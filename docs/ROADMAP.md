@@ -1,0 +1,218 @@
+# Roadmap — Lexicon Parity Initiative
+
+The epic queue. One epic per branch, one draft PR each, reviewed before the next begins.
+
+Source of truth for *what* each feature means: [`docs/lexicon/`](lexicon/).
+Source of truth for *where we stand*: [`docs/lexicon/PARITY.md`](lexicon/PARITY.md).
+
+## Scope
+
+**Rekordbox-deep first.** Reach full Lexicon parity within Rekordbox before adding any second DJ
+app. Serato, Traktor, VirtualDJ, Engine DJ, djay Pro, Apple Music, USB export and DIRECT2CDJ are
+deferred past this initiative, as are cloud storage, cloud backup, the mobile app, and the plugin
+host.
+
+## Definition of done
+
+Per epic, in addition to the standing contract in
+[`CLAUDE_CODE_PROMPT.md`](CLAUDE_CODE_PROMPT.md) §0:
+
+```sh
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+pnpm test && pnpm typecheck && pnpm lint
+pnpm e2e
+```
+
+Plus: the feature is reachable from the UI (never tests-only); `STATUS.md`, `JOURNAL.md` and the
+relevant `docs/*.md` update in the same commit; new capability is exposed through
+`crates/agent-tools::ToolRequest` where it makes sense, so the chat panel, MCP server and CLI all
+gain it at once.
+
+---
+
+## Epic 0 — Spec, parity, roadmap, relicense ✅
+
+Branch `claude/lexicon-spec-docs`.
+
+- [x] `docs/lexicon/` — 12 domain specs written from the official manual
+- [x] `docs/lexicon/PARITY.md` — 102-row feature matrix
+- [x] `docs/lexicon/GAPS.md` — what's unverified, plus open questions
+- [x] `docs/ROADMAP.md` — this file
+- [x] ADR-0011 (relicense), ADR-0012 (analysis stack), ADR-0013 (smartlist rule model)
+- [x] Root `CLAUDE.md`
+- [x] Relicense MIT → GPL-3.0-or-later
+
+---
+
+## Epic 1 — Smartlists engine
+
+Branch `claude/lexicon-smartlists`. Spec: [`03-smartlists.md`](lexicon/03-smartlists.md).
+
+Highest structural leverage: it replaces the ad-hoc filter system with a real query model, and
+several later epics consume it (`Is file missing` as a rule rather than a bespoke view; smartlists
+materialised on sync; the tag OR/AND selection semantics).
+
+- [ ] `crates/smartlists` — rule model per ADR-0013, evaluator, generator
+- [ ] `crates/cache` migration **v7** — `smartlists`, `smartlist_clauses`, `smartlist_rules`
+- [ ] Operator vocabulary (`None`, `>`, `<`, `>=`, `<=`, ranges, `!`) shared with track-browser search
+- [ ] Key-notation-aware equality via `changes::key_format`
+- [ ] Tag query language (`~` requires all, `!` negates) and the OR-within-category /
+      AND-across-category selection semantics on the Custom Tags page
+- [ ] 30-second recompute throttle with a visible loading state
+- [ ] Archived-tracks-excluded-unless-asked
+- [ ] Smartlist Generator — by field, by tag category, Decade / BPM range / play count; idempotent
+      into a reserved `Lexicon` folder
+- [ ] Rekordbox compatibility indicator (MyTag: 4 categories, 2 rules)
+- [ ] Honor `SyncOptions.all_smartlists_to_playlists`
+- [ ] `Excluded From Sync` name-prefix and tag conventions
+- [ ] `SmartlistEditor.tsx` + generator modal in `SidebarNav`
+
+**Acceptance:** create a smartlist with a nested OR clause, watch it populate, sync it to Rekordbox
+as a materialised playlist, and confirm the tag rules land as MyTag rules where expressible.
+
+---
+
+## Epic 2 — Player, cues, beatgrid, action registry
+
+Branch `claude/lexicon-cue-editor`. Spec: [`05-cues-player.md`](lexicon/05-cues-player.md).
+
+Turns `decks` from a viewer into an editor, and is a hard prerequisite for Epic 3.
+
+- [ ] **Action registry first** — `id`, label, handler, default binding, context predicate. Migrate
+      `useKeyboardShortcuts` onto it. Everything below registers into it.
+- [ ] Cue CRUD on `ColorWaveform`; extend `ChangeKind` with cue delete and loop variants
+- [ ] Interaction model: `1`–`8` set/play, `Cmd+1`–`8` delete, double-click seek, `Shift`+click
+      move-to-playhead, `Ctrl`+click delete, `Shift`-drag slow scrub
+- [ ] Loops, active loops, global active-loop suppression
+- [ ] Quantize, including grid-move-carries-on-grid-cues
+- [ ] Cue templates (unlimited, first 8 hotkeyed)
+- [ ] Beatgrid editing, half/double BPM, BPM changepoints
+- [ ] Beat jump (`Ctrl+←/→`, 16 beats)
+- [ ] Play queue with autoplay, shuffle, clear
+- [ ] Cue Destination round-trip: hidden merged memory cues restored on sync
+- [ ] Action Center (`Cmd/Ctrl+Space`), Find Popup (`Cmd/Ctrl+F`)
+- [ ] Compatible-key indicator in the browser
+
+**Acceptance:** load a track, place and colour cues by keyboard alone, turn one into an active loop,
+nudge the beatgrid and watch on-grid cues follow, sync to Rekordbox, verify in Rekordbox.
+
+---
+
+## Epic 3 — Cue Point Generator
+
+Branch `claude/lexicon-cue-generator`. Spec:
+[`05-cues-player.md`](lexicon/05-cues-player.md#cue-point-generator).
+
+- [ ] **Custom cue anchors first** — pure name/colour matching, no ML, and it delivers the whole
+      template system standalone while giving us ground truth to evaluate detection against
+- [ ] Cue template model: offsets in beats relative to anchors, name, colour, enabled, order
+- [ ] Structural segmentation on `stratum-dsp` primitives (beat-synchronous Foote self-similarity +
+      novelty peaks; energy contrast separates drop from breakdown)
+- [ ] Fade-out detection from low frequencies only
+- [ ] Settings: start-cue behaviour, breakdown min. beats, drop-at-start, keep-cue-position,
+      emergency loop, auto-generate-on-play
+- [ ] Overflow handling when the template exceeds the app's cue count
+- [ ] Guard: Rekordbox rejects two memory cues at one position
+- [ ] Honest confidence surfacing per ADR-0008
+
+**Acceptance:** generate against a genre-labelled fixture set and report per-anchor accuracy versus
+hand-placed cues; never present a low-confidence anchor as certain.
+
+---
+
+## Epic 4 — Files, automation, enrichment
+
+Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.md),
+[`07-health.md`](lexicon/07-health.md#find-tags--album-art).
+
+- [ ] Watch folder → Incoming, with auto-advance on `Selected done` and a hotkey
+- [ ] Rename pattern language: `%field%`, literals, `{}` optional segments
+- [ ] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
+      current year/month/decade)
+- [ ] Quick move with favourited folders on hotkeys 1–9
+- [ ] Bulk Write Tags (ID3) with per-field selection
+- [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining
+- [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
+- [ ] Album art: fetch, embed, replace, remove, reload
+- [ ] Energy / Danceability / Popularity / Happiness from our own analysis (**not** Spotify — see
+      ADR-0012)
+- [ ] Beatshift detection on import/sync + Beatshift Fixer re-encode with an already-done ledger
+- [ ] Find Unused Files with include/exclude extensions and DJ-folder skips
+- [ ] Local Path Mappings
+- [ ] Automatic Actions settings group (5 toggles)
+
+**Acceptance:** drop a file in the watch folder, see it analysed, tagged, art-fetched, renamed by
+pattern, filed into a genre/BPM tree, and marked done — untouched by hand.
+
+---
+
+## Epic 5 — Recipes, editing, health, backup
+
+Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-recipes.md),
+[`02-library.md`](lexicon/02-library.md), [`07-health.md`](lexicon/07-health.md).
+
+- [ ] Recipes engine + the ~30 non-cue operations (casing, field, text, number, tag, other)
+- [ ] Cue and beatgrid recipes (14 ops) — depends on Epic 2
+- [ ] `Import Tags from Text` (hashtag → custom tags, idempotent)
+- [ ] Multi-track manual editor with `<multiple values>`
+- [ ] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, report
+- [ ] Undo History (60 min / until restart)
+- [ ] Database backup/restore as a ZIP of the cache DB's derived state
+- [ ] Duplicates: duration bounds, interruptible scan, preselection, bulk Prefer, review step,
+      **playlist re-pointing to the keeper**, manual merge
+- [ ] Relocate: prefix rewriting, all-tracks mode, extension change, merge-with-existing, backup
+- [ ] Find Broken Tracks (decode check, not existence check)
+- [ ] Archive: context-sensitive playlist rule, selection helper, delete-from-disk
+- [ ] Genre/Artist Cleanup: locking, pinned letters, alt-click filter, extra artist fields
+- [ ] Common-text blocklist settings UI
+
+---
+
+## Epic 6 — Set preparation
+
+Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md),
+[`04-analysis.md`](lexicon/04-analysis.md#mixable-tracks).
+
+- [ ] Surface `scoring::score_transition` / `suggest_next_tracks` — **currently unreachable from the
+      UI** — with the full Mixable Tracks rule set and saveable templates
+- [ ] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing
+- [ ] Track Timeline (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
+      BPM-change bar colouring)
+- [ ] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order**
+- [ ] Playlist Occurrence for arbitrary N
+- [ ] Favorite Playlists with hotkeys
+- [ ] Sidepanel (second track browser)
+- [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist
+- [ ] Share/export: CSV, M3U, HTML/PDF with column selection — also the input format the
+      `dj-setlist-builder` skill expects
+- [ ] Colors → nearest on sync; key conversion leading-zero option
+
+---
+
+## Epic 7 — Streaming & discovery
+
+Branch `claude/lexicon-streaming`. Spec: [`08-streaming.md`](lexicon/08-streaming.md).
+
+Last, because it carries the most external risk — see ADR-0012 for what is and isn't reachable.
+
+- [ ] Streaming track model (reference, not file) — conversion works even when playback doesn't
+- [ ] SoundCloud (playable, cueable), Tidal / Beatport / Beatsource (reference-only)
+- [ ] Paste-a-link ingestion
+- [ ] Track Matcher: `.m3u8`, configurable separator, create playlist from results
+- [ ] Send To Spotify / Tidal / Beatport with a not-found report
+- [ ] Transfer Streaming To Local + purchase replacement (re-points every playlist)
+- [ ] Charts, Store Links, Track Discovery
+- [ ] Beatport catalog browse + cart *(partner-gated API — may prove impossible)*
+
+---
+
+## Sequencing rationale
+
+1 before everything — the rules engine is consumed by 4, 5 and 6.
+2 before 3 — the generator needs a cue model to write into.
+4 and 5 are independent and could swap.
+6 depends on 2 (key mixing) and 1 (rules).
+7 last — external APIs may block outright, and nothing else depends on it.
+
+Stopping after any epic leaves a coherent product.

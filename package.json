@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first AI DJ assistant for Rekordbox 7",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "pnpm --filter desktop dev",
     "build": "pnpm --filter desktop build",

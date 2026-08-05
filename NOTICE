@@ -1,10 +1,18 @@
 # Third-Party Notices
 
+`decks` is licensed under the GNU General Public License version 3 or later
+(see LICENSE). Third-party components retain their own licences as noted
+below; all are GPL-3.0 compatible.
+
 ## reklawdbox
 
 This software incorporates code from reklawdbox
 (https://github.com/ryan-voitiskis/reklawdbox), copyright (c) 2024
-Ryan Voitiskis, licensed under the MIT License.
+Ryan Voitiskis, originally licensed under the MIT License.
+
+The MIT License is compatible with the GNU General Public License. The
+incorporated code is redistributed here as part of a GPL-3.0-or-later work;
+its original MIT grant remains available from upstream and is unaffected.
 
 Vendored or derived modules:
 - crates/rekordbox-db    — from src/db.rs
@@ -18,3 +26,19 @@ Vendored or derived modules:
 - crates/scoring        — from src/tools/scoring.rs, src/tools/sequencing_handlers.rs
 - docs/rekordbox-internals.md — from docs/rekordbox-internals.md, docs/rekordbox-gotchas.md
 - docs/sops/            — from site/src/partials/sops/*.mdx
+
+## stratum-dsp
+
+`crates/stratum-dsp` is a vendored DSP engine (BPM detection, key detection,
+beat-grid HMM) licensed "MIT OR Apache-2.0". It retains that dual permissive
+licence in its own `Cargo.toml`; it is redistributed here as a component of a
+GPL-3.0-or-later work, and both licences are GPL-compatible.
+
+## Lexicon DJ
+
+`docs/lexicon/` describes the observable feature set of Lexicon DJ
+(https://www.lexicondj.com), a commercial product with which this project has
+no affiliation or endorsement. Those documents describe behaviour in our own
+words for the purpose of setting our own requirements; Lexicon's manual is not
+redistributed with this repository. Lexicon and its documentation remain the
+property of their respective owners.
