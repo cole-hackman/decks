@@ -180,6 +180,16 @@ export default function App() {
         : new Set([track.id]);
       setTagPickerTrackIds(ids);
     },
+    onSendToFiles: (track) => {
+      // Scope the Files view to the current multi-selection when the
+      // right-clicked track is part of it, so "send these twelve" works;
+      // otherwise just the one that was clicked.
+      if (!selectedTrackIds.has(track.id)) {
+        setSelectedTrackIds(new Set([track.id]));
+        setSelectedTrack(track);
+      }
+      setCurrentView("organize");
+    },
   });
 
   const handleSelectionChange = (ids: Set<string>) => {

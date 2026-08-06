@@ -1640,6 +1640,14 @@ this?": a mapping must not overwrite a field the user explicitly ticked, and a m
 audio files do not have has to say so rather than doing nothing. Silent no-ops in a settings screen
 are how people conclude a feature is broken.
 
+**The same async-assertion mistake, twice in one session.** Earlier I fixed `PlaylistPanel.test.tsx`
+for waiting on a folder row and then asserting synchronously on its children, which auto-expand one
+render later. Then I wrote `waitFor(() => expect(mappableTagTargets).toHaveBeenCalled())` and
+asserted on the select's options — waiting on the *call* rather than on the state it produces.
+Green locally, red on CI, exactly as before. The rule that generalises: **wait on the thing you are
+about to assert about**, not on the thing that triggers it. `findByRole("option", …)` is the right
+shape here.
+
 **A jsdom lesson worth keeping.** `mappableTagTargets().catch(...)` looks safe and is not: when the
 mocked module has no such export at all, the *call* throws synchronously and `.catch` never runs,
 taking the whole settings panel down. Wrapping in `try/await` inside an async IIFE covers both the

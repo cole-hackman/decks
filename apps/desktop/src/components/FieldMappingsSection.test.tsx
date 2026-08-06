@@ -62,18 +62,21 @@ describe("FieldMappingsSection", () => {
 
   it("only offers targets audio files actually have", async () => {
     renderSection();
-    await waitFor(() => {
-      expect(mappableTagTargets).toHaveBeenCalled();
-    });
+    // Wait for an option to exist, not for the call: the targets arrive in an
+    // effect, so the select is on screen one render before it has any options.
+    const comment = await screen.findByRole("option", { name: "Comment" });
     const select = screen.getByLabelText("Mapping target");
     expect(select).toHaveValue("Comment");
+    expect(comment).toBeInTheDocument();
     expect(select.querySelectorAll("option")).toHaveLength(2);
   });
 
   it("adds a mapping", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByText("Energy");
+    // The target options and the rule list arrive from two different promises;
+    // wait for the one this test drives.
+    await screen.findByRole("option", { name: "Genre" });
     await user.selectOptions(screen.getByLabelText("Mapping source"), "all_custom_tags");
     await user.selectOptions(screen.getByLabelText("Mapping target"), "Genre");
     await user.click(screen.getByLabelText("Replace existing value"));
@@ -103,7 +106,7 @@ describe("FieldMappingsSection", () => {
       new Error("a target field is required"),
     );
     renderSection();
-    await screen.findByText("Energy");
+    await screen.findByRole("option", { name: "Comment" });
     await user.click(screen.getByRole("button", { name: "Add" }));
     expect(
       await screen.findByText(/a target field is required/),
