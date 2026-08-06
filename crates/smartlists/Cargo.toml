@@ -1,0 +1,12 @@
+[package]
+name = "smartlists"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rules-driven dynamic playlists (Lexicon-style smartlists)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+changes = { path = "../changes" }
+rekordbox-db = { path = "../rekordbox-db" }

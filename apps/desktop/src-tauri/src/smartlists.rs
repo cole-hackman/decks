@@ -1,0 +1,284 @@
+//! Tauri commands for smartlists (Epic 1).
+//!
+//! The rule model and evaluator live in `crates/smartlists`; this module owns
+//! the IPC surface and the assembly of `EvalContext` from the several places
+//! its inputs live (`master.db` for cues and playlists, the local cache for
+//! tags and archived tracks, the filesystem for missing files).
+
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+
+use decks_core::rekordbox_db::{RekordboxDb, Track};
+use smartlists::{
+    evaluate, generate, only_missing, Clause, Combinator, EvalContext, GeneratorSpec, Smartlist,
+    LEXICON_FOLDER,
+};
+
+use crate::{cache_db, hydrate_energy};
+
+fn open_db(path: &str) -> Result<RekordboxDb, String> {
+    RekordboxDb::open(Path::new(path)).map_err(|e| e.to_string())
+}
+
+/// Load every input the evaluator needs.
+///
+/// `missing_files` is the expensive one — it stats every track — so it is only
+/// computed when some rule actually asks about it. Everything else is cheap
+/// enough to load unconditionally.
+fn build_context(
+    app: &tauri::AppHandle,
+    library_path: &str,
+    db: &RekordboxDb,
+    needs_missing_files: bool,
+) -> Result<(Vec<Track>, EvalContext), String> {
+    let mut tracks = db.tracks().map_err(|e| e.to_string())?;
+
+    let mut ctx = EvalContext {
+        tracks_with_cues: db
+            .track_ids_with_cues()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .collect(),
+        tracks_in_any_playlist: db
+            .track_ids_in_any_playlist()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .collect(),
+        ..Default::default()
+    };
+
+    if needs_missing_files {
+        ctx.tracks_with_missing_files = tracks
+            .iter()
+            .filter(|t| {
+                t.folder_path
+                    .as_deref()
+                    .map(|p| !Path::new(p).exists())
+                    .unwrap_or(false)
+            })
+            .map(|t| t.id.clone())
+            .collect();
+    }
+
+    // Cache lookups are best-effort: a missing or unreadable cache degrades to
+    // "no tags, nothing archived, no energy" rather than failing the query.
+    if let Ok(cache) = cache_db(app) {
+        hydrate_energy(&mut tracks, &cache);
+        if let Ok(ids) = cache.list_archived(library_path) {
+            ctx.archived_tracks = ids.into_iter().collect();
+        }
+        if let Ok(map) = cache.list_track_tags_map(library_path) {
+            ctx.tags_by_track = map
+                .into_iter()
+                .map(|(k, v)| (k, v.into_iter().collect::<HashSet<String>>()))
+                .collect();
+        }
+    }
+
+    Ok((tracks, ctx))
+}
+
+fn mentions_missing_files(list: &Smartlist) -> bool {
+    list.clauses
+        .iter()
+        .flat_map(|c| c.rules.iter())
+        .any(|r| r.field == smartlists::Field::IsFileMissing)
+}
+
+#[tauri::command]
+pub async fn list_smartlists(
+    app: tauri::AppHandle,
+    library_path: String,
+) -> Result<Vec<Smartlist>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.list_smartlists(&library_path).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn create_smartlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    name: String,
+    parent_folder_id: Option<String>,
+    combinator: Combinator,
+    clauses: Vec<Clause>,
+) -> Result<Smartlist, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.create_smartlist(
+            &library_path,
+            &name,
+            parent_folder_id.as_deref(),
+            combinator,
+            &clauses,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn update_smartlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    id: String,
+    name: String,
+    parent_folder_id: Option<String>,
+    combinator: Combinator,
+    clauses: Vec<Clause>,
+) -> Result<Smartlist, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.update_smartlist(
+            &library_path,
+            &id,
+            &name,
+            parent_folder_id.as_deref(),
+            combinator,
+            &clauses,
+        )
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn delete_smartlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    id: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.delete_smartlist(&library_path, &id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Evaluate a stored smartlist and return the matching tracks.
+#[tauri::command]
+pub async fn evaluate_smartlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    id: String,
+) -> Result<Vec<Track>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let list = cache
+            .get_smartlist(&library_path, &id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("smartlist {id} not found"))?;
+        let db = open_db(&library_path)?;
+        let (tracks, ctx) = build_context(&app, &library_path, &db, mentions_missing_files(&list))?;
+        let ids: HashSet<String> = evaluate(&list, &tracks, &ctx).into_iter().collect();
+        Ok(tracks.into_iter().filter(|t| ids.contains(&t.id)).collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Evaluate an unsaved smartlist. Powers the editor's live match count, so the
+/// user sees what a rule set selects before committing to it.
+#[tauri::command]
+pub async fn preview_smartlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    combinator: Combinator,
+    clauses: Vec<Clause>,
+) -> Result<Vec<Track>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let list = Smartlist {
+            id: "__preview__".into(),
+            name: "preview".into(),
+            parent_folder_id: None,
+            combinator,
+            clauses,
+            created_at: 0,
+            updated_at: 0,
+        };
+        list.validate()?;
+        let db = open_db(&library_path)?;
+        let (tracks, ctx) = build_context(&app, &library_path, &db, mentions_missing_files(&list))?;
+        let ids: HashSet<String> = evaluate(&list, &tracks, &ctx).into_iter().collect();
+        Ok(tracks.into_iter().filter(|t| ids.contains(&t.id)).collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Run the Smartlist Generator, creating only the smartlists that do not yet
+/// exist in the reserved `Lexicon` folder. Safe to re-run.
+#[tauri::command]
+pub async fn generate_smartlists(
+    app: tauri::AppHandle,
+    library_path: String,
+    spec: GeneratorSpec,
+) -> Result<Vec<Smartlist>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = open_db(&library_path)?;
+        let tracks = db.tracks().map_err(|e| e.to_string())?;
+        let cache = cache_db(&app)?;
+
+        let existing = cache
+            .list_generated_smartlists(&library_path)
+            .map_err(|e| e.to_string())?;
+        let wanted = only_missing(generate(&spec, &tracks), &existing);
+
+        let mut created = Vec::new();
+        for g in wanted {
+            let list = cache
+                .create_smartlist(
+                    &library_path,
+                    &g.name,
+                    Some(LEXICON_FOLDER),
+                    g.combinator,
+                    &g.clauses,
+                )
+                .map_err(|e| e.to_string())?;
+            created.push(list);
+        }
+        Ok(created)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Match counts for every smartlist in one pass.
+///
+/// The playlist tree needs a count per row; doing this as one command means the
+/// library and its derived sets are loaded once rather than once per smartlist.
+#[tauri::command]
+pub async fn smartlist_counts(
+    app: tauri::AppHandle,
+    library_path: String,
+) -> Result<HashMap<String, usize>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let lists = cache
+            .list_smartlists(&library_path)
+            .map_err(|e| e.to_string())?;
+        if lists.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let db = open_db(&library_path)?;
+        let needs_missing = lists.iter().any(mentions_missing_files);
+        let (tracks, ctx) = build_context(&app, &library_path, &db, needs_missing)?;
+        Ok(lists
+            .into_iter()
+            .map(|l| {
+                let n = evaluate(&l, &tracks, &ctx).len();
+                (l.id, n)
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

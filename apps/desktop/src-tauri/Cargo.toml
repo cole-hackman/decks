@@ -33,6 +33,7 @@ audio-analysis = { path = "../../../crates/audio-analysis" }
 relocate = { version = "0.1.0", path = "../../../crates/relocate" }
 scoring = { path = "../../../crates/scoring" }
 smart-fixes = { path = "../../../crates/smart-fixes" }
+smartlists = { path = "../../../crates/smartlists" }
 track-matcher = { path = "../../../crates/track-matcher" }
 
 [build-dependencies]

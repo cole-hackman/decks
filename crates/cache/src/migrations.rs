@@ -143,6 +143,31 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        7,
+        "
+        -- Smartlists (Epic 1). Rules are stored as a JSON document rather than
+        -- normalised into clause/rule tables: evaluation is in-memory (ADR-0013),
+        -- so no query ever filters on an individual rule, and `staged_changes`
+        -- already sets the precedent for JSON payloads in this database.
+        --
+        -- `parent_folder_id` doubles as the generator ledger. Generated
+        -- smartlists live in the reserved `Lexicon` folder; moving one out (by
+        -- changing this column) is what makes the generator recreate it.
+        CREATE TABLE smartlists (
+          id               TEXT PRIMARY KEY,
+          library_path     TEXT NOT NULL,
+          name             TEXT NOT NULL,
+          parent_folder_id TEXT,
+          combinator       TEXT NOT NULL,
+          clauses_json     TEXT NOT NULL,
+          seq              INTEGER NOT NULL DEFAULT 0,
+          created_at       INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at       INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX idx_smartlists_library ON smartlists(library_path, seq, name);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -258,6 +283,23 @@ mod tests {
         .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn smartlists_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO smartlists
+                (id, library_path, name, parent_folder_id, combinator, clauses_json)
+             VALUES
+                ('s1', '/db', 'Peak time', 'Lexicon', 'all', '[]');",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM smartlists", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }

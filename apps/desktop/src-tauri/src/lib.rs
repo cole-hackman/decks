@@ -1,5 +1,6 @@
 mod audio;
 mod claude_agent;
+mod smartlists;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -2570,6 +2571,14 @@ pub fn run() {
             health_fuzzy_duplicate_scan,
             library_duplicate_groups,
             health_broken_link_scan,
+            smartlists::list_smartlists,
+            smartlists::create_smartlist,
+            smartlists::update_smartlist,
+            smartlists::delete_smartlist,
+            smartlists::evaluate_smartlist,
+            smartlists::preview_smartlist,
+            smartlists::generate_smartlists,
+            smartlists::smartlist_counts,
             list_tracks_with_cues,
             list_tracks_in_any_playlist,
             list_tracks_with_missing_files,
