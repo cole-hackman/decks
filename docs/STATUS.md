@@ -52,12 +52,22 @@ Tag recipes apply directly rather than staging — tags live in the local cache,
 step to carry them. A tag name with no existing tag is created in the first category, and the result
 reports which were invented.
 
+**The three "other" recipes** close the category. Each reaches into a different subsystem — Incoming
+state, playlists, the filesystem — so they run one at a time rather than joining the ordered recipe
+list, and the UI states what each does *before* it runs. `Remove from All Playlists` leaving
+smartlists alone is exactly the sort of thing that otherwise reads as the recipe having missed some.
+
+`Import Date from Filesystem` takes the file's **modification** time, not creation time: creation
+time is not portable (Linux has no reliable `birthtime`), and a file copied between drives keeps its
+mtime while its ctime becomes the copy date — worse than useless as a release year. `Mark as
+Incoming` is the exact inverse of `Selected done`, clearing the per-track reviewed flag added in
+migration v12.
+
 **Not done:** the cue (11) and beatgrid (3) recipes, which operate on cue lists rather than text and
-need the quantize arithmetic from `crates/rekordbox-db`; and the three "other" recipes
-(`Mark as Incoming`, `Remove from All Playlists`, `Import Date from Filesystem`).
+need the quantize arithmetic from `crates/rekordbox-db`.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 383, typecheck, lint, `pnpm e2e` 20 — all green.
+clean, `pnpm test` 390, typecheck, lint, `pnpm e2e` 20 — all green.
 
 ## Blockers — verified, not assumed (2026-08-06)
 

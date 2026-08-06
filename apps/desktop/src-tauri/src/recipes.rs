@@ -216,6 +216,154 @@ pub async fn recipe_apply(
     .map_err(|e| e.to_string())?
 }
 
+// ── "Other" recipes ──────────────────────────────────────────────────────────
+
+/// The three operations from the spec's "Other" category.
+///
+/// They share nothing with the field and tag recipes except the selection they
+/// run over — each reaches into a different subsystem — so they are commands
+/// rather than another arm of the pure engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OtherRecipe {
+    /// Push tracks back onto Incoming, using it as a to-do list.
+    MarkAsIncoming,
+    /// Strip a track from every playlist. Deliberately does **not** touch
+    /// smartlists, which are derived and would simply re-add the track.
+    RemoveFromAllPlaylists,
+    /// Take the file's modification time as the track's year.
+    ImportDateFromFilesystem,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct OtherRecipeResult {
+    /// Tracks the recipe acted on.
+    pub changed: Vec<String>,
+    /// Staged change ids, where the recipe stages rather than applies.
+    pub staged: Vec<String>,
+    /// `(track_id, reason)` for tracks it could not act on.
+    pub skipped: Vec<(String, String)>,
+}
+
+/// The year a file's modification time falls in.
+///
+/// Modification rather than creation time: creation time is not portable
+/// (Linux has no reliable `birthtime`), and a file copied between drives keeps
+/// its mtime while its ctime becomes the copy date — which would be worse than
+/// useless as a release year.
+fn year_from_file(path: &std::path::Path) -> Option<i32> {
+    use chrono::Datelike;
+    let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+    let secs = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    let dt = chrono::DateTime::from_timestamp(secs as i64, 0)?;
+    Some(dt.year())
+}
+
+#[tauri::command]
+pub async fn other_recipe_apply(
+    app: tauri::AppHandle,
+    library_path: String,
+    track_ids: Vec<String>,
+    recipe: OtherRecipe,
+) -> Result<OtherRecipeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+        let mut result = OtherRecipeResult::default();
+
+        match recipe {
+            OtherRecipe::MarkAsIncoming => {
+                // The inverse of Selected done: clear the per-track reviewed
+                // flag so the track surfaces on Incoming again.
+                let cleared = cache
+                    .unmark_incoming_reviewed(&library_path, &track_ids)
+                    .map_err(|e| e.to_string())?;
+                if cleared > 0 {
+                    result.changed = track_ids;
+                }
+            }
+
+            OtherRecipe::RemoveFromAllPlaylists => {
+                let playlists = db.playlists().map_err(|e| e.to_string())?;
+                for playlist in playlists
+                    .iter()
+                    .filter(|p| matches!(p.kind, decks_core::rekordbox_db::PlaylistKind::Playlist))
+                {
+                    let entries = db
+                        .playlist_entries(&playlist.id)
+                        .map_err(|e| e.to_string())?;
+                    for entry in entries.iter().filter(|e| track_ids.contains(&e.content_id)) {
+                        let record = cache
+                            .stage_change(changes::NewChange {
+                                library_path: Some(library_path.clone()),
+                                kind: changes::ChangeKind::PlaylistRemoveTrack,
+                                target_id: Some(playlist.id.clone()),
+                                field: None,
+                                old_value: None,
+                                new_value: Some(serde_json::json!(entry.content_id)),
+                                reason: Some("Recipe — remove from all playlists".to_string()),
+                                confidence: Some(1.0),
+                            })
+                            .map_err(|e| e.to_string())?;
+                        result.staged.push(record.id);
+                        if !result.changed.contains(&entry.content_id) {
+                            result.changed.push(entry.content_id.clone());
+                        }
+                    }
+                }
+            }
+
+            OtherRecipe::ImportDateFromFilesystem => {
+                for id in &track_ids {
+                    let Some(track) = db.track_by_id(id).map_err(|e| e.to_string())? else {
+                        continue;
+                    };
+                    let Some(path) = track.folder_path.as_deref() else {
+                        result
+                            .skipped
+                            .push((id.clone(), "track has no file path".into()));
+                        continue;
+                    };
+                    let Some(year) = year_from_file(Path::new(path)) else {
+                        result
+                            .skipped
+                            .push((id.clone(), "file not readable".into()));
+                        continue;
+                    };
+                    if track.release_year == Some(year as i64) {
+                        continue;
+                    }
+                    let record = cache
+                        .stage_change(changes::NewChange {
+                            library_path: Some(library_path.clone()),
+                            kind: changes::ChangeKind::TrackMetadataEdit,
+                            target_id: Some(id.clone()),
+                            field: Some("ReleaseYear".to_string()),
+                            old_value: Some(match track.release_year {
+                                Some(y) => serde_json::json!(y),
+                                None => serde_json::Value::Null,
+                            }),
+                            new_value: Some(serde_json::json!(year)),
+                            reason: Some("Recipe — import date from filesystem".to_string()),
+                            confidence: Some(1.0),
+                        })
+                        .map_err(|e| e.to_string())?;
+                    result.staged.push(record.id);
+                    result.changed.push(id.clone());
+                }
+            }
+        }
+
+        Ok(result)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ── Tag recipes ──────────────────────────────────────────────────────────────
 
 /// What a tag recipe would do to one track, as the preview shows it.

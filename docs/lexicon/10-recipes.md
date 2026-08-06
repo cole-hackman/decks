@@ -154,8 +154,16 @@ Tag recipes apply directly rather than staging — tags live in the local cache,
 step to carry them. A tag name with no existing tag is created in the first category, and the result
 says which were invented.
 
-Still missing: the **cue and beatgrid recipes** (14 ops), and the "other" recipes
-(`Mark as Incoming`, `Remove from All Playlists`, `Import Date from Filesystem`).
+The three **"other" recipes** are done as well. Each reaches into a different subsystem, so they run
+one at a time rather than joining the ordered recipe list, and the UI states what each does before
+it runs — `Remove from All Playlists` leaving smartlists alone is exactly the sort of thing that
+otherwise reads as the recipe having missed some.
+
+`Import Date from Filesystem` takes the file's **modification** time, not its creation time:
+creation time is not portable (Linux has no reliable `birthtime`), and a file copied between drives
+keeps its mtime while its ctime becomes the copy date — worse than useless as a release year.
+
+Still missing: the **cue and beatgrid recipes** (14 ops).
 
 *Epic* — **5**. Within the epic, the cue recipes depend on the cue-editing model from Epic 2, so
 field/text/tag recipes came first as the spec advises.

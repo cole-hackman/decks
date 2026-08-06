@@ -8,6 +8,7 @@ import {
   type ParamValues,
   type RecipeDef,
 } from "../lib/recipe-forms";
+import { OtherRecipesSection } from "./OtherRecipesSection";
 import { TagRecipesSection } from "./TagRecipesSection";
 import { useToast } from "./Toast";
 import type { Recipe, RecipeProposal } from "../types";
@@ -345,6 +346,8 @@ export function RecipesPanel({ libraryPath, trackIds }: Props) {
         trackIds={trackIds}
         fields={fields}
       />
+
+      <OtherRecipesSection libraryPath={libraryPath} trackIds={trackIds} />
     </div>
   );
 }

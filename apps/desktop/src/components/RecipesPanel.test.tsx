@@ -13,6 +13,7 @@ vi.mock("../ipc", () => ({
   // Used by the tag section mounted below.
   tagRecipePreview: vi.fn(async () => []),
   tagRecipeApply: vi.fn(),
+  otherRecipeApply: vi.fn(),
 }));
 
 const PREVIEW: RecipePreview = {

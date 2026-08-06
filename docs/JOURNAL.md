@@ -1717,6 +1717,21 @@ Fixed in the component (fall back to the first field when the default is not on 
 the fixture. Worth remembering that a fixture that disagrees with production is sometimes telling
 you something.
 
-**Next in Epic 5:** the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic, and the
-three "other" recipes. Then the larger Epic 5 items — Undo History, CSV import, the duplicates
-work.
+**The "other" recipes were three unrelated things wearing one hat.** Mark as Incoming is the exact
+inverse of Selected done — the per-track reviewed flag from migration v12 already existed, so it was
+one accessor. Remove from All Playlists stages a `PlaylistRemoveTrack` per playlist and deliberately
+ignores smartlists, which are derived and would just re-add the track. Import Date reads the
+filesystem. Nothing shared except the selection, so they got their own section rather than joining
+the ordered recipe list.
+
+**Modification time, not creation time,** and the reason is worth keeping: creation time is not
+portable — Linux has no reliable `birthtime` — and a file copied between drives keeps its mtime
+while its ctime becomes the copy date. Using ctime would quietly stamp every track with the date the
+user got a new hard disk.
+
+**The UI states what each does before it runs**, which matters most for Remove from All Playlists:
+without the smartlist caveat spelled out, a user watching tracks stay in their smartlists would
+reasonably conclude the recipe was broken.
+
+**Next in Epic 5:** the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic. Then
+the larger items — Undo History, CSV import, the duplicates work.

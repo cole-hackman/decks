@@ -618,3 +618,14 @@ export interface TagApplyResult {
   tags_removed: number;
   tags_created: string[];
 }
+
+export type OtherRecipe =
+  | "mark_as_incoming"
+  | "remove_from_all_playlists"
+  | "import_date_from_filesystem";
+
+export interface OtherRecipeResult {
+  changed: string[];
+  staged: string[];
+  skipped: [string, string][];
+}

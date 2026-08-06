@@ -52,6 +52,8 @@ import type {
   TagRecipe,
   TagProposal,
   TagApplyResult,
+  OtherRecipe,
+  OtherRecipeResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1200,4 +1202,16 @@ export async function tagRecipeApply(
   proposals: TagProposal[],
 ): Promise<TagApplyResult> {
   return invoke<TagApplyResult>("tag_recipe_apply", { libraryPath, proposals });
+}
+
+export async function otherRecipeApply(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: OtherRecipe,
+): Promise<OtherRecipeResult> {
+  return invoke<OtherRecipeResult>("other_recipe_apply", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
 }
