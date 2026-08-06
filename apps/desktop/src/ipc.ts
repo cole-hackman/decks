@@ -26,6 +26,9 @@ import type {
   QuantizeResolution,
   CueField,
   CueInput,
+  CueTemplate,
+  CustomAnchorRule,
+  GeneratePreview,
 } from "./types";
 import type {
   ChatMessage,
@@ -930,4 +933,41 @@ export async function stageGridShift(
     offsetMs,
     toleranceMs: toleranceMs ?? null,
   });
+}
+
+// ── Cue Point Generator (Epic 3) ─────────────────────────────────────────────
+
+export async function previewGeneratedCues(
+  libraryPath: string,
+  trackId: string,
+  template: CueTemplate,
+  anchorRules: CustomAnchorRule[],
+): Promise<GeneratePreview> {
+  return invoke<GeneratePreview>("preview_generated_cues", {
+    libraryPath,
+    trackId,
+    template,
+    anchorRules,
+  });
+}
+
+export async function applyGeneratedCues(
+  libraryPath: string,
+  trackId: string,
+  template: CueTemplate,
+  anchorRules: CustomAnchorRule[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_generated_cues", {
+    libraryPath,
+    trackId,
+    template,
+    anchorRules,
+  });
+}
+
+export async function suggestAnchorRules(
+  libraryPath: string,
+  trackId: string,
+): Promise<CustomAnchorRule[]> {
+  return invoke<CustomAnchorRule[]>("suggest_anchor_rules", { libraryPath, trackId });
 }

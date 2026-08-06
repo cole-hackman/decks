@@ -1,5 +1,24 @@
 # Status
 
+## 2026-08-06 — Epic 3 (part 1): cue templates and custom cue anchors
+New `crates/cue-generator`, split in two so detection can land later without touching the placement logic:
+
+**`anchor`** — the structural landmarks a template hangs off (`Start`, `Drop{ordinal}`, `Breakdown{ordinal}`, `FadeOut`, `End`) and `resolve_custom_anchors`, which maps the user's *existing* cues onto them. Lexicon's matching rules exactly: name+colour requires both, name-only takes the first cue with that name regardless of colour, colour-only takes the first with that colour regardless of name, and a rule with neither matches nothing rather than acting as a wildcard. Name matching is trimmed and case-insensitive. Anchors carry `Confidence`; a user-placed one is `Certain` because a human put it there.
+
+**`template`** — declarative placement in beats relative to anchors, with name, colour, enabled and order. Offsets walk the beat grid rather than multiplying by a constant tempo, so they stay correct across tempo changes, falling back to arithmetic only past the end of the grid. Also: `keep_cue_position` (slot = template row, so "drop is always cue 1" survives a skipped row), overflow trimming that drops the **least confident first** then the latest in the track, and the **Rekordbox duplicate-memory-cue guard** — Rekordbox silently discards the second of two memory cues at one position, so we discard it ourselves and say which.
+
+Nothing is silently dropped: every omission comes back as a typed `SkippedCue` (`AnchorMissing`, `OutOfRange`, `Overflow`, `DuplicateMemoryCue`) that the UI renders as a sentence.
+
+Three Tauri commands in `src-tauri/src/cue_generator.rs`; preview and apply share one `generate` function so what the user reviews is exactly what gets staged. `suggest_anchor_rules` guesses anchors from cue names ("Drop", "Break", "Outro"/"Fade") so the panel opens with something to edit. `CueGeneratorPanel` is mounted in `TrackDetailPanel`.
+
+**Honest labelling, per ADR-0008.** `Confidence` rides from anchor → cue → UI. Low-confidence cues render as `provisional NN%`, and the panel states plainly that automatic drop detection is not implemented rather than implying an analyser is running.
+
+**What is NOT done:** structural segmentation — the actual drop/breakdown/fade-out detection — is the remaining half of Epic 3. Everything above is the placement machinery it will feed. Also outstanding: breakdown-min-beats, drop-at-start and auto-generate-on-play (all detection inputs), and finding a good emergency-loop spot.
+
+One robustness fix found by the E2E suite rather than by unit tests: `CueGeneratorPanel` assumed `suggest_anchor_rules` returns an array. Two existing specs whose IPC mock returns `null` for unknown commands took the whole track panel down. Now guarded.
+
+Verification: `cargo test --workspace` 725 passing, clippy `-D warnings` clean, `cargo fmt --check` clean, `pnpm test` 279, typecheck, lint, `pnpm e2e` 11 — all green.
+
 ## 2026-08-06 — Epic 2 (part 1): action registry, cue editing, quantize, beat jump
 **Action registry** (`apps/desktop/src/lib/actions.ts`) — the substrate the rest of Epic 2 registers into. Every global capability is a named, bindable command; the Action Center searches that list, hotkeys bind to it, and inline hints read from it. Pure module covering binding serialisation, display formatting, matching (Cmd and Ctrl interchangeable), persisted user rebinding, conflict detection and fuzzy search. `ActionProvider` owns a single global key listener reading the action list through a ref so it installs once. App's four global shortcuts migrated onto it; component-local key handling (track-table arrows) deliberately stays in `useKeyboardShortcuts`. `ActionCenter` is the `Cmd/Ctrl+Space` palette.
 

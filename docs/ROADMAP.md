@@ -110,22 +110,23 @@ nudge the beatgrid and watch on-grid cues follow, sync to Rekordbox, verify in R
 
 ---
 
-## Epic 3 — Cue Point Generator
+## Epic 3 — Cue Point Generator (in progress)
 
 Branch `claude/lexicon-cue-generator`. Spec:
 [`05-cues-player.md`](lexicon/05-cues-player.md#cue-point-generator).
 
-- [ ] **Custom cue anchors first** — pure name/colour matching, no ML, and it delivers the whole
+- [x] **Custom cue anchors** — pure name/colour matching, no ML, and it delivers the whole
       template system standalone while giving us ground truth to evaluate detection against
-- [ ] Cue template model: offsets in beats relative to anchors, name, colour, enabled, order
-- [ ] Structural segmentation on `stratum-dsp` primitives (beat-synchronous Foote self-similarity +
-      novelty peaks; energy contrast separates drop from breakdown)
+- [x] Cue template model: offsets in beats relative to anchors, name, colour, enabled, order
+- [ ] **Structural segmentation** on `stratum-dsp` primitives (beat-synchronous Foote
+      self-similarity + novelty peaks; energy contrast separates drop from breakdown) — the
+      remaining half of this epic
 - [ ] Fade-out detection from low frequencies only
-- [ ] Settings: start-cue behaviour, breakdown min. beats, drop-at-start, keep-cue-position,
-      emergency loop, auto-generate-on-play
-- [ ] Overflow handling when the template exceeds the app's cue count
-- [ ] Guard: Rekordbox rejects two memory cues at one position
-- [ ] Honest confidence surfacing per ADR-0008
+- [x] Start-cue behaviour and keep-cue-position
+- [ ] Breakdown min. beats, drop-at-start, auto-generate-on-play — all inputs to detection
+- [x] Overflow handling — lowest confidence first, then latest in the track
+- [x] Guard: Rekordbox rejects two memory cues at one position
+- [x] Honest confidence surfacing per ADR-0008 — `Confidence` rides from anchor to cue to UI
 
 **Acceptance:** generate against a genre-labelled fixture set and report per-anchor accuracy versus
 hand-placed cues; never present a low-confidence anchor as certain.

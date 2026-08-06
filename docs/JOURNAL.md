@@ -1464,3 +1464,34 @@ half-tested pile.
 **Next:** finish Epic 2 — play queue, cue templates, Find Popup, Cue Destination round-trip — then
 Epic 3's custom cue anchors, which are pure matching logic and give us ground truth to evaluate
 drop detection against.
+
+
+## 2026-08-06 — Session: Epic 3 part 1
+
+**Plan:** custom cue anchors first, as the roadmap called for. The reasoning held up: it is pure
+matching with no analysis behind it, it delivers the entire template system standalone, and the
+anchors a human placed by hand are exactly the ground truth we will need to evaluate detection
+against later.
+
+**Design call worth recording:** `apply_template` takes `&[ResolvedAnchor]` and does not care where
+they came from. Custom anchors and detected anchors produce the same values, so when detection
+lands it plugs into the existing engine rather than growing a second code path. That shape was
+chosen specifically because part 2 is coming.
+
+**Two things the tests earned:**
+
+1. The overflow rule ("drop the least interesting first") needed defining before it could be
+   tested. Lowest confidence first, then latest in the track — a certain early landmark is worth
+   more to a DJ than a speculative late one.
+2. The E2E suite caught a crash unit tests could not: `suggest_anchor_rules` returning `null` from
+   a spec's catch-all mock took down the whole track panel. Guarded now. Worth remembering that the
+   mocked-IPC specs are the only place that exercises "host returns something unexpected".
+
+**Scope:** stopping before structural segmentation. That is the genuinely hard, genuinely uncertain
+part — building it in the same PR as the placement machinery would mean neither gets reviewed
+properly, and the placement machinery is useful on its own today for anyone who cues by hand.
+
+**Next:** Epic 3 part 2 — beat-synchronous Foote self-similarity plus novelty peaks over the
+existing `stratum-dsp` chroma and novelty curves, with energy contrast separating drop from
+breakdown, and fade-out from low frequencies only. Evaluate against hand-placed cues on a
+genre-labelled fixture set, and report per-anchor accuracy rather than claiming a number.

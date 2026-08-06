@@ -11,12 +11,23 @@ vi.mock("../ipc", () => ({
   stageChange: vi.fn(),
   getAnlzWaveform: vi.fn(),
   getAudioWaveform: vi.fn(),
+  // The panel now embeds the cue editor and cue generator, which reach for
+  // these on mount.
+  stageCueAdd: vi.fn(),
+  stageCueDelete: vi.fn(),
+  stageCueEdit: vi.fn(),
+  stageGridShift: vi.fn(),
+  beatJumpPosition: vi.fn(),
+  suggestAnchorRules: vi.fn(),
+  previewGeneratedCues: vi.fn(),
+  applyGeneratedCues: vi.fn(),
 }));
 import {
   analyzeTrack,
   stageChange,
   getAnlzWaveform,
   getAudioWaveform,
+  suggestAnchorRules,
 } from "../ipc";
 
 const EMPTY_ANLZ = { preview: [], detail: [], beat_grid: [], peaks: null };
@@ -75,6 +86,7 @@ beforeEach(() => {
   vi.mocked(stageChange).mockResolvedValue(undefined as never);
   vi.mocked(getAnlzWaveform).mockResolvedValue(EMPTY_ANLZ as never);
   vi.mocked(getAudioWaveform).mockResolvedValue([]);
+  vi.mocked(suggestAnchorRules).mockResolvedValue([]);
 });
 
 describe("TrackDetailPanel", () => {

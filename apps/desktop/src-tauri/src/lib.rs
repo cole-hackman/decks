@@ -1,5 +1,6 @@
 mod audio;
 mod claude_agent;
+mod cue_generator;
 mod cues;
 mod smartlists;
 
@@ -2579,6 +2580,9 @@ pub fn run() {
             health_fuzzy_duplicate_scan,
             library_duplicate_groups,
             health_broken_link_scan,
+            cue_generator::preview_generated_cues,
+            cue_generator::apply_generated_cues,
+            cue_generator::suggest_anchor_rules,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,

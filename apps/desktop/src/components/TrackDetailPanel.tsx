@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTrackCues } from "../hooks/useTrackCues";
 import { CueEditor } from "./CueEditor";
+import { CueGeneratorPanel } from "./CueGeneratorPanel";
 import { ColorWaveform } from "@/components/ui/ColorWaveform";
 import {
   analyzeTrack,
@@ -540,6 +541,12 @@ function TrackDetailContent({
         cues={sortedCues}
         positionMs={currentTime * 1000}
         onSeek={(ms) => onSeek?.(ms / 1000)}
+        onChanged={() => void refetchCues()}
+      />
+
+      <CueGeneratorPanel
+        libraryPath={libraryPath}
+        track={track}
         onChanged={() => void refetchCues()}
       />
 
