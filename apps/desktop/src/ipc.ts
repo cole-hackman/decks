@@ -33,6 +33,9 @@ import type {
   OrganizeResult,
   OrganizeRow,
   PatternField,
+  ExtensionFilter,
+  UnusedScan,
+  DeleteReport,
 } from "./types";
 import type {
   ChatMessage,
@@ -1003,4 +1006,19 @@ export async function applyOrganize(
   rows: OrganizeRow[],
 ): Promise<OrganizeResult> {
   return invoke<OrganizeResult>("apply_organize", { libraryPath, rows });
+}
+
+export async function scanUnusedFiles(
+  libraryPath: string,
+  roots: string[],
+  filter: ExtensionFilter,
+): Promise<UnusedScan> {
+  return invoke<UnusedScan>("scan_unused_files", { libraryPath, roots, filter });
+}
+
+export async function deleteUnusedFiles(
+  libraryPath: string,
+  paths: string[],
+): Promise<DeleteReport> {
+  return invoke<DeleteReport>("delete_unused_files", { libraryPath, paths });
 }

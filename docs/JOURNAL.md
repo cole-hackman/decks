@@ -1529,5 +1529,13 @@ those are all date-of-run buckets. But a decade computed from *today* is the sam
 track in a run, so filing by release decade is the obviously intended use and it costs nothing.
 Recorded in GAPS rather than left as an undocumented divergence.
 
+**Find Unused Files went in the same crate and the same session** because it is the mirror image of
+the move planner: one asks where a track should go, the other asks which files no track claims. It
+also has the worst failure mode in the app — its output is a deletion list, and a false positive is
+a lost track. So it got guards the manual does not mention: refuse to scan an empty library,
+re-check library membership at delete time rather than trusting the scan, and compare paths
+case- and separator-insensitively because Rekordbox and the filesystem do not reliably agree. That
+last one is not hypothetical; a case-only mismatch would put a real track on the delete list.
+
 **Next:** the rest of Epic 4. Watch folder and the incoming auto-advance flow are the natural
 follow-on, since they are what makes auto-move-on-done meaningful.

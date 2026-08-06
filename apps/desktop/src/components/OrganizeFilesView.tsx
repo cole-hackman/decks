@@ -6,6 +6,7 @@ import {
   validatePattern,
 } from "../ipc";
 import { useToast } from "./Toast";
+import { UnusedFilesPanel } from "./UnusedFilesPanel";
 import type {
   OrganizeRow,
   PatternField,
@@ -268,7 +269,7 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
       </div>
 
       {rows != null && (
-        <div data-testid="organize-preview" className="min-h-0 flex-1 overflow-auto">
+        <div data-testid="organize-preview" className="overflow-auto">
           {rows.length === 0 ? (
             <p className="text-xs text-muted">No tracks with a file path to move.</p>
           ) : (
@@ -300,6 +301,10 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
           )}
         </div>
       )}
+
+      <div className="mt-4">
+        <UnusedFilesPanel libraryPath={libraryPath} />
+      </div>
     </div>
   );
 }

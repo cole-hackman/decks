@@ -151,7 +151,7 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 - [ ] Energy / Danceability / Popularity / Happiness from our own analysis (**not** Spotify — see
       ADR-0012)
 - [ ] Beatshift detection on import/sync + Beatshift Fixer re-encode with an already-done ledger
-- [ ] Find Unused Files with include/exclude extensions and DJ-folder skips
+- [x] Find Unused Files with include/exclude extensions and DJ-folder skips
 - [ ] Local Path Mappings
 - [ ] Automatic Actions settings group (5 toggles)
 

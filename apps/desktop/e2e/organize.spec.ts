@@ -129,6 +129,34 @@ test.beforeEach(async ({ page }) => {
               }
               return [...p.matchAll(/%([^%]+)%/g)].map((m) => m[1]);
             }
+            case "scan_unused_files": {
+              const filter = args.filter as {
+                mode: string;
+                extensions: string[];
+              };
+              const candidates = [
+                { path: "/music/cover.png", size_bytes: 2048 },
+                { path: "/music/notes.txt", size_bytes: 10 },
+              ];
+              const files = candidates.filter((c) => {
+                if (filter.extensions.length === 0) return true;
+                const ext = c.path.split(".").pop() ?? "";
+                const listed = filter.extensions.includes(ext);
+                return filter.mode === "include" ? listed : !listed;
+              });
+              return {
+                files,
+                total_bytes: files.reduce((n, f) => n + f.size_bytes, 0),
+                skipped_directories: ["PioneerDJ", "_Serato_"],
+                errors: [],
+              };
+            }
+            case "delete_unused_files":
+              return {
+                deleted: args.paths as string[],
+                failed: [],
+                report_path: "/data/reports/deleted-1.txt",
+              };
             case "preview_organize":
               return plan(args);
             case "apply_organize": {
@@ -190,4 +218,32 @@ test("a malformed pattern blocks the preview", async ({ page }) => {
   await page.getByLabel("Filename pattern").fill("%artist");
   await expect(page.getByRole("alert")).toContainText("unterminated");
   await expect(page.getByRole("button", { name: "Preview" })).toBeDisabled();
+});
+
+test("find unused files: scan, then confirm before deleting", async ({ page }) => {
+  await openOrganize(page);
+
+  await page.getByLabel("Folder to scan").fill("/music");
+  await page.getByRole("button", { name: "Scan" }).click();
+
+  const scan = page.getByTestId("unused-scan");
+  await expect(scan).toBeVisible();
+  await expect(scan.getByText("/music/cover.png")).toBeVisible();
+  // The report says what it did not look at.
+  await expect(page.getByText(/Skipped: PioneerDJ, _Serato_/)).toBeVisible();
+
+  // Nothing is pre-selected, so deletion starts unavailable.
+  await expect(
+    page.getByRole("button", { name: /Delete 0 file\(s\)/ }),
+  ).toBeDisabled();
+
+  await page.getByLabel("Select /music/cover.png").check();
+  await page.getByRole("button", { name: /Delete 1 file\(s\)…/ }).click();
+  await expect(page.getByRole("alert")).toContainText("cannot be undone");
+
+  await page
+    .getByRole("button", { name: /Permanently delete 1 file\(s\)/ })
+    .click();
+  await expect(page.getByText(/Deleted 1 file\(s\)/)).toBeVisible();
+  await expect(page.getByText(/deleted-1\.txt/)).toBeVisible();
 });

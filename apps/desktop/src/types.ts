@@ -416,3 +416,28 @@ export interface PatternField {
   name: string;
   supported: boolean;
 }
+
+export type ExtensionMode = "include" | "exclude";
+
+export interface ExtensionFilter {
+  mode: ExtensionMode;
+  extensions: string[];
+}
+
+export interface UnusedFile {
+  path: string;
+  size_bytes: number;
+}
+
+export interface UnusedScan {
+  files: UnusedFile[];
+  total_bytes: number;
+  skipped_directories: string[];
+  errors: string[];
+}
+
+export interface DeleteReport {
+  deleted: string[];
+  failed: [string, string][];
+  report_path: string | null;
+}

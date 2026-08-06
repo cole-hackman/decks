@@ -2588,6 +2588,8 @@ pub fn run() {
             organizer::validate_pattern,
             organizer::preview_organize,
             organizer::apply_organize,
+            organizer::scan_unused_files,
+            organizer::delete_unused_files,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,

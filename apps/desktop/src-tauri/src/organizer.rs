@@ -15,7 +15,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use file_organizer::{
-    plan_batch, OrganizeSpec, Pattern, PlanRequest, RunDate, SubfolderSpec, TrackFacts,
+    plan_batch, ExtensionFilter, KnownPaths, OrganizeSpec, Pattern, PlanRequest, RunDate,
+    SubfolderSpec, TrackFacts, UnusedScan,
 };
 use serde::{Deserialize, Serialize};
 
@@ -335,6 +336,108 @@ pub async fn apply_organize(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Scan folder trees for files the library does not reference.
+///
+/// Read-only. The report is a list of deletion *candidates*, which is why the
+/// scan and the deletion are separate commands and why the scan refuses to run
+/// against an empty library.
+#[tauri::command]
+pub async fn scan_unused_files(
+    library_path: String,
+    roots: Vec<String>,
+    filter: ExtensionFilter,
+) -> Result<UnusedScan, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+        let known = KnownPaths::new(
+            db.tracks()
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter_map(|t| t.folder_path),
+        );
+        let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).collect();
+        file_organizer::unused::scan(&roots, &known, &filter)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct DeleteReport {
+    pub deleted: Vec<String>,
+    pub failed: Vec<(String, String)>,
+    /// Where the record of what was deleted was written. Deletion here is
+    /// irreversible, so it always leaves a trail.
+    pub report_path: Option<String>,
+}
+
+/// Delete files the scan reported.
+///
+/// Irreversible — the caller is responsible for confirming with the user. Two
+/// guards regardless: a path still in the library is refused outright (the
+/// library can change between scanning and deleting), and a report of what went
+/// is written before the command returns.
+#[tauri::command]
+pub async fn delete_unused_files(
+    app: tauri::AppHandle,
+    library_path: String,
+    paths: Vec<String>,
+) -> Result<DeleteReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+        let known = KnownPaths::new(
+            db.tracks()
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .filter_map(|t| t.folder_path),
+        );
+
+        let mut report = DeleteReport::default();
+        for path in paths {
+            let p = PathBuf::from(&path);
+            // Re-checked here, not just at scan time: the library can gain a
+            // track between the scan and the click.
+            if known.contains(&p) {
+                report
+                    .failed
+                    .push((path, "now referenced by the library".into()));
+                continue;
+            }
+            match std::fs::remove_file(&p) {
+                Ok(()) => report.deleted.push(path),
+                Err(e) => report.failed.push((path, e.to_string())),
+            }
+        }
+
+        if !report.deleted.is_empty() {
+            report.report_path = write_delete_report(&app, &report.deleted).ok();
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Write the list of deleted paths beside the app's own data.
+///
+/// Best-effort: failing to write the record must not make the command look like
+/// the deletion failed, but the UI is told whether a record exists.
+fn write_delete_report(app: &tauri::AppHandle, deleted: &[String]) -> std::io::Result<String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| std::io::Error::other(e.to_string()))?
+        .join("reports");
+    std::fs::create_dir_all(&dir)?;
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let path = dir.join(format!("deleted-{stamp}.txt"));
+    std::fs::write(&path, deleted.join("\n"))?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

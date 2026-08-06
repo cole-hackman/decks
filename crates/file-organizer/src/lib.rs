@@ -10,18 +10,28 @@
 //! - [`plan`] — combine the two into concrete destination paths, resolving
 //!   collisions.
 //!
-//! Nothing in this crate touches the filesystem. Planning is separated from
-//! execution so a bulk move over someone's music library can be shown in full
-//! and reviewed before anything happens to it.
+//! Plus [`unused`], the Find Unused Files sweep, which shares the crate because
+//! it is the same concern seen from the other side: which files on disk the
+//! library does *not* account for.
+//!
+//! Nothing here *writes* to the filesystem — [`unused::scan`] reads a folder
+//! tree and that is the extent of it. Planning is separated from execution so a
+//! bulk move over someone's music library can be shown in full and reviewed
+//! before anything happens to it.
 //!
 //! See `docs/lexicon/06-files.md` for the behavioural spec.
 
 pub mod pattern;
 pub mod plan;
 pub mod subfolder;
+pub mod unused;
 
 pub use pattern::{sanitize_component, Pattern, PatternError};
 pub use plan::{plan_batch, MovePlan, OrganizeSpec, PlanOutcome, PlanRequest};
 pub use subfolder::{
     RunDate, SubfolderError, SubfolderPattern, SubfolderSpec, TrackFacts, MAX_LEVELS,
+};
+pub use unused::{
+    is_skipped_directory, is_unused, scan, ExtensionFilter, ExtensionMode, KnownPaths, UnusedFile,
+    UnusedScan, SKIPPED_DIRECTORIES,
 };

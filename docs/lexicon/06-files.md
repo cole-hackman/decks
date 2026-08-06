@@ -148,7 +148,18 @@ missing-file scan. Aimed at reclaiming disk space.
 - The scan results can be exported as a plain path list **without deleting**, so users can hand
   them to their own scripts.
 
-*decks status* — **missing.**
+*decks status* — **done.** `crates/file-organizer::unused` implements the sweep;
+`UnusedFilesPanel` (inside Move & Rename) runs it. Include/exclude extension filtering with an
+empty list meaning "no filter" in either mode; the DJ-folder skip list plus OS and VCS
+directories, matched case-insensitively; `Copy paths` exports the list without deleting; and a
+timestamped record of every deletion is written under the app data folder.
+
+Three guards the manual does not specify but this needs, given the output is a deletion list:
+a scan against an **empty library refuses to run** (everything would look unused); library
+membership is **re-checked at delete time**, not just at scan time, because the library can gain
+a track in between; and path comparison is case- and separator-insensitive, since Rekordbox and
+the filesystem do not reliably agree and a case-only mismatch would offer a real track for
+deletion. Nothing is pre-selected, and deletion is behind an explicit second click.
 
 *Epic* — **4**.
 

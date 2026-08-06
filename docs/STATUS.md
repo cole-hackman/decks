@@ -50,13 +50,26 @@ New `OrganizeFilesView`, reachable from the sidebar as **Move & Rename**, acting
 or the whole library. Preview lists rows that would *not* change too, and the success toast says a
 sync is still needed — per the manual, a partial sync leaves the old locations behind.
 
+**Find Unused Files** ships in the same crate, because it is the same concern from the other side:
+which files on disk the library does not account for. Include/exclude extension filtering (an empty
+list means "no filter" in either mode, since an empty include list would report nothing and look
+broken), the DJ-folder skip list matched case-insensitively, `Copy paths` to export without
+deleting, and a timestamped record of every deletion under the app data folder.
+
+Its output is a list of deletion candidates, so it carries three guards the manual does not
+specify. A scan against an **empty library refuses to run** — everything would look unused. Library
+membership is **re-checked at delete time**, because the library can gain a track between the scan
+and the click. And path comparison is case- and separator-insensitive, since Rekordbox and the
+filesystem do not reliably agree and a case-only mismatch would offer a real track for deletion.
+Nothing is pre-selected and deletion needs an explicit second click.
+
 **What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move with favourite
 folders, bulk Write Tags with per-field selection, field mappings, enrichment (Find Tags & album
-art), Energy/Danceability, Beatshift Fixer, Find Unused Files, local path mappings, and the
-Automatic Actions settings group.
+art), Energy/Danceability, Beatshift Fixer, local path mappings, and the Automatic Actions settings
+group.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 301, typecheck, lint, `pnpm e2e` 13 — all green.
+clean, `pnpm test` 299, typecheck, lint, `pnpm e2e` 14 — all green.
 
 ## 2026-08-06 — Epic 3 (part 1): cue templates and custom cue anchors
 New `crates/cue-generator`, split in two so detection can land later without touching the placement logic:
