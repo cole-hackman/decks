@@ -2318,6 +2318,21 @@ a promise about muscle memory (favourites). A snapshot is a different kind of ta
 Absence is not a value (the timeline). Six of those are the same instinct wearing different
 clothes: **say what you actually know, and nothing more.**
 
+## 2026-08-06 — Custom Tags selection semantics
+
+**A flat list plus one combinator cannot express two levels.** `tagIds` + `tagMatchAll` can say "any
+of these" or "all of these" and nothing in between — but the page's actual meaning is OR inside each
+category and AND across them. The shape of the data has to match the shape of the rule; no amount of
+care at the call site fixes a model that cannot represent the answer.
+
+**An empty group is not a constraint.** A category the user has not touched must not exclude
+everything. That is the same empty-case instinct as Cross Reference over no selection, and it is
+worth checking every time a filter is built from a collection of collections.
+
+**Put the rule on screen.** "Any within a category, all across" is not guessable from results. One
+line next to the selection count is cheaper than a user reverse-engineering the semantics from a
+track count that surprised them.
+
 ## 2026-08-06 — M3U import, and new playlist from selection
 
 **A format module should read what it writes.** Putting `parse_m3u` next to `m3u` means one place

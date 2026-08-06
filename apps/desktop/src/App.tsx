@@ -659,10 +659,11 @@ export default function App() {
           )}
           {currentView === "tags" && (
             <CustomTagsPanel
-              onShowTracks={(tagIds) => {
+              onShowTracks={(tagIds, tagGroups) => {
                 setFilters((prev) => ({
                   ...prev,
                   tagIds,
+                  tagGroups,
                   tagMatchAll: false,
                 }));
                 setCurrentView("library");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   listTagCategories,
   createTagCategory,
@@ -13,7 +13,7 @@ interface Props {
   /** Optional — when provided, the panel renders a "Show tracks" button that
    *  hands the selected tag IDs back to the parent (which typically updates
    *  the library filter and switches view). */
-  onShowTracks?: (tagIds: string[]) => void;
+  onShowTracks?: (tagIds: string[], tagGroups: string[][]) => void;
 }
 
 export function CustomTagsPanel({ onShowTracks }: Props = {}) {
@@ -21,6 +21,25 @@ export function CustomTagsPanel({ onShowTracks }: Props = {}) {
   const [tags, setTags] = useState<Record<string, Tag[]>>({});
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+
+  /**
+   * Selected ids grouped by the category they came from.
+   *
+   * The spec's semantics for this page are **OR within a category, AND across
+   * categories** — picking two genres and one energy means "either genre, and
+   * that energy". A flat list cannot say that.
+   */
+  const tagGroups = useMemo(
+    () =>
+      categories
+        .map((cat) =>
+          (tags[cat.id] ?? [])
+            .filter((t) => selectedTagIds.has(t.id))
+            .map((t) => t.id),
+        )
+        .filter((g) => g.length > 0),
+    [categories, tags, selectedTagIds],
+  );
 
   const loadData = async () => {
     try {
@@ -198,6 +217,11 @@ export function CustomTagsPanel({ onShowTracks }: Props = {}) {
           <span className="text-xs text-ink-muted">
             {selectedTagIds.size} tag
             {selectedTagIds.size === 1 ? "" : "s"} selected
+            {tagGroups.length > 1 && (
+              <span className="ml-1 text-[11px] opacity-70" data-testid="tag-selection-rule">
+                — any within a category, all across
+              </span>
+            )}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -209,7 +233,7 @@ export function CustomTagsPanel({ onShowTracks }: Props = {}) {
             </button>
             <button
               type="button"
-              onClick={() => onShowTracks([...selectedTagIds])}
+              onClick={() => onShowTracks([...selectedTagIds], tagGroups)}
               className="rounded bg-accent px-2 py-1 text-xs font-medium text-base hover:bg-accent-hover"
             >
               Show {selectedTagIds.size} tag

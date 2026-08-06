@@ -1,5 +1,31 @@
 # Status
 
+## 2026-08-06 — Custom Tags selection semantics
+
+The Custom Tags page handed the library filter a flat list of tag ids with "match any". The spec's
+semantics for that page are **OR within a category, AND across categories** — picking House and
+Techno from Genre plus Peak from Mood means `(House OR Techno) AND Peak`, and a flat list with one
+combinator cannot say that.
+
+`Filters` gains `tagGroups: string[][]`, and the page groups its selection by the category each tag
+came from. Details:
+
+- **Groups take precedence over the flat list** when both are set — the grouped form is the more
+  specific statement.
+- **An empty group is not a constraint.** A category with nothing selected must not exclude
+  everything.
+- **The rule is on screen**, next to the selection count, rather than being a hidden behaviour the
+  user has to infer from results.
+
+This is the other half of the Epic 1 deferral I closed earlier today: the tag query language went
+into the browser search box, and this is the Tags page.
+
+**CI note:** the Actions queue is draining slowly — `e8a6120` took ~35 minutes to start. Several
+commits still have no scheduled runs. Local verification is complete and green.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 602, typecheck, lint, `pnpm e2e` 46 — all green locally.
+
 ## 2026-08-06 — M3U import and new-playlist-from-selection
 
 Two playlist-tree gaps, both reusing primitives that were already there.
