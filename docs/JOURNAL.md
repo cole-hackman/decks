@@ -1572,6 +1572,14 @@ flex children without `shrink-0` get compressed once the siblings fill the conta
 Playwright reporting the element as "hidden" while it was plainly in the DOM; vitest could not have
 seen it, since jsdom has no layout.
 
+**A pre-existing flake surfaced on CI** and is fixed here since it was red on this PR:
+`PlaylistPanel.test.tsx` waited on the folder row and then asserted synchronously on its children.
+Auto-expansion happens in an effect *after* the first render with data, so the folder is on screen
+one render before its children are — the assertion caught that intermediate render whenever the
+machine was slow enough. Waiting on a child instead is both correct and what the test's own comment
+already claimed it was doing. Worth remembering: `findBy*` on the thing that appears first does not
+wait for the thing that appears second.
+
 **Next:** the rest of Epic 4. The watch folder is what remains of the automation story, and it needs
 a decision first: importing a *new* file into the library is a `master.db` write, so it has to go
 through a new `ChangeKind::TrackCreate` and the XML-export path rather than the watcher writing
