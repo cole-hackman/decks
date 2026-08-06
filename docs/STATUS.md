@@ -1,5 +1,34 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 9): sidepanel — and Epic 6 closes
+
+A **second track browser** on the right, resizable, toggled from the header or by `Cmd/Ctrl+\`.
+Registered in the action registry rather than hard-wired, so it is rebindable like everything else
+(Epic 2's design earning its keep).
+
+**It keeps its own selection, deliberately.** The point of the spec's feature is comparing two
+playlists while building a set; a shared selection would make it a mirror rather than a second
+view. It is also available from every workspace view, not just the playlist browser — the reason to
+open it is usually something you are looking at in the main pane.
+
+That closes **Epic 6 — Set preparation**. Nine slices:
+
+1. Mixable Tracks — reached `score_transition`, which had been unreachable since before the epic
+2. Playlist tools — Merge, Sort, Cross Reference, Prefix, Rewrite Order
+3. Playlist Occurrence — any N, with its distribution
+4. Share / export — CSV, M3U, HTML, quick copy
+5. Key leading-zero option, and Colors-to-nearest recorded as blocked
+6. Favourite playlists with per-favourite hotkeys
+7. Play history — snapshots, deleted-set ledger, save-as-playlist
+8. Track Timeline
+9. Sidepanel
+
+Parity moved **34 done / 37 partial / 32 missing** at the start of the initiative to
+**44 / 34 / 14 / 16 deferred**.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 589, typecheck, lint, `pnpm e2e` 46 — all green.
+
 ## 2026-08-06 — Epic 6 (part 8): track timeline
 
 A chart above the playlist tracks — and above a history set, per the spec — showing how a set

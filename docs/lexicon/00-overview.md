@@ -73,7 +73,12 @@ actions.
 can be viewed side by side. Pitched for set building, and repeatedly cited as the thing that makes
 Genre/Artist Cleanup's alt-click-to-filter useful.
 
-*decks status* — **missing.**
+*decks status* — **done.** A resizable second browser on the right, toggled from the header or by
+`Cmd/Ctrl+\` — registered in the action registry, so it is rebindable like everything else.
+
+**It keeps its own selection**, deliberately. The point is comparing two playlists; a shared
+selection would make it a mirror rather than a second view. Available from any view, not just the
+playlist browser, since the reason to open it is usually something in the main pane.
 
 *Epic* — **6**.
 

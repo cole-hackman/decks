@@ -220,7 +220,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
 - [x] Favorite Playlists with hotkeys — star up to 9 (cache migration **v16**); the bar pins above
       the browser, `1`–`9` opens and `Shift+1`–`9` files the selection. Drag-and-drop onto a
       favourite is not done: the track table has no drag source yet
-- [ ] Sidepanel (second track browser)
+- [x] Sidepanel (second track browser) — resizable, toggled from the header or `Cmd/Ctrl+\`, and
+      registered in the action registry so it is rebindable. Keeps its own selection: a second
+      view, not a mirror
 - [x] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist —
       cache migration **v17**; import is idempotent by `djmdHistory.ID`, and the re-match says
       which rule matched rather than implying certainty

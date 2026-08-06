@@ -92,6 +92,9 @@ export default function App() {
   >(null);
   /** Set when a favourite hotkey asks the playlist panel to jump. */
   const [focusPlaylistId, setFocusPlaylistId] = useState<string | null>(null);
+  /** The Sidepanel: a second track browser, for building a set from two
+   *  playlists at once. Per docs/lexicon/00-overview.md §Sidepanel. */
+  const [sidepanelOpen, setSidepanelOpen] = useState(false);
   const [pendingAgentPrompt, setPendingAgentPrompt] = useState<string | null>(
     null,
   );
@@ -283,6 +286,13 @@ export default function App() {
         },
       },
       {
+        id: "view.toggleSidepanel",
+        label: "Toggle Sidepanel",
+        group: "View",
+        defaultBinding: { key: "\\", meta: true },
+        run: () => setSidepanelOpen((v) => !v),
+      },
+      {
         id: "player.playPause",
         label: "Play / pause",
         group: "Player",
@@ -454,6 +464,18 @@ export default function App() {
               </button>
             </>
           )}
+          <button
+            onClick={() => setSidepanelOpen((v) => !v)}
+            aria-label={sidepanelOpen ? "Close sidepanel" : "Open sidepanel"}
+            title="A second browser, so two playlists sit side by side"
+            className={`rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors duration-150 hover:bg-elevated ${
+              sidepanelOpen
+                ? "text-accent-hover"
+                : "text-ink-secondary hover:text-ink"
+            }`}
+          >
+            Sidepanel
+          </button>
           {showInspectorToggles && (
             <button
               onClick={() =>
@@ -679,6 +701,26 @@ export default function App() {
           )}
           {currentView === "settings" && <SettingsPanel />}
         </main>
+
+        {sidepanelOpen && (
+          <ResizablePanel
+            side="right"
+            className="border-l border-edge bg-base"
+            minWidth={280}
+            maxWidth={900}
+            defaultWidth={420}
+          >
+            {/* A second, independent browser. It keeps its own selection on
+                purpose: the point is comparing two playlists, and a shared
+                selection would make it a mirror rather than a second view. */}
+            <PlaylistPanel
+              libraryPath={libraryPath}
+              selectedTrackId={null}
+              onSelectTrack={handleTrackSelect}
+              onTrackContextMenu={handleTrackContextMenu}
+            />
+          </ResizablePanel>
+        )}
 
         {inspector !== null && (
           <ResizablePanel

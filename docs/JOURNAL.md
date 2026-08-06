@@ -2295,6 +2295,34 @@ old test had simply been relying on there being only one match.
 
 **Next in Epic 6:** the sidepanel.
 
+## 2026-08-06 — Epic 6 (part 9): sidepanel, and the epic closes
+
+**A second instance is not a second view unless it has its own state.** The whole temptation with a
+sidepanel is to share the selection — it feels consistent. It also makes the feature pointless: two
+panes showing the same thing is a mirror, and the reason to open a second browser is to look at
+something *else*. The independent selection is the feature, not an oversight.
+
+**Building the registry first keeps paying.** The sidepanel toggle was three lines in the actions
+array and arrived rebindable, searchable in the Action Center, and with its shortcut hint rendered
+for free. Epic 2's decision to make every capability a named action is still returning interest
+eight epics later.
+
+**Nine slices, one branch.** Epic 6 shipped as nine commits on one PR rather than nine PRs, which
+kept the stack from growing another eight deep. Worth remembering as the default: the epic is the
+review unit, the slice is the commit unit.
+
+**What Epic 6 taught, in one line each.** A capability with no caller is not a feature (Mixable
+Tracks). Filter and rank are different products (the rule set). A vacuous truth is still a wrong
+answer (Cross Reference over nothing). An export is an attack surface (CSV injection). A hotkey is
+a promise about muscle memory (favourites). A snapshot is a different kind of table (history).
+Absence is not a value (the timeline). Six of those are the same instinct wearing different
+clothes: **say what you actually know, and nothing more.**
+
+**Next:** Epic 7 — streaming. Beatport / Beatsource / Tidal / SoundCloud sources, the Beatport
+catalog and cart, Charts, Store Links, Track Discovery, Send To, Transfer Streaming To Local. All
+of it needs network access and accounts, so the first question is which parts can exist at all
+under the no-telemetry, local-first constraint.
+
 ## 2026-08-06 — Epic 6 (part 5): key leading-zero option
 
 **Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a
