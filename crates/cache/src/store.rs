@@ -2466,9 +2466,10 @@ impl CacheDb {
     /// their old numbers, so deleting the second preset would leave `2` dead
     /// and `3` still on the third.
     pub fn delete_cue_preset(&self, id: &str) -> Result<bool> {
-        let removed = self
-            .conn
-            .execute("DELETE FROM cue_presets WHERE id = ?1", rusqlite::params![id])?;
+        let removed = self.conn.execute(
+            "DELETE FROM cue_presets WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
         if removed == 0 {
             return Ok(false);
         }
@@ -2500,7 +2501,10 @@ impl CacheDb {
             let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
-        let mut order: Vec<&String> = ordered_ids.iter().filter(|id| existing.contains(id)).collect();
+        let mut order: Vec<&String> = ordered_ids
+            .iter()
+            .filter(|id| existing.contains(id))
+            .collect();
         for id in &existing {
             if !order.contains(&id) {
                 order.push(id);
@@ -3855,7 +3859,8 @@ mod tests {
         let one = db.create_cue_preset("One", None).unwrap();
         let two = db.create_cue_preset("Two", None).unwrap();
 
-        db.set_cue_preset_order(&[two.clone(), one.clone()]).unwrap();
+        db.set_cue_preset_order(&[two.clone(), one.clone()])
+            .unwrap();
         assert_eq!(
             db.list_cue_presets()
                 .unwrap()
@@ -3884,7 +3889,8 @@ mod tests {
     fn an_unknown_id_in_the_order_is_ignored() {
         let db = CacheDb::open_in_memory().unwrap();
         let one = db.create_cue_preset("One", None).unwrap();
-        db.set_cue_preset_order(&["ghost".to_string(), one]).unwrap();
+        db.set_cue_preset_order(&["ghost".to_string(), one])
+            .unwrap();
         assert_eq!(db.list_cue_presets().unwrap().len(), 1);
     }
 }

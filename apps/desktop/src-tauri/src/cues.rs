@@ -344,25 +344,23 @@ pub async fn apply_cue_preset(
             .ok_or_else(|| format!("no cue preset {preset_id}"))?;
 
         let mut staged = Vec::new();
-        let mut stage = |field: &str,
-                         old: serde_json::Value,
-                         new: serde_json::Value|
-         -> Result<(), String> {
-            let record = cache
-                .stage_change(changes::NewChange {
-                    library_path: Some(library_path.clone()),
-                    kind: changes::ChangeKind::CueMetadataEdit,
-                    target_id: Some(cue_id.clone()),
-                    field: Some(field.to_string()),
-                    old_value: Some(old),
-                    new_value: Some(new),
-                    reason: Some(format!("Applied cue preset “{}”", preset.name)),
-                    confidence: Some(1.0),
-                })
-                .map_err(|e| e.to_string())?;
-            staged.push(record.id);
-            Ok(())
-        };
+        let mut stage =
+            |field: &str, old: serde_json::Value, new: serde_json::Value| -> Result<(), String> {
+                let record = cache
+                    .stage_change(changes::NewChange {
+                        library_path: Some(library_path.clone()),
+                        kind: changes::ChangeKind::CueMetadataEdit,
+                        target_id: Some(cue_id.clone()),
+                        field: Some(field.to_string()),
+                        old_value: Some(old),
+                        new_value: Some(new),
+                        reason: Some(format!("Applied cue preset “{}”", preset.name)),
+                        confidence: Some(1.0),
+                    })
+                    .map_err(|e| e.to_string())?;
+                staged.push(record.id);
+                Ok(())
+            };
 
         if current_name.as_deref() != Some(preset.name.as_str()) {
             stage(
