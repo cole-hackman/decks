@@ -495,3 +495,12 @@ export interface ImportResult {
   staged: string[];
   failed: [string, string][];
 }
+
+export interface AutomaticAction {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  /** Non-null when decks cannot honour the action yet; the toggle is disabled. */
+  unavailable: string | null;
+}

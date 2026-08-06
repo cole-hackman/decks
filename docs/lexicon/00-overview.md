@@ -95,7 +95,22 @@ background behaviour the user opts into once:
 The recurring pattern — *automation applies to tracks the user brought in, never to tracks imported
 from a DJ app* — is a good default and should carry into `decks`.
 
-*decks status* — **missing**, all five.
+*decks status* — **partial.** The settings group exists (`AutomaticActionsSection`, Settings), and
+**Auto Analyze New Tracks** works: importing a watch-folder arrival detects BPM and key on the way
+in, and analysis failing does not undo an import that already succeeded.
+
+The other four are surfaced as **disabled toggles that state what they need**, rather than hidden or
+offered as switches that quietly do nothing:
+
+| Setting | Blocked on |
+|---|---|
+| Auto Generate Cues on Play | Automatic drop detection. Every anchor today comes from a cue the user placed, so there is nothing to generate from on a track with no cues — the setting would be a permanent no-op. |
+| Auto Re-encode New MP3/MP4/M4A | The Beatshift Fixer, not built. |
+| Auto Write File (ID3) Tags | Field mappings, so Lexicon-only fields project into real tag fields. Write Tags in the Files view does this manually today. |
+| Automatically Find Custom Tags | The enrichment providers, not wired up. |
+
+An unavailable action also reads as *off* at the point of use regardless of what is stored, so a
+setting enabled before its feature regressed cannot silently take effect.
 
 *Epic* — **4**.
 

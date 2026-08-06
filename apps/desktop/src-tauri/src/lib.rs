@@ -1,4 +1,5 @@
 mod audio;
+mod automation;
 mod claude_agent;
 mod cue_generator;
 mod cues;
@@ -80,7 +81,7 @@ fn hydrate_energy(tracks: &mut [decks_core::rekordbox_db::Track], cache: &cache:
 
 // ── Config helpers ────────────────────────────────────────────────────────────
 
-fn read_config(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub(crate) fn read_config(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     let path = app
         .path()
         .app_config_dir()
@@ -93,7 +94,10 @@ fn read_config(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
-fn write_config(app: &tauri::AppHandle, config: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn write_config(
+    app: &tauri::AppHandle,
+    config: &serde_json::Value,
+) -> Result<(), String> {
     let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
     let path = config_dir.join("config.json");
@@ -2684,6 +2688,8 @@ pub fn run() {
             watch::stage_arrival_imports,
             watch::dismiss_arrivals,
             watch::clear_dismissed_arrivals,
+            automation::list_automatic_actions,
+            automation::set_automatic_action,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,

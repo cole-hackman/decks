@@ -1605,6 +1605,18 @@ wrong duration that then propagates into Rekordbox. Ten seconds of no modificati
 still moving are reported separately rather than silently omitted — "3 files still copying" is
 information; a short list is a mystery.
 
-**Next:** what is left of Epic 4 is the Automatic Actions settings group (which is what would make
-auto-move-on-done actually fire), field mappings, and the enrichment revival. Epic 5 onward is
-untouched.
+**Automatic Actions forced a question worth writing down:** what do you do with a settings group
+where you can only honour one of the five switches? Three options — hide the four, ship them as
+toggles that do nothing, or show them disabled with the reason. The second is banned outright (no
+stub logic in production paths). The first is tempting and wrong: hiding them makes the gap
+invisible, to us as much as to the user. So they render disabled, each naming what it is blocked
+on, and `set_automatic_action` refuses them at the backend too rather than trusting the UI to keep
+them off.
+
+One more guard: `is_enabled` returns false for an unavailable action *regardless of what is
+stored*. If one of these ever ships, gets enabled, and is then blocked again by a regression, the
+stored `true` must not silently take effect.
+
+**Next:** what remains in Epic 4 is field mappings, the enrichment revival (Find Tags & album art),
+Energy/Danceability, and the Beatshift Fixer — the last two are analysis work closer in character
+to Epic 3 part 2 than to the file management this PR covers. Epic 5 onward is untouched.

@@ -43,6 +43,7 @@ import type {
   WatchFolderRow,
   WatchScan,
   ImportResult,
+  AutomaticAction,
 } from "./types";
 import type {
   ChatMessage,
@@ -1109,4 +1110,15 @@ export async function dismissArrivals(paths: string[]): Promise<number> {
 
 export async function clearDismissedArrivals(): Promise<number> {
   return invoke<number>("clear_dismissed_arrivals");
+}
+
+export async function listAutomaticActions(): Promise<AutomaticAction[]> {
+  return invoke<AutomaticAction[]>("list_automatic_actions");
+}
+
+export async function setAutomaticAction(
+  key: string,
+  enabled: boolean,
+): Promise<void> {
+  return invoke<void>("set_automatic_action", { key, enabled });
 }

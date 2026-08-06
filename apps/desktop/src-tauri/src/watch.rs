@@ -124,6 +124,10 @@ pub struct ImportResult {
     pub staged: Vec<String>,
     /// `(path, reason)` — a file whose tags cannot be read fails alone.
     pub failed: Vec<(String, String)>,
+    /// Files that were analysed on the way in, because "Auto-analyse new
+    /// tracks" is on. Reported so the UI can say it happened rather than
+    /// leaving the user wondering why the import took longer.
+    pub analysed: Vec<String>,
 }
 
 /// Stage arrivals for import as `TrackCreate` changes.
@@ -132,12 +136,18 @@ pub struct ImportResult {
 /// land in Rekordbox, rather than a bare path. Staging also dismisses the file,
 /// since it has now been dealt with — otherwise the next scan offers it again
 /// and the user stages it twice.
+///
+/// When "Auto-analyse new tracks" is on, BPM and key are detected here too.
+/// This is the one place the spec's rule bites: automation applies to tracks
+/// the user brought in, never to tracks that came from Rekordbox — and an
+/// arrival is by definition the former.
 #[tauri::command]
 pub async fn stage_arrival_imports(
     app: tauri::AppHandle,
     library_path: String,
     paths: Vec<String>,
 ) -> Result<ImportResult, String> {
+    let auto_analyse = crate::automation::is_enabled(&app, crate::automation::AUTO_ANALYZE);
     tauri::async_runtime::spawn_blocking(move || {
         let cache = cache_db(&app)?;
         let mut result = ImportResult::default();
@@ -176,6 +186,16 @@ pub async fn stage_arrival_imports(
                 })
                 .map_err(|e| e.to_string())?;
             result.staged.push(record.id);
+
+            if auto_analyse {
+                // Analysis failing must not undo an import that already
+                // succeeded — a track with no BPM yet is still a track.
+                match audio_analysis::analyze_file_cached(Path::new(&path), &path, &cache) {
+                    Ok(_) => result.analysed.push(path.clone()),
+                    Err(e) => tracing::warn!(path = %path, error = %e, "auto-analysis failed"),
+                }
+            }
+
             dismissed.push(path);
         }
 

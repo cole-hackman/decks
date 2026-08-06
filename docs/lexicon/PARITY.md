@@ -19,13 +19,13 @@ regardless of how much of Lexicon they represent.
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
-| Files | 5 | 5 | 1 | 0 |
+| Files | 5 | 6 | 0 | 0 |
 | Health | 0 | 3 | 2 | 0 |
 | Recipes & editing | 1 | 2 | 4 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **22** | **39** | **26** | **16** |
+| **Total** | **22** | **40** | **25** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -129,7 +129,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
-| Automatic Actions settings group | **missing** | 5 automations | 4 |
+| Automatic Actions settings group | partial | Group + auto-analyse work; other four disabled with reasons | 4 |
 
 ## Health — `07-health.md`
 

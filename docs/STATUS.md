@@ -118,13 +118,22 @@ in a performing library is worse than no row. So the applier **refuses** it — 
 the file and pointing at the XML route — and the exporter emits the new tracks into the collection,
 continuing IDs past the highest existing one so an import can never silently replace a real track.
 
+**Automatic Actions** closes the epic's automation story, honestly. The settings group exists and
+**Auto Analyze New Tracks** works: importing an arrival detects BPM and key on the way in, and a
+failed analysis does not undo an import that already succeeded. The other four are shown as
+**disabled toggles that state what they need** — automatic drop detection, the Beatshift Fixer,
+field mappings, the enrichment providers — rather than hidden or offered as switches that quietly
+do nothing. A switch that does not switch anything is worse than one that says why it is off, and
+hiding them would make the gap invisible. An unavailable action also reads as off at the point of
+use regardless of what is stored, so a setting enabled before its feature regressed cannot silently
+take effect.
+
 **What is NOT done in Epic 4:** incoming auto-advance and its hotkey, delete-from-disk, quick
 move's context-menu entry point, field mappings, auto-write-on-change, enrichment (Find Tags &
-album art), Energy/Danceability, Beatshift Fixer, and the Automatic Actions settings group — which
-is what would make auto-move-on-done fire.
+album art), Energy/Danceability, and the Beatshift Fixer.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 334, typecheck, lint, `pnpm e2e` 17 — all green. One CI-only clippy lint
+clean, `pnpm test` 339, typecheck, lint, `pnpm e2e` 17 — all green. One CI-only clippy lint
 (`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
 `cargo clippy` passing locally does not guarantee CI.
 

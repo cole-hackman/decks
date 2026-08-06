@@ -153,7 +153,7 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 - [ ] Beatshift detection on import/sync + Beatshift Fixer re-encode with an already-done ledger
 - [x] Find Unused Files with include/exclude extensions and DJ-folder skips
 - [x] Local Path Mappings
-- [ ] Automatic Actions settings group (5 toggles)
+- [x] Automatic Actions settings group — 1 of 5 wired; the rest disabled with their blockers named
 
 **Acceptance:** drop a file in the watch folder, see it analysed, tagged, art-fetched, renamed by
 pattern, filed into a genre/BPM tree, and marked done — untouched by hand.
