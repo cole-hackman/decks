@@ -1668,3 +1668,34 @@ inbox is how a track silently gets skipped.
 **Next:** enrichment (Find Tags & album art) is the remaining large Epic 4 item, and it needs
 network providers plus a local cache. Energy/Danceability and the Beatshift Fixer are analysis work,
 closer in character to Epic 3 part 2 than to file management. Epics 5–7 untouched.
+
+## 2026-08-06 — Session: Epic 5 part 1 (Recipes)
+
+**The framing that made this tractable:** recipes are not "bulk edit", they are a small pure
+function library with a serialisable description attached. Once that was clear, the crate wrote
+itself — `(Recipe, TrackFields) -> (TrackFields, Outcome)`, no I/O anywhere, 75 tests that need no
+fixtures. The Tauri layer is then thin enough to be obviously correct.
+
+**Reporting *why* nothing happened turned out to be the design decision.** The naive version returns
+the new fields and shrugs. But a user running a recipe over 400 tracks and seeing 340 change wants
+to know about the other 60, and "the source field was empty" versus "the delimiter was not found"
+are different problems with different fixes. So every operation that declines to act says which of
+four reasons applied, and the UI surfaces it.
+
+**Two near-misses the tests caught.** `Extract Text` with no match must not write an empty string —
+that would blank a remixer field the user spent time on. And `Merge Fields` where one half is
+missing must yield the other half rather than `"Daft Punk & "`. Both are the same underlying
+instinct: an operation that cannot do its job should leave the track alone, not do a bad job.
+
+**One that clippy caught:** the emoji range list had `0x1F3FB..=0x1F3FF` (skin tones) *inside*
+`0x1F300..=0x1FAFF`. Harmless, but it meant the list was written from a reference rather than
+checked — worth a comment saying which ranges are genuinely separate and why.
+
+**And one Playwright habit worth writing down:** `getByText("Get Lucky")` is case-insensitive by
+default, so it matched the `get lucky` before-value and the track name as well as the `Get Lucky`
+after-value. `{ exact: true }` is the fix. Three strict-mode violations this session have all been
+locators that were less specific than they looked.
+
+**Next in Epic 5:** the tag recipes — `Import Tags from Text` especially, which the spec calls the
+strongest migration path for users who have been hand-rolling hashtags in comments for years. Then
+the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic.

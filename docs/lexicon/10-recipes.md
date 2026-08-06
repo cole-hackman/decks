@@ -116,10 +116,30 @@ comment field for years — worth prioritising within the epic.
   smartlists, which are derived.
 - **Import Date from Filesystem** — take the file's creation date as the track's date.
 
-*decks status* — **missing**, all of it.
+*decks status* — **partial.** `crates/recipes` implements the casing, field, text and number
+categories — 18 operations — as pure functions of (recipe, fields) → fields. `RecipesPanel`
+(sidebar → Recipes) builds a list, previews every proposed change as a deselectable before/after
+row, and stages what survives review as `TrackMetadataEdit` changes. Recipes serialise, so one built
+today can be saved and replayed on next month's downloads.
+
+Three rules the manual leaves open, decided and tested:
+
+- A recipe whose source field is empty **reports why** rather than doing nothing silently —
+  `SourceEmpty`, `NoMatch`, `NotANumber`, `Misconfigured`. "340 of 400 changed" needs an
+  explanation attached.
+- `Merge Fields` with one half missing yields the other half, not a stray separator.
+- `Extract Text` with no match leaves the target **untouched**. Writing an empty string would blank
+  a good remixer field, which is worse than not running.
+
+The field vocabulary offered is deliberately the intersection of what `decks` models and what the
+applier's allowlist will actually write — offering a field that cannot be persisted would produce a
+preview full of changes that silently vanish at sync time.
+
+Still missing: the **cue and beatgrid recipes** (14 ops), and the tag recipes including
+`Import Tags from Text`.
 
 *Epic* — **5**. Within the epic, the cue recipes depend on the cue-editing model from Epic 2, so
-sequence field/text/tag recipes first.
+field/text/tag recipes came first as the spec advises.
 
 ---
 

@@ -16,6 +16,7 @@ export type WorkspaceView =
   | "duplicates"
   | "matcher"
   | "organize"
+  | "recipes"
   | "sync"
   | "analytics"
   | "changes"
@@ -158,6 +159,17 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
         <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
         <path d="M10 13h6m0 0-2-2m2 2-2 2" />
+      </svg>
+    ),
+  },
+  {
+    id: "recipes",
+    label: "Recipes",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <path d="M4 6h9M4 12h13M4 18h7" />
+        <circle cx="18" cy="6" r="2" />
+        <circle cx="20" cy="18" r="2" />
       </svg>
     ),
   },

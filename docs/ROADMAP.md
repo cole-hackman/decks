@@ -165,7 +165,7 @@ pattern, filed into a genre/BPM tree, and marked done — untouched by hand.
 Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-recipes.md),
 [`02-library.md`](lexicon/02-library.md), [`07-health.md`](lexicon/07-health.md).
 
-- [ ] Recipes engine + the ~30 non-cue operations (casing, field, text, number, tag, other)
+- [x] Recipes engine + the casing / field / text / number operations (18). Tag and "other" recipes outstanding
 - [ ] Cue and beatgrid recipes (14 ops) — depends on Epic 2
 - [ ] `Import Tags from Text` (hashtag → custom tags, idempotent)
 - [ ] Multi-track manual editor with `<multiple values>`

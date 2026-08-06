@@ -16,6 +16,7 @@ import { SmartFixesPanel } from "./components/SmartFixesPanel";
 import { TrackMatcherView } from "./components/TrackMatcherView";
 import { SmartlistsView } from "./components/SmartlistsView";
 import { OrganizeFilesView } from "./components/OrganizeFilesView";
+import { RecipesPanel } from "./components/RecipesPanel";
 import { DuplicatesView } from "./components/DuplicatesView";
 import { IncomingView } from "./components/IncomingView";
 import { ArchiveView } from "./components/ArchiveView";
@@ -566,6 +567,16 @@ export default function App() {
               libraryPath={libraryPath}
               tracks={tracks}
               selectedTrackIds={selectedTrackIds}
+            />
+          )}
+          {currentView === "recipes" && (
+            <RecipesPanel
+              libraryPath={libraryPath}
+              trackIds={
+                selectedTrackIds.size > 0
+                  ? tracks.filter((t) => selectedTrackIds.has(t.id)).map((t) => t.id)
+                  : tracks.map((t) => t.id)
+              }
             />
           )}
           {currentView === "sync" && (

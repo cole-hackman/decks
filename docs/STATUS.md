@@ -1,5 +1,47 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 1): the Recipes engine
+
+New `crates/recipes` — the *other* bulk-editing system. `crates/smart-fixes` is ten fixed,
+zero-parameter cleanups; a recipe takes parameters, and the user assembles the one they need. The
+casing, field, text and number categories are done: **18 operations**, every one a pure function of
+(recipe, fields) → fields, with no database, no filesystem and no notion of what a track is. That
+keeps the whole vocabulary testable in isolation and lets one engine back the preview, the apply
+pass and, later, an agent tool.
+
+**The casing recipes exist because of one parameter.** `fix_casing` hardcodes its
+article/preposition list; a recipe takes the user's own words-to-ignore. A library full of `EDM`,
+`NYC` and `DJ` needs those protected, and no hardcoded list will ever contain them.
+
+Three rules the spec leaves open, decided and tested:
+
+- A recipe whose source is empty **reports why** — `SourceEmpty`, `NoMatch`, `NotANumber`,
+  `Misconfigured`. "340 of 400 changed" needs an explanation attached; silence reads as a bug.
+- `Merge Fields` with one half missing yields the other half, not a stray separator.
+- `Extract Text` with no match leaves the target **untouched**. Writing an empty string would blank
+  a good remixer field, which is worse than not running at all.
+
+Smaller decisions worth recording: `AdjustNumber` keeps an integer looking like an integer (bumping
+a track number from 3 must give `4`, not `4`); casing preserves original spacing rather than
+round-tripping through `split_whitespace`; and `RemoveBetween` collapses the gap it leaves, since
+`"Track  Live"` with a double space is exactly what a cleanup recipe should not produce.
+
+The field vocabulary offered by the UI is deliberately the intersection of what `decks` models and
+what the applier's allowlist will actually write — a test enforces it. Offering a field that cannot
+be persisted would produce a preview full of changes that silently vanish at sync time.
+
+`RecipesPanel` (sidebar → **Recipes**) builds an ordered list, previews every change as a
+deselectable before/after row, and stages what survives. Recipes serialise, so one built today can
+be saved and replayed on next month's downloads — the point of the feature.
+
+**Not done:** the cue (11) and beatgrid (3) recipes, which operate on cue lists rather than text and
+need the quantize arithmetic from `crates/rekordbox-db`; and the tag recipes, including
+`Import Tags from Text`, which the spec flags as the strongest migration path for users who have
+been hand-rolling hashtags in the comment field.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 375, typecheck, lint, `pnpm e2e` 19 — all green.
+
 ## Blockers — verified, not assumed (2026-08-06)
 
 The three Epic 4 items still open cannot be built *in this environment*, for reasons that are about

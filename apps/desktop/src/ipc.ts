@@ -46,6 +46,9 @@ import type {
   AutomaticAction,
   FieldMappingRow,
   MappingSource,
+  Recipe,
+  RecipePreview,
+  RecipeProposal,
 } from "./types";
 import type {
   ChatMessage,
@@ -1150,4 +1153,29 @@ export async function markIncomingReviewed(
   trackIds: string[],
 ): Promise<number> {
   return invoke<number>("mark_incoming_reviewed", { libraryPath, trackIds });
+}
+
+// ── Recipes (Epic 5) ─────────────────────────────────────────────────────────
+
+export async function recipeFields(): Promise<string[]> {
+  return invoke<string[]>("recipe_fields");
+}
+
+export async function recipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipes: Recipe[],
+): Promise<RecipePreview> {
+  return invoke<RecipePreview>("recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipes,
+  });
+}
+
+export async function recipeApply(
+  libraryPath: string,
+  proposals: RecipeProposal[],
+): Promise<string[]> {
+  return invoke<string[]>("recipe_apply", { libraryPath, proposals });
 }

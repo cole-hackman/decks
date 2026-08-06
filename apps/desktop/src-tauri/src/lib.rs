@@ -4,6 +4,7 @@ mod claude_agent;
 mod cue_generator;
 mod cues;
 mod organizer;
+mod recipes;
 mod smartlists;
 mod watch;
 mod write_tags;
@@ -2716,6 +2717,9 @@ pub fn run() {
             watch::clear_dismissed_arrivals,
             automation::list_automatic_actions,
             automation::set_automatic_action,
+            recipes::recipe_fields,
+            recipes::recipe_preview,
+            recipes::recipe_apply,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

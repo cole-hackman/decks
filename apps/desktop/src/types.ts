@@ -520,3 +520,80 @@ export interface FieldMappingRow {
   target: string;
   overwrite: boolean;
 }
+
+// ── Recipes (Epic 5) ─────────────────────────────────────────────────────────
+
+export type DelimiterPair =
+  | "parentheses"
+  | "brackets"
+  | "braces"
+  | "angles"
+  | "double_quotes"
+  | "single_quotes";
+
+export type SpecialCharacterMode = "special" | "emojis";
+
+/** Mirrors `recipes::Recipe`. */
+export type Recipe =
+  | { op: "to_upper_case"; field: string; ignore_words: string[] }
+  | { op: "to_lower_case"; field: string; ignore_words: string[] }
+  | { op: "to_title_case"; field: string; ignore_words: string[] }
+  | { op: "to_sentence_case"; field: string }
+  | { op: "copy_field"; from: string; to: string }
+  | { op: "move_field"; from: string; to: string }
+  | {
+      op: "merge_fields";
+      first: string;
+      second: string;
+      target: string;
+      separator: string;
+    }
+  | { op: "prefix_field"; field: string; text: string }
+  | { op: "suffix_field"; field: string; text: string }
+  | { op: "swap_fields"; first: string; second: string }
+  | {
+      op: "split_field";
+      field: string;
+      delimiter: string;
+      first_target: string;
+      second_target: string;
+      preserve_split_text: boolean;
+      append: boolean;
+    }
+  | { op: "remove_text"; field: string; text: string; case_insensitive: boolean }
+  | {
+      op: "replace_text";
+      field: string;
+      find: string;
+      replace: string;
+      case_insensitive: boolean;
+    }
+  | {
+      op: "extract_text";
+      field: string;
+      start: string;
+      end: string;
+      target: string;
+      include_delimiters: boolean;
+      delete_from_source: boolean;
+      append: boolean;
+    }
+  | { op: "shorten_text"; field: string; chars_per_word: number }
+  | { op: "remove_special_characters"; field: string; mode: SpecialCharacterMode }
+  | { op: "remove_between"; field: string; pair: DelimiterPair }
+  | { op: "adjust_number"; field: string; amount: number };
+
+export interface RecipeProposal {
+  id: string;
+  track_id: string;
+  track_title: string;
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface RecipePreview {
+  proposals: RecipeProposal[];
+  /** `[track_id, reason]` for tracks a recipe could not act on. */
+  skipped: [string, string][];
+}
