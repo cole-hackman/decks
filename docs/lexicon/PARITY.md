@@ -15,8 +15,8 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 5 | 6 | 1 | 11 |
-| Library & browser | 9 | 6 | 2 | 0 |
-| Smartlists | 2 | 1 | 0 | 0 |
+| Library & browser | 11 | 4 | 2 | 0 |
+| Smartlists | 3 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 |
 | History & backup | 3 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **45** | **34** | **13** | **16** |
+| **Total** | **48** | **31** | **13** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -55,9 +55,9 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Virtualized track table | partial | Resizable, sortable, inline column search, multi-select | — |
-| Search operators (`None`, `>`, `<`, ranges, `!`) | **partial** | Implemented in the smartlist rule engine; the track-browser search box does not yet share the vocabulary | 1 |
-| Tag query language (`~`, `!`, comma) in the search box | **missing** | The rule engine expresses the same logic via `has_all`/`has_any`/`has_none`; the browser search syntax is separate | 5 |
-| Key-notation-aware search | **partial** | `canonical_key` handles Camelot / Open Key / musical spellings in smartlist rules; not yet wired into the browser search box | 1 |
+| Search operators (`None`, `>`, `<`, ranges, `!`) | **done** | `smartlists::search` parses the box into rules the same evaluator runs — one implementation, not two | 1 |
+| Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
+| Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
 | Spreadsheet keyboard navigation | **missing** | | 2 |
 | Inline per-row waveform preview | **missing** | | 2 |
 | Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |

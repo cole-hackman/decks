@@ -1785,3 +1785,19 @@ export async function saveHistoryAsPlaylist(
     trackIds,
   });
 }
+
+// ── Browser search (Epic 6 loose end) ────────────────────────────────────────
+
+/** Whether a query uses operator syntax. Asked of the parser rather than
+ *  guessed in the renderer, so both agree on what counts. */
+export async function searchHasOperators(query: string): Promise<boolean> {
+  return invoke<boolean>("search_has_operators", { query });
+}
+
+/** Track ids matching an operator query, evaluated by the smartlist engine. */
+export async function searchTracks(
+  path: string,
+  query: string,
+): Promise<string[]> {
+  return invoke<string[]>("search_tracks", { path, query });
+}

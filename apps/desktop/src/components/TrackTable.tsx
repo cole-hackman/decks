@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchIcon, Wand2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { EmptyState } from "./EmptyState";
 import { ErrorPanel } from "./ErrorPanel";
 import { applyFilters, type FilterContext, type Filters } from "../lib/filters";
+import { searchHasOperators, searchTracks } from "../ipc";
 import { colorForKey, toCamelot } from "../lib/camelot";
 import { EnergyBar } from "./EnergyBar";
 import type { Track } from "../types";
@@ -229,10 +230,74 @@ export function TrackTable({
   const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
+  /**
+   * Track ids from an **operator** search, or `null` when the query is plain
+   * text or empty.
+   *
+   * Plain text keeps the instant local substring match, so typing a band's
+   * name never waits on a round-trip. Anything with syntax — `bpm>128`,
+   * `key:4A`, `~peak`, `!remix` — goes to the smartlist engine, which is the
+   * only thing that knows what those mean. Two implementations of `bpm > 128`
+   * is how the browser and smartlists drift apart.
+   */
+  const [searchIds, setSearchIds] = useState<Set<string> | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const query = filters.query.trim();
+    if (query === "" || !libraryPath) {
+      setSearchIds(null);
+      setSearchError(null);
+      return;
+    }
+    let cancelled = false;
+    // Debounced: an operator search hits the database, and a keystroke is not
+    // a reason to re-read the library.
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          if (!(await searchHasOperators(query))) {
+            if (!cancelled) {
+              setSearchIds(null);
+              setSearchError(null);
+            }
+            return;
+          }
+          const ids = await searchTracks(libraryPath, query);
+          if (!cancelled) {
+            setSearchIds(new Set(ids));
+            setSearchError(null);
+          }
+        } catch (e) {
+          // Fall back to the plain match rather than showing nothing.
+          if (!cancelled) {
+            setSearchIds(null);
+            setSearchError(e instanceof Error ? e.message : String(e));
+          }
+        }
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [filters.query, libraryPath]);
+
   const filtered = useMemo(() => {
     if (tracksOverride) return tracksOverride;
+    if (searchIds != null) {
+      // The engine has already applied the query; the rest of the filter bar
+      // still applies on top, with its own query blanked so it is not run
+      // twice under different semantics.
+      const withoutQuery = { ...filters, query: "" };
+      return applyFilters(
+        fetchedTracks.filter((t) => searchIds.has(t.id)),
+        withoutQuery,
+        filterCtx,
+      );
+    }
     return applyFilters(fetchedTracks, filters, filterCtx);
-  }, [fetchedTracks, filters, filterCtx, tracksOverride]);
+  }, [fetchedTracks, filters, filterCtx, tracksOverride, searchIds]);
 
   const showTagsColumn = filterCtx.tagsByTrack.size > 0;
   const compatibleKeys = useMemo(
@@ -530,6 +595,17 @@ export function TrackTable({
             );
           })}
         </div>
+
+        {searchError != null && (
+          // Say the operator search failed. Silently falling back to the plain
+          // match would look like the query simply matched fewer tracks.
+          <p
+            className="border-b border-border px-4 py-1.5 text-[11px] text-amber-500"
+            data-testid="search-error"
+          >
+            Could not run that search — showing a plain text match instead.
+          </p>
+        )}
 
         {rows.length === 0 && (
           <EmptyState

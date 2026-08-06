@@ -1,5 +1,49 @@
 # Status
 
+## 2026-08-06 — browser search shares the rule engine
+
+The track-browser search box was a plain substring match across six fields. Lexicon's accepts the
+same vocabulary its smartlists do, and `decks` had that vocabulary — in the rule engine, unreachable
+from the box. This connects them.
+
+**Parsed to rules, evaluated by the same evaluator.** `crates/smartlists::search` turns a query into
+`Clause`s; nothing in it matches anything. The evaluator already knows what `bpm > 128` means, what
+makes `4A` equal `Abm`, and how tags compare — a second implementation in the search box is exactly
+how the two drift apart. This is the same reasoning as serving basic mode from Rust in the Mixable
+Tracks slice.
+
+| Input | Meaning |
+|---|---|
+| `deadmau5` | any text field contains it |
+| `artist:deadmau5` | that field |
+| `bpm>128`, `bpm<=120` | numeric comparison |
+| `bpm:120-130` | inclusive range |
+| `key:4A` | notation-aware — finds `Abm` |
+| `genre:None` | the field is empty |
+| `!remix` | negated |
+| `~peak,vocal` | has **all** those tags |
+| `tag:peak,vocal` | has **any** |
+
+Decisions, each tested:
+
+- **Plain text never leaves the renderer.** Only a query with syntax goes to the engine, so typing a
+  band's name stays instant and works with no round-trip. The renderer asks the parser whether a
+  query counts as syntax rather than carrying its own idea of it.
+- **A negated comparison is the opposite comparison.** `!bpm>128` parses to `<=`, which keeps the
+  rule model free of a "not" wrapper it does not have.
+- **An unknown field is dropped, not guessed.** `remixer:` is a real Lexicon field we do not model;
+  guessing which one they meant is worse than ignoring the term.
+- **A non-numeric value on a numeric field matches nothing, not everything.** `bpm:fast` finds
+  nothing rather than being silently discarded and widening the search.
+- **A title with a dash is not a range.** `title:jump-off` is text.
+- **A failed operator search says so.** Falling back silently would look like the query simply
+  matched fewer tracks.
+- Terms are ANDed and a bare word ORs across text fields — each word you add narrows, which is what
+  a search box is for.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 594, typecheck, lint, `pnpm e2e` 46 — all green.
+
 ## 2026-08-06 — compatible-key indicator (Epic 2 loose end)
 
 The spec describes the Key Mixing Mode as one global setting shared between Mixable Tracks and

@@ -2798,6 +2798,8 @@ pub fn run() {
             mixable::get_key_mixing_mode,
             mixable::mixable_default_options,
             mixable::key_compatibility,
+            smartlists::search_tracks,
+            smartlists::search_has_operators,
             mixable::set_key_mixing_mode,
             mixable::list_mixable_templates,
             mixable::save_mixable_template,

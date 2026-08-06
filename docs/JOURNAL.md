@@ -2318,6 +2318,30 @@ a promise about muscle memory (favourites). A snapshot is a different kind of ta
 Absence is not a value (the timeline). Six of those are the same instinct wearing different
 clothes: **say what you actually know, and nothing more.**
 
+## 2026-08-06 — browser search shares the rule engine
+
+**Parse in one place, evaluate in another that already exists.** The search box needed operators the
+rule engine already had. Writing a matcher in the box would have been quicker and would have created
+a second definition of `bpm > 128` — the thing most likely to drift, because nothing fails when it
+does. Parsing to `Clause`s and handing them to the existing evaluator means the box cannot disagree
+with smartlists.
+
+**Route to the engine only when the engine is needed.** Plain text keeps the instant local match; a
+query with syntax goes over IPC, debounced. The alternative — everything through Rust — would have
+made typing a band's name wait on a database read for no benefit.
+
+**Ask the parser what counts as syntax.** The renderer could have checked for `>` or `:` itself.
+Then the two would disagree the first time the grammar grew. `has_operators` lives next to the
+parser and both callers use it.
+
+**Dropping a term beats guessing it.** `remixer:skrillex` names a real Lexicon field we do not
+model. Guessing the closest field would occasionally be right and would be unexplainable when it was
+not.
+
+**Widening on a parse failure is worse than matching nothing.** `bpm:fast` produces a rule that
+matches nothing rather than being discarded — a discarded term silently broadens the search, and the
+user reads the extra rows as a bug in the search rather than in their query.
+
 ## 2026-08-06 — compatible-key indicator
 
 **Delete unreachable code, then bring it back when it has a caller.** I wrote `key_compatibility`

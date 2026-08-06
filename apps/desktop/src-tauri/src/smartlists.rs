@@ -387,3 +387,44 @@ pub async fn smartlist_compatibility(
     .await
     .map_err(|e| e.to_string())?
 }
+
+// ── Browser search ───────────────────────────────────────────────────────────
+
+/// Run a track-browser search that uses operator syntax.
+///
+/// Parses with `smartlists::search` and evaluates with the **same** evaluator
+/// smartlists use, which is the point: `bpm > 128`, notation-aware key
+/// equality and tag semantics have one implementation, not two that drift.
+///
+/// Returns matching track ids; the renderer filters the list it already has.
+/// A plain-text query never reaches here — the browser keeps its instant local
+/// substring match for those, so typing a band's name does not wait on IPC.
+#[tauri::command]
+pub async fn search_tracks(
+    app: tauri::AppHandle,
+    path: String,
+    query: String,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let list = smartlists::parse_search(&query);
+        // An unparseable search shows the library rather than an empty screen
+        // with no explanation.
+        if list.clauses.is_empty() {
+            return Ok(Vec::new());
+        }
+        let db = open_db(&path)?;
+        let (tracks, ctx) = build_context(&app, &path, &db, mentions_missing_files(&list))?;
+        Ok(evaluate(&list, &tracks, &ctx))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Whether a query needs the engine at all.
+///
+/// Exposed so the renderer makes the same call the parser would, rather than
+/// carrying its own idea of what counts as syntax.
+#[tauri::command]
+pub fn search_has_operators(query: String) -> Result<bool, String> {
+    Ok(smartlists::has_operators(&query))
+}
