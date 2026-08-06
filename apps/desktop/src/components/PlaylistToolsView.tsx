@@ -10,6 +10,7 @@ import {
   previewPlaylistPrefix,
   previewPlaylistSort,
   previewRewriteOrder,
+  playlistOccurrence,
   getPlaylist,
 } from "../ipc";
 import { useToast } from "./Toast";
@@ -17,6 +18,7 @@ import type {
   CrossReferenceMode,
   CrossReferencePreview,
   MergePreview,
+  OccurrenceReport,
   Playlist,
   PlaylistRenamePlan,
   PlaylistSortMode,
@@ -29,7 +31,13 @@ interface Props {
   libraryPath: string;
 }
 
-type Tool = "merge" | "sort" | "cross-reference" | "prefix" | "rewrite-order";
+type Tool =
+  | "merge"
+  | "sort"
+  | "cross-reference"
+  | "prefix"
+  | "rewrite-order"
+  | "occurrence";
 
 const TOOLS: { id: Tool; label: string; blurb: string }[] = [
   {
@@ -61,6 +69,12 @@ const TOOLS: { id: Tool; label: string; blurb: string }[] = [
     label: "Rewrite Order",
     blurb:
       "Persist a sort as the playlist's stored order, so it reaches the CDJ that way.",
+  },
+  {
+    id: "occurrence",
+    label: "Occurrence",
+    blurb:
+      "Which tracks appear in exactly N playlists? N = 0 finds the orphans. A report — nothing is staged.",
   },
 ];
 
@@ -159,6 +173,9 @@ export function PlaylistToolsView({ libraryPath }: Props) {
   const [rewritePlan, setRewritePlan] = useState<RewriteOrderPlan | null>(null);
   const [rewriteNames, setRewriteNames] = useState<string[]>([]);
 
+  const [occurrenceN, setOccurrenceN] = useState(0);
+  const [occurrence, setOccurrence] = useState<OccurrenceReport | null>(null);
+
   useEffect(() => {
     listPlaylists(libraryPath)
       .then((got) => setPlaylists(Array.isArray(got) ? got : []))
@@ -182,6 +199,7 @@ export function PlaylistToolsView({ libraryPath }: Props) {
     setXref(null);
     setRenames(null);
     setRewritePlan(null);
+    setOccurrence(null);
   }, []);
 
   const toggle = useCallback(
@@ -263,7 +281,7 @@ export function PlaylistToolsView({ libraryPath }: Props) {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {tool !== "sort" && (
+        {tool !== "sort" && tool !== "occurrence" && (
           <div className="w-64 shrink-0 overflow-auto border-r border-border p-2 text-xs">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-muted">
@@ -664,6 +682,101 @@ export function PlaylistToolsView({ libraryPath }: Props) {
                     ))}
                   </ul>
                 ))}
+            </div>
+          )}
+
+          {/* ── Occurrence ──────────────────────────────────────────── */}
+          {tool === "occurrence" && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <label>
+                  <span className="mb-1 block text-muted">
+                    In exactly how many playlists
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    aria-label="Playlist count"
+                    className="w-24 rounded border border-border bg-surface px-2 py-1 text-xs"
+                    value={occurrenceN}
+                    onChange={(e) => {
+                      setOccurrenceN(Math.max(0, Number(e.target.value)));
+                      setOccurrence(null);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="rounded border border-border px-3 py-1 disabled:opacity-50"
+                  onClick={() =>
+                    void run(async () =>
+                      setOccurrence(
+                        await playlistOccurrence(libraryPath, occurrenceN),
+                      ),
+                    )
+                  }
+                >
+                  Find tracks
+                </button>
+              </div>
+              {occurrence != null && (
+                <div data-testid="occurrence-result">
+                  <p className="mb-1">
+                    {occurrence.tracks.length} track(s) are in exactly{" "}
+                    {occurrenceN} playlist(s).
+                  </p>
+                  {/* The distribution is why there is no guessing: it answers
+                      "what is a useful N?" before the number box is touched. */}
+                  <table className="mb-2 text-[11px]" data-testid="occurrence-distribution">
+                    <thead>
+                      <tr className="text-muted">
+                        <th className="pr-3 text-left font-normal">Playlists</th>
+                        <th className="text-left font-normal">Tracks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {occurrence.distribution.map(([count, tracks]) => (
+                        <tr key={count}>
+                          <td className="pr-3 tabular-nums">
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => {
+                                setOccurrenceN(count);
+                                void run(async () =>
+                                  setOccurrence(
+                                    await playlistOccurrence(libraryPath, count),
+                                  ),
+                                );
+                              }}
+                            >
+                              {count}
+                            </button>
+                          </td>
+                          <td className="tabular-nums">{tracks}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <ul className="space-y-0.5">
+                    {occurrence.tracks.slice(0, 200).map((t) => (
+                      <li key={t.id} className="truncate">
+                        {t.title}
+                        <span className="text-muted">
+                          {" "}
+                          — {t.artist ?? "Unknown artist"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {occurrence.tracks.length > 200 && (
+                    <p className="mt-1 text-muted" data-testid="occurrence-truncated">
+                      Showing the first 200 of {occurrence.tracks.length}.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

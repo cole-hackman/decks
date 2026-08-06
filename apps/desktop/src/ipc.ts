@@ -15,6 +15,7 @@ import type {
   PrefixSpec,
   PlaylistRenamePlan,
   RewriteOrderPlan,
+  OccurrenceReport,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1624,4 +1625,11 @@ export async function applyRewriteOrder(
   plan: RewriteOrderPlan,
 ): Promise<string | null> {
   return invoke<string | null>("apply_rewrite_order", { libraryPath, plan });
+}
+
+export async function playlistOccurrence(
+  path: string,
+  n: number,
+): Promise<OccurrenceReport> {
+  return invoke<OccurrenceReport>("playlist_occurrence", { path, n });
 }

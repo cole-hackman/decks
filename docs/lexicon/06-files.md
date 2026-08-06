@@ -243,7 +243,12 @@ delete list. `crates/relocate` still solves the adjacent problem of genuinely br
 *What it does* — "Which tracks appear in exactly N playlists?" Setting N to 0 finds orphans; N=2
 finds tracks in exactly two. Utility → Other.
 
-*decks status* — **partial.** A `list_tracks_in_any_playlist` IPC command and a
-`not-in-any-playlist` filter exist, which covers the N=0 case only.
+*decks status* — **done.** Playlist Tools → Occurrence, for any N. Counted with
+`COUNT(DISTINCT PlaylistID)`, because Rekordbox allows the same track twice in one playlist and
+"appears in two playlists" must not be satisfied by appearing twice in one.
+
+**Addition:** the report ships the whole distribution — how many tracks sit in 0, 1, 2 … playlists
+— and each row is clickable. A bare "how many playlists?" box asks the user to guess a number; the
+distribution is what makes the guess unnecessary.
 
 *Epic* — **6**.

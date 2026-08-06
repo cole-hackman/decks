@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 4 | 7 | 1 | 11 |
-| Library & browser | 4 | 7 | 5 | 0 |
+| Library & browser | 5 | 6 | 5 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **37** | **36** | **18** | **16** |
+| **Total** | **38** | **35** | **18** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -65,7 +65,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Playlists tree | partial | No folder-drop, no M3U import, no drag-between, no create-from-selection | 6 |
 | Favorite Playlists + hotkeys | **missing** | | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
-| Playlist Occurrence | partial | Only the N=0 case | 6 |
+| Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
 | Custom Tags | partial | Strong already; missing category colours, drag-reorder, OR/AND selection on the Tags page, MyTag import, per-tag hotkeys | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |

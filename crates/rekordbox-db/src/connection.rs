@@ -87,6 +87,11 @@ impl RekordboxDb {
         queries::playlists::track_ids_in_any_playlist(&self.conn)
     }
 
+    /// How many distinct playlists hold each track. Tracks in none are absent.
+    pub fn playlist_occurrence(&self) -> Result<std::collections::HashMap<String, usize>> {
+        queries::playlists::playlist_occurrence(&self.conn)
+    }
+
     // ── Health ───────────────────────────────────────────────────────────────
 
     pub fn duplicate_tracks(&self) -> Result<Vec<DuplicateGroup>> {

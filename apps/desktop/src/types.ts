@@ -1049,6 +1049,12 @@ export interface PlaylistRenamePlan {
   to: string;
 }
 
+export interface OccurrenceReport {
+  tracks: Track[];
+  /** `[playlist_count, how_many_tracks]`, ascending. */
+  distribution: [number, number][];
+}
+
 export interface RewriteOrderPlan {
   playlist_id: string;
   order: string[];

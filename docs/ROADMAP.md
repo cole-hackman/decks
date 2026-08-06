@@ -213,7 +213,8 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       Playlist Tools view. Sort needed a new `ChangeKind::PlaylistReorder` (writes
       `djmdPlaylist.Seq`). Rewrite Order sorts on a field picked in the tool rather than following
       the browser's transient column sort — a documented divergence
-- [ ] Playlist Occurrence for arbitrary N
+- [x] Playlist Occurrence for arbitrary N — in Playlist Tools, counting *distinct* playlists, with
+      the full distribution so N does not have to be guessed
 - [ ] Favorite Playlists with hotkeys
 - [ ] Sidepanel (second track browser)
 - [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist

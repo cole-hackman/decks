@@ -2144,6 +2144,26 @@ change nothing trains people to approve without reading.
 **Next in Epic 6:** Track Timeline, Playlist Occurrence for arbitrary N, favourite playlists with
 hotkeys, the sidepanel, History snapshots, and share/export.
 
+## 2026-08-06 — Epic 6 (part 3): playlist occurrence
+
+**A `GROUP BY` cannot count what it cannot see.** "In exactly 0 playlists" is the case people ask
+for most, and it is precisely the one a count-per-track query returns nothing for — the rows do not
+exist. The zero has to be supplied from the other side, by walking the library and treating absence
+as zero. Any aggregate used as a *filter* has this shape: check what the empty bucket does before
+shipping it.
+
+**`DISTINCT` is not a detail when the schema allows duplicates.** Rekordbox lets the same track sit
+twice in one playlist, so a plain `COUNT(PlaylistID)` reports it as "in two playlists" — the exact
+wrong answer for a feature whose only job is that number. The test adds a duplicate row on purpose,
+because without one the naive query passes.
+
+**Answer the question the number box implies.** "How many playlists?" asks the user to guess. The
+distribution — 1 track in zero, 4 in one, 2 in two — makes the guess unnecessary and turns a
+one-shot query into something explorable. Cheap: the count map was already built.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, History
+snapshots, and share/export.
+
 ---
 
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer

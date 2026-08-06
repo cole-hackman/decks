@@ -2772,6 +2772,7 @@ pub fn run() {
             playlist_tools::preview_cross_reference,
             playlist_tools::preview_playlist_prefix,
             playlist_tools::apply_playlist_prefix,
+            playlist_tools::playlist_occurrence,
             playlist_tools::preview_rewrite_order,
             playlist_tools::apply_rewrite_order,
             mixable::find_mixable_tracks,

@@ -170,6 +170,26 @@ test.beforeEach(async ({ page }) => {
               staged.push({ kind: "PlaylistReorderTrack" });
               return "c1";
 
+            case "playlist_occurrence": {
+              const counts = new Map<string, number>();
+              tracks.forEach((t) => {
+                const n = Object.values(members).filter((ids) =>
+                  ids.includes(t.id),
+                ).length;
+                counts.set(t.id, n);
+              });
+              const distribution = new Map<number, number>();
+              counts.forEach((n) =>
+                distribution.set(n, (distribution.get(n) ?? 0) + 1),
+              );
+              return {
+                tracks: tracks.filter((t) => counts.get(t.id) === args.n),
+                distribution: [...distribution.entries()].sort(
+                  (a, b) => a[0] - b[0],
+                ),
+              };
+            }
+
             default:
               return null;
           }
@@ -275,4 +295,26 @@ test("rewrite order: sort by Energy and store that order", async ({ page }) => {
 
   await page.getByRole("button", { name: "Stage order" }).click();
   await expect(page.getByText(/Staged the new track order/)).toBeVisible();
+});
+
+test("occurrence: exactly N, with the distribution to pick N from", async ({
+  page,
+}) => {
+  await openTools(page);
+  await page.getByRole("button", { name: "Occurrence" }).click();
+
+  // Track 2 is in both playlists; tracks 1 and 3 are in one each.
+  await page.getByLabel("Playlist count").fill("2");
+  await page.getByRole("button", { name: "Find tracks" }).click();
+
+  const result = page.getByTestId("occurrence-result");
+  await expect(result).toContainText("1 track(s) are in exactly 2 playlist(s).");
+  await expect(result).toContainText("Quiet");
+
+  // Clicking a distribution row re-runs for that N.
+  await page
+    .getByTestId("occurrence-distribution")
+    .getByRole("button", { name: "1", exact: true })
+    .click();
+  await expect(result).toContainText("2 track(s) are in exactly 1 playlist(s).");
 });

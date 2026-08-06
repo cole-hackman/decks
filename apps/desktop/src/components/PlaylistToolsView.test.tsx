@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaylistToolsView } from "./PlaylistToolsView";
@@ -14,6 +14,7 @@ import {
   previewPlaylistPrefix,
   previewPlaylistSort,
   previewRewriteOrder,
+  playlistOccurrence,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 import type { Playlist, Track } from "../types";
@@ -30,6 +31,7 @@ vi.mock("../ipc", () => ({
   applyPlaylistPrefix: vi.fn(),
   previewRewriteOrder: vi.fn(),
   applyRewriteOrder: vi.fn(),
+  playlistOccurrence: vi.fn(),
 }));
 
 const PLAYLISTS: Playlist[] = [
@@ -97,6 +99,14 @@ beforeEach(() => {
     unchanged: false,
   });
   vi.mocked(applyRewriteOrder).mockResolvedValue("c1");
+  vi.mocked(playlistOccurrence).mockResolvedValue({
+    tracks: [track("3", "Orphan", null)],
+    distribution: [
+      [0, 1],
+      [1, 4],
+      [2, 2],
+    ],
+  });
 });
 
 function renderView() {
@@ -314,6 +324,44 @@ describe("PlaylistToolsView", () => {
     expect(await screen.findByTestId("rewrite-appended")).toHaveTextContent(
       "1 track(s) were not in the sorted view and were appended rather than dropped.",
     );
+  });
+
+  it("occurrence answers for exactly N and shows the whole distribution", async () => {
+    renderView();
+    await pickTool("Occurrence");
+    await userEvent.click(screen.getByRole("button", { name: "Find tracks" }));
+
+    const result = await screen.findByTestId("occurrence-result");
+    expect(result).toHaveTextContent("1 track(s) are in exactly 0 playlist(s).");
+    expect(result).toHaveTextContent("Orphan");
+    // A bare "how many playlists?" box asks the user to guess. The
+    // distribution is what makes the guess unnecessary.
+    const table = screen.getByTestId("occurrence-distribution");
+    expect(table).toHaveTextContent("4");
+    expect(table).toHaveTextContent("2");
+  });
+
+  it("a row in the distribution re-runs the report for that N", async () => {
+    renderView();
+    await pickTool("Occurrence");
+    await userEvent.click(screen.getByRole("button", { name: "Find tracks" }));
+    await screen.findByTestId("occurrence-distribution");
+
+    await userEvent.click(
+      within(screen.getByTestId("occurrence-distribution")).getByRole("button", {
+        name: "2",
+      }),
+    );
+    await waitFor(() =>
+      expect(playlistOccurrence).toHaveBeenLastCalledWith("/lib.db", 2),
+    );
+  });
+
+  it("occurrence hides the playlist picker — it asks about tracks", async () => {
+    renderView();
+    await screen.findByTestId("playlist-picker");
+    await pickTool("Occurrence");
+    expect(screen.queryByTestId("playlist-picker")).not.toBeInTheDocument();
   });
 
   it("each tool says what it does before you use it", async () => {

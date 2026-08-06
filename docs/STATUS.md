@@ -1,5 +1,27 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 3): playlist occurrence
+
+"Which tracks appear in exactly N playlists?" — **Playlist Tools → Occurrence**. `decks` had the
+N=0 case only, through the `not-in-any-playlist` filter. This is any N.
+
+Counted with `COUNT(DISTINCT PlaylistID)`. Rekordbox allows the same track twice in one playlist,
+and "appears in two playlists" must not be satisfied by appearing twice in one — the distinct is
+the whole correctness of the feature, and it has a test that adds a duplicate row specifically to
+catch its absence.
+
+**A track in no playlist is absent from the query, not zero in it.** The `GROUP BY` cannot see it.
+The zero has to come from the library side, which is why the command walks the track list rather
+than the count map — the N=0 case is exactly the one people ask for most, and it is the one a naive
+implementation silently returns nothing for.
+
+**Addition beyond the spec:** the report ships the whole distribution — how many tracks sit in 0,
+1, 2 … playlists — and each row re-runs the report for that N. A bare "how many playlists?" box
+asks the user to guess a number they have no way to know; the distribution answers it first.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 519, typecheck, lint, `pnpm e2e` 36 — all green.
+
 ## 2026-08-06 — Epic 6 (part 2): playlist tools
 
 All five, in a **Playlist Tools** view: Merge, Sort, Cross Reference, Prefix, Rewrite Order. Every

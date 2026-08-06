@@ -377,6 +377,51 @@ pub async fn apply_rewrite_order(
     .map_err(|e| e.to_string())?
 }
 
+// ── Playlist Occurrence ──────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct OccurrenceReport {
+    /// Tracks in exactly `n` playlists.
+    pub tracks: Vec<decks_core::rekordbox_db::Track>,
+    /// `[playlist_count, how_many_tracks]`, ascending. The point of shipping
+    /// this alongside the answer: a bare "how many playlists?" box asks the
+    /// user to guess a number, and the distribution is what makes the guess
+    /// unnecessary.
+    pub distribution: Vec<(usize, usize)>,
+}
+
+/// "Which tracks appear in exactly N playlists?" — `N = 0` finds orphans.
+///
+/// Read-only. This is a report, not a plan; nothing is staged either way.
+#[tauri::command]
+pub async fn playlist_occurrence(path: String, n: usize) -> Result<OccurrenceReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = open_db(&path)?;
+        let tracks = db.tracks().map_err(|e| e.to_string())?;
+        let counts = db.playlist_occurrence().map_err(|e| e.to_string())?;
+
+        // A track absent from `counts` is in zero playlists — the GROUP BY
+        // cannot see it, so the zero has to come from the library side.
+        let mut distribution: std::collections::BTreeMap<usize, usize> =
+            std::collections::BTreeMap::new();
+        let mut matching = Vec::new();
+        for track in tracks {
+            let count = counts.get(&track.id).copied().unwrap_or(0);
+            *distribution.entry(count).or_insert(0) += 1;
+            if count == n {
+                matching.push(track);
+            }
+        }
+
+        Ok(OccurrenceReport {
+            tracks: matching,
+            distribution: distribution.into_iter().collect(),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use changes::playlist_tools::{CrossReferenceMode, PlaylistSortMode, PrefixSpec};
