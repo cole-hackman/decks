@@ -284,3 +284,26 @@ export type SmartlistGeneratorSpec =
   | { kind: "by_decade" }
   | { kind: "by_bpm_range"; width: number }
   | { kind: "by_play_count"; threshold: number };
+
+// ── Cue editing (Epic 2) ─────────────────────────────────────────────────────
+
+/** Resolutions the quantiser offers. Mirrors `rekordbox_db::quantize`. */
+export type QuantizeResolution =
+  | "beat"
+  | "two_beats"
+  | "bar"
+  | "four_bars"
+  | "sixteen_bars";
+
+/** Columns `changes::applier::cues` allows editing. */
+export type CueField = "InMsec" | "OutMsec" | "Kind" | "Color" | "Commnt";
+
+export interface CueInput {
+  in_msec: number;
+  /** Set to make the cue a loop. */
+  out_msec?: number | null;
+  /** 0 = memory cue, 1–8 = hot cue slot. */
+  kind: number;
+  color?: number | null;
+  comment?: string | null;
+}

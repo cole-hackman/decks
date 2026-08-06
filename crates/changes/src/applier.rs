@@ -131,6 +131,7 @@ fn apply_single(
         ChangeKind::TrackDelete => tracks::apply_delete(tx, change),
         ChangeKind::TrackAddCue => cues::apply_add_cue(tx, change, options),
         ChangeKind::CueMetadataEdit => cues::apply_metadata_edit(tx, change),
+        ChangeKind::TrackDeleteCue => cues::apply_delete_cue(tx, change),
         ChangeKind::PlaylistCreate => playlists::apply_create(tx, change),
         ChangeKind::PlaylistRename => playlists::apply_rename(tx, change),
         ChangeKind::PlaylistDelete => playlists::apply_delete(tx, change),

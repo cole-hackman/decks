@@ -22,6 +22,10 @@ import type {
   SmartlistCombinator,
   SmartlistCompatibility,
   SmartlistGeneratorSpec,
+  BeatGridEntry,
+  QuantizeResolution,
+  CueField,
+  CueInput,
 } from "./types";
 import type {
   ChatMessage,
@@ -838,4 +842,92 @@ export async function generateSmartlists(
   spec: SmartlistGeneratorSpec,
 ): Promise<Smartlist[]> {
   return invoke<Smartlist[]>("generate_smartlists", { libraryPath, spec });
+}
+
+// ── Cue editing & beat grid (Epic 2) ─────────────────────────────────────────
+
+export async function getBeatGrid(
+  libraryPath: string,
+  trackId: string,
+): Promise<BeatGridEntry[]> {
+  return invoke<BeatGridEntry[]>("get_beat_grid", { libraryPath, trackId });
+}
+
+export async function quantizePosition(
+  libraryPath: string,
+  trackId: string,
+  positionMs: number,
+  resolution: QuantizeResolution,
+): Promise<number> {
+  return invoke<number>("quantize_position", {
+    libraryPath,
+    trackId,
+    positionMs,
+    resolution,
+  });
+}
+
+export async function beatJumpPosition(
+  libraryPath: string,
+  trackId: string,
+  positionMs: number,
+  beats: number,
+): Promise<number> {
+  return invoke<number>("beat_jump_position", {
+    libraryPath,
+    trackId,
+    positionMs,
+    beats,
+  });
+}
+
+export async function stageCueAdd(
+  libraryPath: string,
+  trackId: string,
+  cue: CueInput,
+  quantizeTo?: QuantizeResolution | null,
+): Promise<string> {
+  return invoke<string>("stage_cue_add", {
+    libraryPath,
+    trackId,
+    cue,
+    quantizeTo: quantizeTo ?? null,
+  });
+}
+
+export async function stageCueDelete(
+  libraryPath: string,
+  cueId: string,
+): Promise<string> {
+  return invoke<string>("stage_cue_delete", { libraryPath, cueId });
+}
+
+export async function stageCueEdit(
+  libraryPath: string,
+  cueId: string,
+  field: CueField,
+  newValue: unknown,
+  oldValue?: unknown,
+): Promise<string> {
+  return invoke<string>("stage_cue_edit", {
+    libraryPath,
+    cueId,
+    field,
+    newValue,
+    oldValue: oldValue ?? null,
+  });
+}
+
+export async function stageGridShift(
+  libraryPath: string,
+  trackId: string,
+  offsetMs: number,
+  toleranceMs?: number,
+): Promise<string[]> {
+  return invoke<string[]>("stage_grid_shift", {
+    libraryPath,
+    trackId,
+    offsetMs,
+    toleranceMs: toleranceMs ?? null,
+  });
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTrackCues } from "../hooks/useTrackCues";
+import { CueEditor } from "./CueEditor";
 import { ColorWaveform } from "@/components/ui/ColorWaveform";
 import {
   analyzeTrack,
@@ -434,10 +435,12 @@ function TrackDetailContent({
   playbackDuration: number;
   onSeek?: (secs: number) => void;
 }) {
-  const { data: cues = [], isLoading: cuesLoading, error: cuesError } = useTrackCues(
-    libraryPath,
-    track.id,
-  );
+  const {
+    data: cues = [],
+    isLoading: cuesLoading,
+    error: cuesError,
+    refetch: refetchCues,
+  } = useTrackCues(libraryPath, track.id);
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -530,6 +533,15 @@ function TrackDetailContent({
           )}
         </div>
       </div>
+
+      <CueEditor
+        libraryPath={libraryPath}
+        track={track}
+        cues={sortedCues}
+        positionMs={currentTime * 1000}
+        onSeek={(ms) => onSeek?.(ms / 1000)}
+        onChanged={() => void refetchCues()}
+      />
 
       {/* Cue position bar */}
       <CuePositionBar

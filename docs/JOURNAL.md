@@ -1433,3 +1433,34 @@ on, so it wants to exist before the features that register into it.
 **Open questions still unanswered** (in `docs/lexicon/GAPS.md`): the Camelot vs Open Key posture,
 and how Energy should be defined now that Spotify's audio-features endpoint is unavailable. Neither
 blocked Epic 1 — key rules canonicalise through whichever notation the library uses.
+
+
+## 2026-08-06 — Session: Epic 2 part 1
+
+**Plan:** Action registry first, then cue editing on top of it — the registry is what the Action
+Center, hotkey rebinding and eventually the plugin host all sit on, so building features that
+register into it before it exists would mean retrofitting them.
+
+**What went well:** putting the beat-grid arithmetic in `crates/rekordbox-db/src/quantize.rs` as
+pure functions meant the fiddly parts — snapping measured from the first grid marker rather than
+from the cue, clamping at the end of a short grid, and the on-grid-only rule for grid moves — got
+16 unit tests instead of being reachable only by clicking around a running app.
+
+**Two things I found rather than chose:**
+
+1. **Active loops are blocked by the schema.** Lexicon's active loops auto-engage when the playhead
+   reaches them; `djmdCue` as we model it has `InMsec`/`OutMsec`/`Kind`/`Color`/`Commnt` and no
+   active flag. Loop *length* works today. Rather than invent a column, this is recorded as blocked
+   in ROADMAP and PARITY — it needs a look at what real Rekordbox stores.
+2. **Beatgrid writing is a bigger job than "editing".** The grid nudge stages the cue moves that
+   follow a grid change, which is the user-visible half, but writing the grid back into ANLZ is a
+   binary-format write path that does not exist anywhere yet.
+
+**Scope note:** Epic 2 as scoped in the roadmap is large — player queue, cue templates, Find Popup
+and the Cue Destination round-trip are still open. This slice is the foundation plus the cue
+editing that depends on it. Splitting it here keeps the PR reviewable rather than shipping a
+half-tested pile.
+
+**Next:** finish Epic 2 — play queue, cue templates, Find Popup, Cue Destination round-trip — then
+Epic 3's custom cue anchors, which are pure matching logic and give us ground truth to evaluate
+drop detection against.

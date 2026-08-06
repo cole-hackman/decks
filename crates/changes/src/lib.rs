@@ -23,6 +23,7 @@ pub enum ChangeKind {
     TrackDelete,
     CueMetadataEdit,
     TrackAddCue,
+    TrackDeleteCue,
     PlaylistCreate,
     PlaylistRename,
     PlaylistDelete,

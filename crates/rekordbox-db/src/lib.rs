@@ -15,6 +15,7 @@
 
 pub mod anlz;
 mod connection;
+pub mod quantize;
 mod queries;
 pub mod types;
 pub mod write;
