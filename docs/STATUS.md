@@ -1,5 +1,61 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 1): Mixable Tracks
+
+`scoring::score_transition` has existed since long before the parity initiative with **no UI
+caller** — the spec called it "partial, and stranded". This reaches it. **Right-click a track →
+Find mixable tracks**, or the `Mixable` toggle in the header; the panel opens as a right-hand
+inspector and stays open, because the spec's workflow is driving it live through a set.
+
+**The rules filter; the score orders.** A candidate that fails an enabled rule is not in the list
+at all. That is why the header says "12 of 4,213" rather than just listing twelve — a rule that
+merely demoted would make "must have cue points" a suggestion, and the count is what tells you the
+rules are too tight.
+
+Nine of the spec's thirteen advanced options are here: BPM range, Match key, half/double BPM,
+must-have-cues, genres, year, energy, rating, and the tag include/exclude lists. **Four are
+deliberately absent** — `Match color` and `Recently added` need colour and date-added columns
+`Track` does not carry, and Popularity / Danceability / Happiness are the Lexicon-only fields from
+Epic 4. The panel says so in as many words rather than showing controls that match everything.
+
+Decisions, each tested:
+
+- **`Use as next track`** re-seeds the panel from the row just picked. It is the difference between
+  a report and a tool you can play a set with.
+- **Key Mixing Mode is global**, per the spec, and the backend overwrites whatever a template
+  carried with the stored value — otherwise loading an old template would silently change a setting
+  the user made in the panel.
+- **Basic mode is served by the backend**, not hardcoded in the renderer. A second definition of
+  "basic mode" in TypeScript would drift the first time a default changed and nothing would fail.
+  The panel simply does not search until it has the rules.
+- **Templates are keyed by name and overwrite**, because the workflow is "tweak, save as *Peak
+  time* again". Not scoped by library: it is a statement about how someone mixes.
+- **Ties break by track id**, so two identical searches give the same order. A list that reshuffles
+  between previews is not usable live.
+- **Half/double tolerance is a percentage of the *stretched* tempo**, so a ±3% double-time search
+  round 140 accepts 286 and refuses 290, rather than applying 3% of 140 to a 280 target.
+- **An unparseable key is never compatible.** Treating unknown as a wildcard floods the list with
+  exactly the tracks nobody has analysed yet.
+- **Archived tracks are never suggested.** Archiving says "out of rotation", and "what do I play
+  next" is where that should be honoured.
+
+Two latent bugs fixed on the way. `score_transition` carried its own Camelot-only parser, so every
+spelled-out key (`C minor`, `Cm`) scored as **"Missing Key Data"** — it now routes through
+`changes::key_format`, the one place that knows the 24-key table. And `key_format` itself could not
+read **Open Key** input (`10m`, `8d`), which is what a library edited in Lexicon stores; it can now,
+without stealing `Dm` from the musical-key parser.
+
+Cache migration **v15** (`mixable_templates`). Agent tool `mixable_tracks`, so the chat panel, MCP
+server and CLI gain it too — its `bpm_tolerance_pct` keeps "omitted" and "0" apart, since one means
+"use the default 6%" and the other means "ignore tempo".
+
+Still missing from Epic 6: the Track Timeline, playlist tools (Merge / Sort / Cross Reference /
+Prefix / Rewrite Order), Playlist Occurrence, favourite playlists, the sidepanel, History
+snapshots, and share/export.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 502, typecheck, lint, `pnpm e2e` 30 — all green.
+
 ## 2026-08-06 — Epic 5 (part 10): prefix rewriting
 
 The fuzzy relocate answers "where did this one file go?". `relocate::rewrite` answers a different

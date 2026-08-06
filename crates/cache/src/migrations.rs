@@ -345,6 +345,28 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        15,
+        "
+        -- Mixable Tracks option sets (Epic 6).
+        --
+        -- The spec calls these templates: 'option sets are saveable and
+        -- reusable'. Stored as a JSON document rather than a column per rule,
+        -- for the same reason smartlists are (v7): nothing queries an
+        -- individual rule, the set is always loaded whole, and a rule added
+        -- later must not require a migration.
+        --
+        -- Not scoped by library_path. 'my peak-time rules' is a statement about
+        -- how someone mixes, not about one database, and re-entering it per
+        -- library would defeat the point — same reasoning as cleanup_locks.
+        CREATE TABLE mixable_templates (
+          id         TEXT PRIMARY KEY,
+          name       TEXT NOT NULL UNIQUE,
+          options    TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -629,5 +651,38 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM smartlists", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn mixable_templates_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO mixable_templates (id, name, options, created_at)
+             VALUES ('t1', 'Peak time', '{}', 1770000000);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM mixable_templates", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn mixable_template_names_are_unique() {
+        // Saving over a template by name is the intended workflow, so the
+        // uniqueness constraint has to be there for the upsert to land on it.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO mixable_templates (id, name, options, created_at)
+             VALUES ('t1', 'Peak time', '{}', 1770000000);",
+        )
+        .unwrap();
+        let err = conn.execute_batch(
+            "INSERT INTO mixable_templates (id, name, options, created_at)
+             VALUES ('t2', 'Peak time', '{}', 1770000000);",
+        );
+        assert!(err.is_err());
     }
 }

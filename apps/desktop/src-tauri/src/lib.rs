@@ -8,6 +8,7 @@ mod csv_import;
 mod cue_generator;
 mod cues;
 mod duplicates;
+mod mixable;
 mod multi_edit;
 mod organizer;
 mod recipes;
@@ -2763,6 +2764,13 @@ pub fn run() {
             set_library_path,
             library_search,
             suggest_next_tracks,
+            mixable::find_mixable_tracks,
+            mixable::get_key_mixing_mode,
+            mixable::mixable_default_options,
+            mixable::set_key_mixing_mode,
+            mixable::list_mixable_templates,
+            mixable::save_mixable_template,
+            mixable::delete_mixable_template,
             library_stage_intro_cues,
             library_stage_playlist_remove_track,
             list_playlists,

@@ -1,3 +1,10 @@
+pub mod mixable;
+
+pub use mixable::{
+    compatible_keys, find_mixable, key_relation, keys_compatible, BpmRelation, KeyMixingMode,
+    KeyRelation, MixableContext, MixableMatch, MixableOptions, NumericRule, YearRule,
+};
+
 use rekordbox_db::Track;
 use serde::{Deserialize, Serialize};
 
@@ -8,32 +15,31 @@ pub struct TransitionScore {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct CamelotKey {
-    number: u8,     // 1 to 12
-    is_minor: bool, // A = minor, B = major
+pub(crate) struct CamelotKey {
+    pub number: u8,     // 1 to 12
+    pub is_minor: bool, // A = minor, B = major
 }
 
 impl CamelotKey {
-    fn parse(s: &str) -> Option<Self> {
-        let s = s.trim().to_uppercase();
-        if s.is_empty() {
-            return None;
-        }
-
-        let letter = s.chars().last()?;
-        let is_minor = match letter {
-            'A' => true,
-            'B' => false,
+    /// Parse anything the library might hold in the key field.
+    ///
+    /// Delegates to `changes::key_format::to_camelot`, which is the one place
+    /// that knows the 24-key table and its enharmonics — so `C minor`, `Cm`,
+    /// `5m` and `5A` all land on the same wheel position. Scoring used to carry
+    /// its own Camelot-only parser, which silently gave every spelled-out key a
+    /// "Missing Key Data" score.
+    pub(crate) fn parse(s: &str) -> Option<Self> {
+        let camelot = changes::key_format::to_camelot(s)?;
+        let bytes = camelot.as_bytes();
+        let is_minor = match bytes[bytes.len() - 1] {
+            b'A' => true,
+            b'B' => false,
             _ => return None,
         };
-
-        let num_str = &s[..s.len() - 1];
-        let number: u8 = num_str.parse().ok()?;
-
+        let number: u8 = camelot[..camelot.len() - 1].parse().ok()?;
         if !(1..=12).contains(&number) {
             return None;
         }
-
         Some(Self { number, is_minor })
     }
 }

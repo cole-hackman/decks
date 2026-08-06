@@ -196,14 +196,17 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 
 ---
 
-## Epic 6 — Set preparation
+## Epic 6 — Set preparation (in progress)
 
 Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md),
 [`04-analysis.md`](lexicon/04-analysis.md#mixable-tracks).
 
-- [ ] Surface `scoring::score_transition` / `suggest_next_tracks` — **currently unreachable from the
-      UI** — with the full Mixable Tracks rule set and saveable templates
-- [ ] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing
+- [x] Surface `scoring::score_transition` — was unreachable from the UI — as **Mixable Tracks**:
+      9 of 13 advanced rules, `Use as next track`, saveable templates (cache migration **v15**),
+      and a `mixable_tracks` agent tool. The 4 missing rules (colour, date added, Popularity /
+      Danceability / Happiness) need fields `Track` does not carry — same gap as label/mix/remixer
+- [x] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing, global, with the
+      compatible-key set surfaced in the panel
 - [ ] Track Timeline (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
       BPM-change bar colouring)
 - [ ] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order**

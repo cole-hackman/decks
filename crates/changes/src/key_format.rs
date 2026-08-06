@@ -21,6 +21,16 @@ pub fn to_camelot(key: &str) -> Option<String> {
         return None;
     }
 
+    // Open Key input: "10m", "5d". Unambiguous — no Camelot code ends in m or
+    // d, and no note name is a number — so this can sit ahead of the musical
+    // key parser without stealing anything from it.
+    if let Some((num_part, suffix)) = split_open_key(trimmed) {
+        if (1..=12).contains(&num_part) {
+            return Some(format!("{}{}", num_part, suffix));
+        }
+        return None;
+    }
+
     let (root, is_minor) = parse_musical_key(trimmed)?;
     let table = if is_minor { MINOR_TABLE } else { MAJOR_TABLE };
     table
@@ -56,6 +66,25 @@ fn split_camelot(s: &str) -> Option<(u8, char)> {
         _ => return None,
     };
     let num_str: String = s[..s.len() - 1]
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    let num: u8 = num_str.parse().ok()?;
+    Some((num, suffix))
+}
+
+/// Split Open Key input into its number and the *Camelot* letter it maps to.
+///
+/// `m` ("moll") is minor → `A`; `d` ("dur") is major → `B`.
+fn split_open_key(s: &str) -> Option<(u8, char)> {
+    let trimmed = s.trim();
+    let last = trimmed.chars().last()?;
+    let suffix = match last {
+        'm' | 'M' => 'A',
+        'd' | 'D' => 'B',
+        _ => return None,
+    };
+    let num_str: String = trimmed[..trimmed.len() - last.len_utf8()]
         .chars()
         .filter(|c| !c.is_whitespace())
         .collect();
@@ -185,6 +214,25 @@ mod tests {
         assert_eq!(to_camelot("Gb major"), Some("2B".into()));
         assert_eq!(to_camelot("F# minor"), Some("11A".into()));
         assert_eq!(to_camelot("Gb minor"), Some("11A".into()));
+    }
+
+    #[test]
+    fn accepts_open_key_input() {
+        // Lexicon presents Open Key, so a library edited there stores it.
+        assert_eq!(to_camelot("5m"), Some("5A".into()));
+        assert_eq!(to_camelot("8d"), Some("8B".into()));
+        assert_eq!(to_camelot("12M"), Some("12A".into()));
+        assert_eq!(to_camelot("13m"), None);
+        assert_eq!(to_open_key("10m"), Some("10m".into()));
+    }
+
+    #[test]
+    fn open_key_parsing_does_not_steal_minor_keys() {
+        // "Dm" ends in m but is a note name, not Open Key.
+        assert_eq!(to_camelot("Dm"), Some("7A".into()));
+        assert_eq!(to_camelot("Am"), Some("8A".into()));
+        // ...and "D" alone is still D major.
+        assert_eq!(to_camelot("D"), Some("10B".into()));
     }
 
     #[test]

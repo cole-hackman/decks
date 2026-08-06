@@ -2045,5 +2045,62 @@ non-deterministic, which is the one property it was chosen for.
 write, and it is not optional — so the honest note is "already covered, more strictly" rather than
 shipping a second backup mechanism nobody needs.
 
+## 2026-08-06 — Epic 6 (part 1): Mixable Tracks
+
+**A capability with no caller is not a feature.** `score_transition` and `suggest_next_tracks` had
+been in the tree since long before this initiative, fully tested and completely unreachable. The
+parity audit's most useful finding was not a gap — it was working code nobody could get to. Worth
+looking for more of those before writing anything new.
+
+**Dead code hides bugs, because nothing runs it.** The stranded scorer carried its own Camelot
+parser that only accepted `8A`-style input, so every library storing `C minor` scored as "Missing
+Key Data" on every comparison. It had unit tests. They all passed — they only ever fed it Camelot.
+Tests written alongside a parser test the inputs its author imagined, which is a different set from
+the inputs the field holds.
+
+**Filter versus rank is a product decision, not an implementation detail.** "Must have cue points"
+could plausibly be a scoring term. It must not be: a rule the user switched on has to remove
+things, or the switch is a lie. The corollary is that the UI owes them the count — "12 of 4,213"
+is the only thing that distinguishes "my library is small" from "my rules are too tight".
+
+**Omitted and zero are different values.** `bpm_tolerance_pct: 0` means "ignore tempo"; omitting it
+means "use the default". `unwrap_or(default)` collapses them and quietly reinstates a 6% window the
+caller explicitly removed. Anywhere an option's *absence* is meaningful, `Option<T>` has to survive
+all the way to the branch that reads it.
+
+**Percentages need a stated base.** A ±3% double-time match around 140 BPM: 3% of *what*? Taking it
+against the source gives ±4.2 and rejects everything; against the stretched target it gives ±8.4
+and works. Neither is wrong in the abstract — the bug is not writing down which one you meant.
+
+**One definition of the defaults, served across the wire.** The panel originally had a
+`BASIC_OPTIONS` literal mirroring `MixableOptions::basic()`, with a comment claiming a test kept
+them in sync. There was no such test and no way to write a cheap one. Replaced with a
+`mixable_default_options` command and a panel that does not search until it has the answer; the
+duplicate is gone rather than documented.
+
+**A global setting must win over stored state.** Templates carry the whole option set, including
+the key mixing mode — so loading a six-month-old template would silently flip a global preference.
+The backend overwrites that field with the stored value on every search. Persisted structures that
+contain a copy of a global need one authoritative reader, or the global drifts.
+
+**Unknown is not a wildcard.** An unparseable key could compare as "compatible with everything" or
+"compatible with nothing". Wildcard floods the results with exactly the un-analysed tracks the
+user is least able to mix; nothing is the honest answer, and matches how `must_have_cues` treats an
+un-cued track.
+
+**Deterministic ties, for the third time this initiative.** Duplicates needed it, the cue recipes
+needed it, and a mixable list needs it most of all: it is read live, mid-set, and a list that
+reorders between two identical searches reads as a bug in the tool at the worst possible moment.
+Sorting by score then by id costs nothing and should probably be the default reflex.
+
+**Playwright `getByRole`/`getByLabel` match as substrings — fourth time.** "Mixable tracks" also
+matched "Hide mixable tracks" and "Close mixable tracks". `{ exact: true }` on any accessible name
+that is a prefix of another one, from now on, without waiting for the failure.
+
+**Next in Epic 6:** the playlist tools (Merge, Sort, Cross Reference, Prefix, Rewrite Order) are
+the most self-contained remaining slice; Track Timeline and the sidepanel are the largest.
+
+---
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

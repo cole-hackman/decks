@@ -3,6 +3,10 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Track,
   HotCue,
+  KeyMixingMode,
+  MixableOptions,
+  MixableResult,
+  MixableTemplate,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1483,4 +1487,45 @@ export async function applyPathRewrite(
   rewrites: PathRewrite[],
 ): Promise<string[]> {
   return invoke<string[]>("apply_path_rewrite", { libraryPath, rewrites });
+}
+
+// ── Mixable Tracks (Epic 6) ──────────────────────────────────────────────────
+
+export async function findMixableTracks(
+  path: string,
+  trackId: string,
+  options: MixableOptions | null,
+): Promise<MixableResult> {
+  return invoke<MixableResult>("find_mixable_tracks", {
+    path,
+    trackId,
+    options,
+  });
+}
+
+export async function mixableDefaultOptions(): Promise<MixableOptions> {
+  return invoke<MixableOptions>("mixable_default_options");
+}
+
+export async function getKeyMixingMode(): Promise<KeyMixingMode> {
+  return invoke<KeyMixingMode>("get_key_mixing_mode");
+}
+
+export async function setKeyMixingMode(mode: KeyMixingMode): Promise<void> {
+  return invoke<void>("set_key_mixing_mode", { mode });
+}
+
+export async function listMixableTemplates(): Promise<MixableTemplate[]> {
+  return invoke<MixableTemplate[]>("list_mixable_templates");
+}
+
+export async function saveMixableTemplate(
+  name: string,
+  options: MixableOptions,
+): Promise<string> {
+  return invoke<string>("save_mixable_template", { name, options });
+}
+
+export async function deleteMixableTemplate(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_mixable_template", { id });
 }

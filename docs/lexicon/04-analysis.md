@@ -149,11 +149,22 @@ picked, so the tool can be driven live through a set.
 
 *Templates* — option sets are saveable and reusable.
 
-*decks status* — **partial, and stranded.** `crates/scoring::score_transition(a, b)` already scores
-Camelot compatibility (perfect / relative major-minor / ±1) plus a BPM component and returns
-`reasons`, and a `suggest_next_tracks` Tauri command exists at
-`apps/desktop/src-tauri/src/lib.rs:198` — but **nothing in the frontend calls it**, and the
-implementation is O(n) over every track. None of the advanced rules exist.
+*decks status* — **done.** `crates/scoring::mixable` holds the rule engine; the panel is reached
+from the track context menu (`Find mixable tracks`) or the header's `Mixable` toggle, and stays
+open as a right-hand inspector so it can be driven through a set. `Use as next track` re-seeds it
+from the row just picked. Option sets save as templates (cache migration **v15**). Key Mixing Mode
+is a global setting with both modes, and the panel shows the resulting compatible-key set.
+
+Nine of the thirteen advanced options are implemented: BPM range, Match key, Include half/double
+BPM, Must have cue points, Genre(s), Year, Energy, Rating, Must have tag / Must not have tag.
+**Four are deliberately absent** — `Match color` and `Recently added` need colour and date-added
+columns `Track` does not carry, and Popularity / Danceability / Happiness are the Lexicon-only
+analysis fields from Epic 4. They are missing rather than present-and-inert, per ADR-0008.
+
+Two things were fixed on the way. `score_transition` carried its own Camelot-only key parser, so
+every spelled-out key (`C minor`) scored as "Missing Key Data"; it now routes through
+`changes::key_format`, which also learned to read Open Key input (`10m`) since that is what a
+library edited in Lexicon stores.
 
 *Epic* — **6**.
 

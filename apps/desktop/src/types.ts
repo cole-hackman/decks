@@ -943,3 +943,67 @@ export interface RewritePreview {
   plan: RewritePlan;
   considered: number;
 }
+
+// ── Mixable Tracks (Epic 6) ──────────────────────────────────────────────────
+
+/** The global setting, shared with the browser's compatible-key indicator. */
+export type KeyMixingMode = "harmonically_compatible" | "fuzzy";
+
+export type KeyRelation =
+  | "same"
+  | "relative_major_minor"
+  | "adjacent_same_mode"
+  | "adjacent_opposite_mode";
+
+export type BpmRelation = "direct" | "half" | "double";
+
+/** A rule over Energy or Rating. `near_source` is the spec's "input ±1". */
+export type NumericRule =
+  | { kind: "off" }
+  | { kind: "near_source" }
+  | { kind: "range"; min: number; max: number };
+
+export type YearRule =
+  | { kind: "off" }
+  | { kind: "same_as_source" }
+  | { kind: "range"; min: number; max: number };
+
+export interface MixableOptions {
+  /** Percentage of the source tempo. `null` accepts any tempo. */
+  bpm_tolerance_pct: number | null;
+  match_key: boolean;
+  key_mixing_mode: KeyMixingMode;
+  include_half_double: boolean;
+  must_have_cues: boolean;
+  genres: string[];
+  year: YearRule;
+  energy: NumericRule;
+  rating: NumericRule;
+  /** Tag ids. */
+  must_have_tags: string[];
+  must_not_have_tags: string[];
+  limit: number;
+}
+
+export interface MixableMatch {
+  track: Track;
+  score: number;
+  reasons: string[];
+  bpm_relation: BpmRelation;
+  key_relation: KeyRelation | null;
+}
+
+export interface MixableResult {
+  source: Track;
+  matches: MixableMatch[];
+  /** Tracks weighed before the rules ran, so an empty list can say "0 of N". */
+  considered: number;
+  compatible_keys: string[];
+}
+
+export interface MixableTemplate {
+  id: string;
+  name: string;
+  options: MixableOptions;
+  created_at: number;
+}

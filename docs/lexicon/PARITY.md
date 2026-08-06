@@ -17,7 +17,7 @@ regardless of how much of Lexicon they represent.
 | Interop & sync | 4 | 7 | 1 | 11 |
 | Library & browser | 3 | 7 | 6 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
-| Analysis | 0 | 5 | 4 | 0 |
+| Analysis | 2 | 4 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
 | Health | 2 | 2 | 1 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **34** | **37** | **19** | **16** |
+| **Total** | **36** | **36** | **19** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -92,7 +92,8 @@ of library *editing*, *automation*, or *set preparation*.
 | Energy | partial | Cached + displayed; no defined scale, no deliberate fill | 4 |
 | Danceability / Popularity / Happiness | **missing** | | 4 |
 | Auto-analyze on add | **missing** | | 4 |
-| Mixable Tracks | partial | **`scoring::score_transition` + `suggest_next_tracks` exist with no UI caller** | 6 |
+| Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 9 of 13 rules, `Use as next track`, saveable templates. The 4 missing rules (colour, date added, Popularity/Danceability/Happiness) need fields `Track` does not carry | 6 |
+| Key Mixing Mode | **done** | Global setting; Harmonically Compatible and Fuzzy, shared with the compatible-key set the panel shows | 6 |
 | Beatshift Fixer | **missing** | | 4 |
 
 ## Player, cues, generator — `05-cues-player.md`

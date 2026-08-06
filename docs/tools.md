@@ -430,3 +430,22 @@ Return downsampled peak data for rendering. The native Pioneer ANLZ color wavefo
 - `plugins.register_plugin`
 - `plugins.list_plugins`
 - `plugins.call_plugin`
+
+### `mixable_tracks`
+Rank a library against one track: what mixes out of it. Filters by BPM difference and key
+compatibility, optionally by genre and whether the candidate has cue points. The rules **filter**;
+the transition score only orders what survives.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string`, `track_id: string`, `bpm_tolerance_pct?: number` (0 = any tempo), `key_mixing_mode?: "harmonically_compatible" \| "fuzzy"`, `match_key?: boolean`, `include_half_double?: boolean`, `must_have_cues?: boolean`, `genres?: string[]`, `limit?: number` |
+| Returns | `{ source, considered, matches: { id, title, artist, bpm, key, score, reasons, bpm_relation }[] }` |
+| Idempotent | yes |
+| Side effects | none — read-only, stages nothing |
+| Cost | free; one pass over the library |
+
+Omitting `bpm_tolerance_pct` uses the default 6%; passing `0` means "ignore tempo". Those are
+different things and the tool keeps them apart.
+
+Unlike the desktop panel this has no access to the global Key Mixing Mode (which lives in the app's
+config file), so the mode is an explicit argument defaulting to `harmonically_compatible`.

@@ -2,6 +2,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { FirstRunWizard } from "./components/FirstRunWizard";
 import { TrackTable } from "./components/TrackTable";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
+import { MixableTracksPanel } from "./components/MixableTracksPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { PlaylistPanel } from "./components/PlaylistPanel";
@@ -83,7 +84,9 @@ export default function App() {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [currentView, setCurrentView] = useState<WorkspaceView>("library");
-  const [inspector, setInspector] = useState<"details" | "agent" | null>(null);
+  const [inspector, setInspector] = useState<
+    "details" | "agent" | "mixable" | null
+  >(null);
   const [pendingAgentPrompt, setPendingAgentPrompt] = useState<string | null>(
     null,
   );
@@ -184,6 +187,11 @@ export default function App() {
         ? new Set(selectedTrackIds)
         : new Set([track.id]);
       setTagPickerTrackIds(ids);
+    },
+    onFindMixable: (track) => {
+      setSelectedTrack(track);
+      setSelectedTrackIds(new Set([track.id]));
+      setInspector("mixable");
     },
     onSendToFiles: (track) => {
       // Scope the Files view to the current multi-selection when the
@@ -444,6 +452,23 @@ export default function App() {
           {showInspectorToggles && (
             <button
               onClick={() =>
+                setInspector((v) => (v === "mixable" ? null : "mixable"))
+              }
+              aria-label={
+                inspector === "mixable" ? "Hide mixable tracks" : "Show mixable tracks"
+              }
+              className={`rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors duration-150 hover:bg-elevated ${
+                inspector === "mixable"
+                  ? "text-accent-hover"
+                  : "text-ink-secondary hover:text-ink"
+              }`}
+            >
+              Mixable
+            </button>
+          )}
+          {showInspectorToggles && (
+            <button
+              onClick={() =>
                 setInspector((v) => (v === "details" ? null : "details"))
               }
               aria-label={inspector === "details" ? "Hide details" : "Show details"}
@@ -664,6 +689,20 @@ export default function App() {
                     : 0
                 }
                 onSeek={audio.seek}
+              />
+            )}
+            {inspector === "mixable" && (
+              <MixableTracksPanel
+                libraryPath={libraryPath ?? ""}
+                track={selectedTrack}
+                onUseAsNextTrack={(next) => {
+                  // The spec's live workflow: the track you just picked becomes
+                  // the seed for the next search, so the panel can be driven
+                  // through a set without going back to the browser.
+                  setSelectedTrack(next);
+                  setSelectedTrackIds(new Set([next.id]));
+                }}
+                onClose={() => setInspector(null)}
               />
             )}
             {inspector === "agent" && (

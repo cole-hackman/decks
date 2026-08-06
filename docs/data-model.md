@@ -130,6 +130,35 @@ matches nothing.
 `parent_folder_id` doubles as the Smartlist Generator's ledger — generated smartlists sit in the
 reserved `Lexicon` folder, and moving one out is what makes the generator recreate it.
 
+### v8 – v14
+
+Added by Epics 4 and 5, each documented in place in `crates/cache/src/migrations.rs`:
+`path_mappings` (v8), `quick_move_folders` (v9), `watch_folders` + `watch_dismissed` (v10),
+`field_mapping_rules` (v11), `incoming_reviewed` (v12), `undo_runs` + `undo_entries` (v13),
+`cleanup_locks` + `cleanup_pinned_letters` (v14).
+
+### v15 — `mixable_templates`
+Saved Mixable Tracks option sets (Epic 6).
+
+```
+mixable_templates (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    options    TEXT NOT NULL,     -- serialised scoring::MixableOptions
+    created_at INTEGER NOT NULL
+)
+```
+
+Rules are a JSON document for the same reason smartlists are: nothing queries an individual rule,
+the set is always loaded whole, and a rule added later must not need a migration. A template whose
+JSON no longer parses is skipped when listing rather than failing the list.
+
+**Not keyed by `library_path`.** "My peak-time rules" is a statement about how someone mixes, not
+about one database — the same reasoning as `path_mappings` and `cleanup_locks`.
+
+`name` is unique because saving over a template by name is the intended workflow; a second
+`Peak time` in the list is not what anyone doing that meant.
+
 ### Planned
 
 - **Embedding** — 512-d CLAP vector; cached per `(track_id, model_version, chunking_config)`. Pending `crates/embeddings` (Phase 4).

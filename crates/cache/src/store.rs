@@ -1667,6 +1667,82 @@ impl CacheDb {
     }
 }
 
+// ── Mixable Tracks templates ─────────────────────────────────────────────────
+
+/// A saved Mixable Tracks option set.
+///
+/// `options` is stored and returned as an **opaque JSON string**: the rule
+/// vocabulary lives in `scoring::MixableOptions`, and the cache has no business
+/// knowing it. That also means a template saved by a newer build survives an
+/// older one reading the table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MixableTemplate {
+    pub id: String,
+    pub name: String,
+    pub options: String,
+    pub created_at: i64,
+}
+
+impl CacheDb {
+    pub fn list_mixable_templates(&self) -> Result<Vec<MixableTemplate>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, name, options, created_at FROM mixable_templates ORDER BY name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(MixableTemplate {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                options: r.get(2)?,
+                created_at: r.get(3)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    /// Save an option set, replacing any template of the same name.
+    ///
+    /// Overwriting by name is deliberate: the workflow is "tweak the rules,
+    /// save as 'Peak time' again", and a second `Peak time` in the list is not
+    /// what anyone doing that meant. Returns the template id.
+    pub fn save_mixable_template(&self, name: &str, options_json: &str) -> Result<String> {
+        let name = name.trim();
+        if name.is_empty() {
+            anyhow::bail!("a template needs a name");
+        }
+        let existing: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT id FROM mixable_templates WHERE name = ?1",
+                rusqlite::params![name],
+                |r| r.get(0),
+            )
+            .ok();
+        if let Some(id) = existing {
+            self.conn.execute(
+                "UPDATE mixable_templates SET options = ?2 WHERE id = ?1",
+                rusqlite::params![id, options_json],
+            )?;
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO mixable_templates (id, name, options, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![id, name, options_json, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    /// Returns whether a template was actually removed.
+    pub fn delete_mixable_template(&self, id: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "DELETE FROM mixable_templates WHERE id = ?1",
+            rusqlite::params![id],
+        )? > 0)
+    }
+}
+
 // ── Backup and restore ───────────────────────────────────────────────────────
 
 impl CacheDb {

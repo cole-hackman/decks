@@ -274,6 +274,52 @@ pub fn tool_definitions() -> Vec<Value> {
             ),
         ),
         tool_definition(
+            "mixable_tracks",
+            "Rank a library against one track: what mixes out of it. Filters by BPM difference \
+             and key compatibility, optionally by genre and whether the candidate has cue points. \
+             key_mixing_mode: 'harmonically_compatible' (default) or 'fuzzy' (also allows the \
+             adjacent key in the opposite mode). Set bpm_tolerance_pct to 0 to ignore tempo. \
+             Read-only; stages nothing.",
+            object_schema(
+                &[
+                    (
+                        "library_path",
+                        string_schema("Path to the Rekordbox master.db file."),
+                    ),
+                    (
+                        "track_id",
+                        string_schema("Id of the track to mix out of."),
+                    ),
+                    (
+                        "bpm_tolerance_pct",
+                        number_schema("Allowed BPM difference as a percentage of the source tempo. 0 accepts any tempo."),
+                    ),
+                    (
+                        "key_mixing_mode",
+                        string_schema("'harmonically_compatible' (default) or 'fuzzy'."),
+                    ),
+                    (
+                        "match_key",
+                        bool_schema("Restrict to compatible keys. Default true."),
+                    ),
+                    (
+                        "include_half_double",
+                        bool_schema("Also accept half-time and double-time candidates. Default false."),
+                    ),
+                    (
+                        "must_have_cues",
+                        bool_schema("Skip tracks with no cue points. Default false."),
+                    ),
+                    (
+                        "genres",
+                        array_schema("Restrict to these genres. Empty means unrestricted."),
+                    ),
+                    ("limit", integer_schema("Maximum results. Default 25.")),
+                ],
+                &["library_path", "track_id"],
+            ),
+        ),
+        tool_definition(
             "undo_list",
             "List Sync runs recorded for a library, newest first, with how many changes of each \
              can be reversed and how many cannot.",
@@ -465,6 +511,27 @@ pub fn tool_request_from_name_and_arguments(name: &str, arguments: Value) -> Res
             library_path: required_string(arguments, "library_path")?,
             depth: optional_string(arguments, "depth")?,
         }),
+        "mixable_tracks" | "mixable.tracks" => Ok(ToolRequest::MixableTracks {
+            library_path: required_string(arguments, "library_path")?,
+            track_id: required_string(arguments, "track_id")?,
+            bpm_tolerance_pct: arguments.get("bpm_tolerance_pct").and_then(|v| v.as_f64()),
+            key_mixing_mode: optional_string(arguments, "key_mixing_mode")?,
+            match_key: arguments.get("match_key").and_then(|v| v.as_bool()),
+            include_half_double: arguments
+                .get("include_half_double")
+                .and_then(|v| v.as_bool()),
+            must_have_cues: arguments.get("must_have_cues").and_then(|v| v.as_bool()),
+            genres: arguments
+                .get("genres")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            limit: optional_usize(arguments, "limit")?,
+        }),
         "undo_list" | "undo.list" => Ok(ToolRequest::UndoList {
             library_path: required_string(arguments, "library_path")?,
         }),
@@ -618,6 +685,29 @@ fn object_schema(properties: &[(&str, Value)], required: &[&str]) -> Value {
 fn string_schema(description: &str) -> Value {
     json!({
         "type": "string",
+        "description": description
+    })
+}
+
+fn number_schema(description: &str) -> Value {
+    json!({
+        "type": "number",
+        "minimum": 0,
+        "description": description
+    })
+}
+
+fn bool_schema(description: &str) -> Value {
+    json!({
+        "type": "boolean",
+        "description": description
+    })
+}
+
+fn array_schema(description: &str) -> Value {
+    json!({
+        "type": "array",
+        "items": {"type": "string"},
         "description": description
     })
 }
@@ -834,6 +924,38 @@ mod tests {
             crate::ToolRequest::HealthPlayableScan {
                 library_path: "/tmp/master.db".into(),
                 depth: None,
+            }
+        );
+    }
+
+    #[test]
+    fn the_mixable_tool_is_advertised_and_parses() {
+        let defs = crate::mcp::tool_definitions();
+        let names: Vec<&str> = defs.iter().filter_map(|t| t["name"].as_str()).collect();
+        assert!(names.contains(&"mixable_tracks"));
+
+        assert_eq!(
+            crate::mcp::tool_request_from_name_and_arguments(
+                "mixable_tracks",
+                serde_json::json!({
+                    "library_path": "/tmp/master.db",
+                    "track_id": "1",
+                    "key_mixing_mode": "fuzzy",
+                    "include_half_double": true,
+                    "genres": ["House"],
+                }),
+            )
+            .expect("parsed"),
+            crate::ToolRequest::MixableTracks {
+                library_path: "/tmp/master.db".into(),
+                track_id: "1".into(),
+                bpm_tolerance_pct: None,
+                key_mixing_mode: Some("fuzzy".into()),
+                match_key: None,
+                include_half_double: Some(true),
+                must_have_cues: None,
+                genres: vec!["House".into()],
+                limit: None,
             }
         );
     }
