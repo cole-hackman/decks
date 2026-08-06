@@ -1,5 +1,38 @@
 # Status
 
+## 2026-08-06 — MyTag import
+
+Rekordbox's own tag system, imported into Custom Tags. Per
+`docs/lexicon/02-library.md §Custom Tags`. `djmdMyTag` / `djmdSongMyTag` added to the synthetic
+schema and seed, a read-only `queries::mytags`, and a preview-then-apply flow on the Custom Tags
+page.
+
+Rekordbox keeps categories and tags in the **same** table — a category is a row whose `ParentID` is
+the root, a tag one whose parent is a category, with `Attribute` telling them apart. Same
+self-referencing shape as playlists and folders.
+
+Four decisions:
+
+- **Preview, then apply.** The spec imports automatically; this does not. It merges a second
+  taxonomy into the user's own tag tree, and doing that unannounced is how a tag list becomes
+  unusable.
+- **Matched by name**, case- and whitespace-insensitively, at both levels. Rekordbox ids are not
+  stored — an id means nothing outside its database, and the name is what the user recognises.
+- **Idempotent.** A second import creates nothing and says "nothing to do" rather than reporting a
+  hollow success.
+- **Soft-deleted rows skipped on both levels.** A deleted category takes its tags with it;
+  importing a tag the user threw away would recreate exactly what they removed.
+
+Links pointing outside this library are counted and surfaced, not hidden — a large number means the
+MyTag data came from a different collection.
+
+**This time `pnpm e2e` ran before the push**, which is the correction to the process failure logged
+in the cue-presets entry below. All 59 pass.
+
+**Next:** what is left in Custom Tags is cosmetic or blocked (category colours, drag-reorder needing
+a `reorder_tags` command, hashtag import, Field-Mapper export). Epic 7 (streaming) still needs a
+scoping decision from the user.
+
 ## 2026-08-06 — Inline per-row waveform previews
 
 A `Wave` column in the browser, drawing each track's ANLZ preview at forty bars. Per

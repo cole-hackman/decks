@@ -11,6 +11,7 @@ mod duplicates;
 mod history;
 mod mixable;
 mod multi_edit;
+mod mytag_import;
 mod organizer;
 mod playlist_tools;
 mod recipes;
@@ -2849,6 +2850,8 @@ pub fn run() {
             cues::delete_cue_preset,
             cues::set_cue_preset_order,
             cues::apply_cue_preset,
+            mytag_import::preview_mytag_import,
+            mytag_import::import_mytags,
             trash::music_roots,
             trash::set_music_roots,
             trash::suggest_music_roots,

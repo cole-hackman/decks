@@ -95,6 +95,16 @@ impl RekordboxDb {
     // ── History ──────────────────────────────────────────────────────────────
 
     /// Play sessions Rekordbox has logged, newest first.
+    /// Rekordbox's own MyTag categories and tags, for import into Custom Tags.
+    pub fn my_tags(&self) -> Result<Vec<queries::mytags::MyTagCategory>> {
+        queries::mytags::my_tags(&self.conn)
+    }
+
+    /// `(track_id, my_tag_id)` pairs, batched over the whole library.
+    pub fn my_tags_by_track(&self) -> Result<Vec<(String, String)>> {
+        queries::mytags::my_tags_by_track(&self.conn)
+    }
+
     pub fn history_sets(&self) -> Result<Vec<queries::history::HistorySet>> {
         queries::history::sets(&self.conn)
     }

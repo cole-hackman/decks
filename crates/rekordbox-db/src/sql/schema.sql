@@ -81,6 +81,26 @@ CREATE TABLE IF NOT EXISTS djmdHistory (
     rb_local_deleted INTEGER DEFAULT 0
 );
 
+-- MyTags. Rekordbox stores categories and tags in the *same* table, with a
+-- category being a row whose ParentID is the root and a tag being one whose
+-- ParentID is a category — the same self-referencing shape as playlists and
+-- folders. Attribute distinguishes them: 0 = category, 1 = tag.
+CREATE TABLE IF NOT EXISTS djmdMyTag (
+    ID          TEXT PRIMARY KEY,
+    Seq         INTEGER,
+    Name        TEXT,
+    Attribute   INTEGER DEFAULT 0,
+    ParentID    TEXT,
+    rb_local_deleted INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS djmdSongMyTag (
+    ID        TEXT PRIMARY KEY,
+    MyTagID   TEXT,
+    ContentID TEXT,
+    rb_local_deleted INTEGER DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS djmdSongHistory (
     ID        TEXT PRIMARY KEY,
     HistoryID TEXT,

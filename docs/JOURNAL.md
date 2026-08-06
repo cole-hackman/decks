@@ -2549,3 +2549,20 @@ first), CSV import, the duplicates work.
   -D warnings`, `pnpm test` (746), `pnpm typecheck`, `pnpm lint`, 59 Playwright e2e.
 - **Next:** album art is the only `missing` row left in Library & browser, and the product does not
   model it at all. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (MyTag import)
+
+### Plan
+- Import Rekordbox MyTags into Custom Tags — the substantive remaining gap on that page.
+
+### End of session
+- **Shipped:** `djmdMyTag`/`djmdSongMyTag` in the synthetic schema + seed, `queries::mytags`
+  (6 tests), preview and import commands (idempotent, name-matched), and the import panel on the
+  Custom Tags page (6 tests).
+- **Diverged from the spec deliberately:** Lexicon imports MyTags automatically; this previews
+  first. Merging a second taxonomy into someone's tag tree unannounced is how a tag list becomes
+  unusable. Written down in `02-library.md`.
+- **Ran the full e2e before pushing** this time — the direct correction to the cue-presets miss.
+- Verified: `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`,
+  `pnpm test` (752), `pnpm typecheck`, `pnpm lint`, **59 Playwright e2e**.
+- **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.

@@ -252,10 +252,35 @@ filtered set), `Enter` toggles, `Esc` saves and closes. Individual tags can be a
 and that number bound to a hotkey.
 
 *decks status* — **partial, and well advanced.** Categories, tags, CRUD, usage-count badges, a
-picker modal, bulk apply, the `T` shortcut, tag filter dimensions and inline chips all exist.
-Missing: category colours, drag-to-reorder/move (backend `move_tag` exists; blocked on a
-`reorder_tags` command), the OR-within/AND-across selection semantics, MyTag import, hashtag
+picker modal, bulk apply, the `T` shortcut, tag filter dimensions, inline chips, the
+OR-within/AND-across selection semantics and **MyTag import** all exist. Missing: category colours,
+drag-to-reorder/move (backend `move_tag` exists; blocked on a `reorder_tags` command), hashtag
 import, per-tag number hotkeys, and Field-Mapper export.
+
+**MyTag import** reads `djmdMyTag` / `djmdSongMyTag`, where Rekordbox keeps categories and tags in
+the *same* table — a category is a row whose `ParentID` is the root, a tag one whose parent is a
+category, with `Attribute` telling them apart. Both tables are read-only, like everything else that
+touches `master.db`; tags land in the local cache.
+
+Four decisions:
+
+- **Preview, then apply.** The spec imports automatically. Here it does not: this merges a second
+  taxonomy into the user's own tag tree, and doing that unannounced is how a tag list becomes
+  unusable. The preview says how many categories, tags and links are new, and how many existing
+  tags will be *reused* rather than duplicated.
+- **Matched by name, case- and whitespace-insensitively**, at both levels. Rekordbox ids are not
+  stored — an id means nothing outside the database it came from, and the name is what the user
+  recognises. The cost is that renaming a category in Rekordbox makes the next import look like a
+  new one; the preview shows that, and it is recoverable, unlike silently renaming the user's own
+  category to match.
+- **Idempotent.** Re-running matches by name and reuses, and an existing track link is skipped, so a
+  second import creates nothing and says "nothing to do" rather than reporting a hollow success.
+- **Soft-deleted rows are skipped on both levels**, and a deleted category takes its tags with it.
+  Importing a tag the user threw away in Rekordbox would recreate exactly what they removed.
+
+Links pointing at tracks outside this library are counted and reported rather than hidden — a large
+number there means the MyTag data came from a different collection, which is worth knowing before
+importing rather than after.
 
 *Epic* — **1** (selection semantics), **5** (imports).
 

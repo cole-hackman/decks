@@ -3,6 +3,8 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Track,
   CuePreset,
+  MyTagImportPreview,
+  MyTagImportResult,
   DeletePlanView,
   DeleteReceipt,
   DeleteBatch,
@@ -1948,4 +1950,20 @@ export async function getRowWaveforms(
     trackIds,
     bars,
   });
+}
+
+// ── MyTag import ─────────────────────────────────────────────────────────────
+
+/** What importing Rekordbox's MyTags would create, without creating it. */
+export async function previewMyTagImport(
+  libraryPath: string,
+): Promise<MyTagImportPreview> {
+  return invoke<MyTagImportPreview>("preview_mytag_import", { libraryPath });
+}
+
+/** Merge MyTags into Custom Tags. Idempotent — re-running creates nothing. */
+export async function importMyTags(
+  libraryPath: string,
+): Promise<MyTagImportResult> {
+  return invoke<MyTagImportResult>("import_mytags", { libraryPath });
 }
