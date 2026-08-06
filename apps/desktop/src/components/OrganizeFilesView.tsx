@@ -7,6 +7,7 @@ import {
 } from "../ipc";
 import { useToast } from "./Toast";
 import { UnusedFilesPanel } from "./UnusedFilesPanel";
+import { WriteTagsPanel } from "./WriteTagsPanel";
 import type {
   OrganizeRow,
   PatternField,
@@ -161,16 +162,20 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
   }, [libraryPath, changing, toast]);
 
   return (
-    <div className="flex h-full flex-col overflow-auto p-4" aria-label="Move and rename">
+    <div className="flex h-full flex-col overflow-auto p-4" aria-label="Files">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold">Move &amp; Rename</h2>
+        <h2 className="text-sm font-semibold">Files</h2>
         <p className="text-xs text-muted">
           {selectedTrackIds.size > 0
             ? `${targetIds.length} selected track(s)`
             : `All ${targetIds.length} track(s)`}
-          {" — files move on disk; Rekordbox learns the new paths when you sync."}
+          {" — everything here writes to disk, not to Rekordbox's database."}
         </p>
       </header>
+
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+        Move &amp; Rename
+      </h3>
 
       <div className="mb-3 grid gap-3 md:grid-cols-2">
         <label className="text-xs">
@@ -303,6 +308,7 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
       )}
 
       <div className="mt-4">
+        <WriteTagsPanel libraryPath={libraryPath} trackIds={targetIds} />
         <UnusedFilesPanel libraryPath={libraryPath} />
       </div>
     </div>

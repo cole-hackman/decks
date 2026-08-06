@@ -123,10 +123,16 @@ detected.
 *Why it's separate from sync* — syncing updates the DJ app's database; this updates the files. A
 user whose music is also in a plain music player needs both.
 
-*decks status* — **partial.** `crates/audio-tags` (lofty) already reads *and writes* title, artist,
-album, genre, BPM, key, comment, year and duration for MP3/FLAC/M4A/WAV, and a `write_audio_tags`
-Tauri command exists. There is no bulk flow, no per-field selection, no field-mapping projection,
-and no auto-write.
+*decks status* — **partial.** `crates/audio-tags` (lofty) reads *and writes* title, artist, album,
+genre, BPM, key, comment and year for MP3/FLAC/M4A/WAV. `write_tags_bulk` plus `WriteTagsPanel`
+(Files view) add the bulk flow with per-field selection over the selection or the whole library.
+
+One rule the manual does not state but the feature needs: **a selected field whose library value is
+empty is not written.** Otherwise ticking "Artist" on a library that happens not to know an artist
+would blank a perfectly good tag in the file. Those tracks come back as `skipped` and the UI says
+how many.
+
+Still missing: field-mapping projection and auto-write-on-change.
 
 *Epic* — **4**.
 

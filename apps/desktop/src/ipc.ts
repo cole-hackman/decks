@@ -36,6 +36,8 @@ import type {
   ExtensionFilter,
   UnusedScan,
   DeleteReport,
+  TagFieldSelection,
+  WriteTagsResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1021,4 +1023,16 @@ export async function deleteUnusedFiles(
   paths: string[],
 ): Promise<DeleteReport> {
   return invoke<DeleteReport>("delete_unused_files", { libraryPath, paths });
+}
+
+export async function writeTagsBulk(
+  libraryPath: string,
+  trackIds: string[],
+  selection: TagFieldSelection,
+): Promise<WriteTagsResult> {
+  return invoke<WriteTagsResult>("write_tags_bulk", {
+    libraryPath,
+    trackIds,
+    selection,
+  });
 }

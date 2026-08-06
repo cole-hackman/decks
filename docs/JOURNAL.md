@@ -1537,5 +1537,14 @@ re-check library membership at delete time rather than trusting the scan, and co
 case- and separator-insensitively because Rekordbox and the filesystem do not reliably agree. That
 last one is not hypothetical; a case-only mismatch would put a real track on the delete list.
 
+**Bulk Write Tags** turned out to hinge on one decision: what to do with a ticked field whose
+library value is empty. Writing it is the naive reading of "write these fields", and it would blank
+real tags in people's files with nothing. Not writing it makes the feature safe and costs a
+`skipped` count in the result. Easy call once stated, easy to get wrong if never stated.
+
+**Toolchain note for future sessions:** the container's clippy is 1.94 and CI's is 1.97. A clean
+local `cargo clippy --workspace --all-targets -- -D warnings` is necessary but not sufficient —
+`unnecessary_sort_by` only fired on CI. Expect one round-trip per PR on new lints.
+
 **Next:** the rest of Epic 4. Watch folder and the incoming auto-advance flow are the natural
 follow-on, since they are what makes auto-move-on-done meaningful.

@@ -129,6 +129,15 @@ test.beforeEach(async ({ page }) => {
               }
               return [...p.matchAll(/%([^%]+)%/g)].map((m) => m[1]);
             }
+            case "write_tags_bulk": {
+              const selection = args.selection as Record<string, boolean>;
+              // Only "genre" is populated on both fixture tracks, so a
+              // genre-only write hits both; anything else is a skip.
+              const ids = args.trackIds as string[];
+              return selection.genre
+                ? { written: ids, failed: [], skipped: [] }
+                : { written: [], failed: [], skipped: ids };
+            }
             case "scan_unused_files": {
               const filter = args.filter as {
                 mode: string;
@@ -188,7 +197,7 @@ async function openOrganize(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: "Get started" }).click();
   await page.getByRole("button", { name: "Browse…" }).click();
   await page.getByRole("button", { name: "Open library" }).click();
-  await page.getByRole("button", { name: "Move & Rename" }).click();
+  await page.getByRole("button", { name: "Files" }).click();
 }
 
 test("preview a move, then apply it", async ({ page }) => {
@@ -246,4 +255,17 @@ test("find unused files: scan, then confirm before deleting", async ({ page }) =
     .click();
   await expect(page.getByText(/Deleted 1 file\(s\)/)).toBeVisible();
   await expect(page.getByText(/deleted-1\.txt/)).toBeVisible();
+});
+
+test("write tags: nothing selected by default, then write the ticked field", async ({
+  page,
+}) => {
+  await openOrganize(page);
+
+  const write = page.getByRole("button", { name: /Write tags to 2 file\(s\)/ });
+  await expect(write).toBeDisabled();
+
+  await page.getByLabel("Genre").check();
+  await write.click();
+  await expect(page.getByText(/Wrote 2 file\(s\)/)).toBeVisible();
 });

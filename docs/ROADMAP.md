@@ -144,7 +144,7 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
       current year/month/decade)
 - [x] Move & Rename over a selection, preview-then-apply, staging `TrackRelocate` per moved file
 - [ ] Quick move with favourited folders on hotkeys 1–9
-- [ ] Bulk Write Tags (ID3) with per-field selection
+- [x] Bulk Write Tags (ID3) with per-field selection
 - [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining
 - [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
 - [ ] Album art: fetch, embed, replace, remove, reload

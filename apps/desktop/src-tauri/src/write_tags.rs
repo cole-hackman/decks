@@ -76,7 +76,10 @@ fn payload(
         if !selected {
             return None;
         }
-        value.map(str::trim).filter(|s| !s.is_empty()).map(String::from)
+        value
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
     }
 
     TagWriteFields {

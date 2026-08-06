@@ -4,6 +4,7 @@ mod cue_generator;
 mod cues;
 mod organizer;
 mod smartlists;
+mod write_tags;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -2590,6 +2591,7 @@ pub fn run() {
             organizer::apply_organize,
             organizer::scan_unused_files,
             organizer::delete_unused_files,
+            write_tags::write_tags_bulk,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,

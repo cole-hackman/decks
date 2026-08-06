@@ -63,13 +63,27 @@ and the click. And path comparison is case- and separator-insensitive, since Rek
 filesystem do not reliably agree and a case-only mismatch would offer a real track for deletion.
 Nothing is pre-selected and deletion needs an explicit second click.
 
+**Bulk Write Tags** rounds out the slice: `write_tags_bulk` projects the library's values into the
+files' own tags, with per-field selection, over the selection or the whole library. The rule that
+matters is the one the manual does not state — **a selected field whose library value is empty is
+not written**, because ticking "Artist" on a library that happens not to know one would blank a
+perfectly good tag in the file. Those tracks come back as `skipped` and the panel says how many.
+Nothing is ticked by default: this writes to files and cannot be rolled back through the staged-
+change pipeline.
+
+The sidebar entry is now **Files** rather than Move & Rename, with Move & Rename, Write Tags and
+Find Unused Files as sections — they are one domain (things that write to disk rather than to
+Rekordbox's database) and `docs/lexicon/06-files.md` treats them as one.
+
 **What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move with favourite
-folders, bulk Write Tags with per-field selection, field mappings, enrichment (Find Tags & album
-art), Energy/Danceability, Beatshift Fixer, local path mappings, and the Automatic Actions settings
+folders, field mappings, auto-write-on-change, enrichment (Find Tags & album art),
+Energy/Danceability, Beatshift Fixer, local path mappings, and the Automatic Actions settings
 group.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 299, typecheck, lint, `pnpm e2e` 14 — all green.
+clean, `pnpm test` 306, typecheck, lint, `pnpm e2e` 15 — all green. One CI-only clippy lint
+(`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
+`cargo clippy` passing locally does not guarantee CI.
 
 ## 2026-08-06 — Epic 3 (part 1): cue templates and custom cue anchors
 New `crates/cue-generator`, split in two so detection can land later without touching the placement logic:

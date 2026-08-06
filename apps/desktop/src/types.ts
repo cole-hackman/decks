@@ -441,3 +441,20 @@ export interface DeleteReport {
   failed: [string, string][];
   report_path: string | null;
 }
+
+export interface TagFieldSelection {
+  title: boolean;
+  artist: boolean;
+  album: boolean;
+  genre: boolean;
+  bpm: boolean;
+  musical_key: boolean;
+  comment: boolean;
+  year: boolean;
+}
+
+export interface WriteTagsResult {
+  written: string[];
+  failed: [string, string][];
+  skipped: string[];
+}
