@@ -139,6 +139,11 @@ bar in `CueEditor`.
   particular database, so it survives opening a different library. That differs from
   `favourite_playlists`, which is scoped, and the migration says why.
 
+The preset list **guards its shape, not just its rejection**: a command that resolves with `null`
+— an older build, a host that does not know it yet — used to put `null` into state and throw on the
+next `.length`, which unmounted the whole inspector rather than just the preset bar. Twelve e2e
+tests caught that; there is now a unit test for it.
+
 Two divergences: duplicate names are allowed ("Drop" in red and "Drop" in orange is a reasonable
 thing to want, and rejecting it is a rule the spec does not ask for), and applying goes through an
 explicit **target** cue rather than the playhead's position. Position-based targeting reads well in

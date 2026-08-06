@@ -26,6 +26,13 @@ allowed, and applying goes through an explicit **target** cue rather than the pl
 Position-based targeting reads well in prose and badly in practice — "exactly on a cue" is a
 millisecond comparison the user cannot see, and getting it wrong stamps a preset onto the wrong cue.
 
+**One bug this shipped and then fixed.** `listCuePresets` resolving with `null` — which is what
+every e2e spec that does not mock the command gets back — put `null` into state, and the next
+`.length` threw. Because the cue editor lives in the inspector, that unmounted the *whole panel*,
+not just the preset bar: clicking a track appeared to do nothing. Twelve e2e tests caught it. The
+loader now guards the shape as well as the rejection, and there is a unit test pinning it. The
+lesson: a `catch` covers a rejected promise, not a resolved one of the wrong type.
+
 With this, **Player, cues and generator has no `missing` rows left**.
 
 **Next:** inline per-row waveform previews is the last unblocked `missing` row outside streaming.

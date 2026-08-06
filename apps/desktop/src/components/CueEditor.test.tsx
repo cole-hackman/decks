@@ -359,6 +359,20 @@ describe("CueEditor", () => {
     expect(deleteCuePreset).toHaveBeenCalledWith("p1");
   });
 
+  it("survives a preset command that resolves with null", async () => {
+    // Not hypothetical: every e2e spec that does not mock this command gets
+    // `null` back from the Tauri host, and `null.length` unmounted the whole
+    // inspector rather than just the preset bar. Twelve e2e tests caught it.
+    vi.mocked(listCuePresets).mockResolvedValue(
+      null as unknown as Awaited<ReturnType<typeof listCuePresets>>,
+    );
+    renderEditor([cue("c1", 1, 1000)]);
+    expect(await screen.findByText(/No presets yet/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Delete cue 1" }),
+    ).toBeInTheDocument();
+  });
+
   it("survives a preset list that fails to load", async () => {
     vi.mocked(listCuePresets).mockRejectedValue(new Error("cache locked"));
     renderEditor([cue("c1", 1, 1000)]);

@@ -2521,6 +2521,12 @@ first), CSV import, the duplicates work.
   names are allowed, and applying targets an explicitly picked cue rather than "whatever the
   playhead is exactly on" — a millisecond comparison the user cannot see is a bad way to choose
   which cue gets overwritten.
+- **Shipped a crash and caught it in the same session.** `listCuePresets` resolving with `null`
+  put `null` into state; the next `.length` threw and unmounted the entire inspector, so clicking a
+  track looked like it did nothing. I had run cargo + vitest + typecheck + lint on this commit but
+  **not** the e2e suite — which is exactly what would have caught it, and did, the moment I ran it
+  against the next branch. Lesson recorded twice over: a `catch` covers a rejected promise, not a
+  resolved one of the wrong shape; and "the definition of done lists four commands" means four.
 - Verified: `cargo test --workspace` (57 targets), `cargo clippy --workspace --all-targets
-  -D warnings`, `pnpm test` (741), `pnpm typecheck`, `pnpm lint`.
+  -D warnings`, `pnpm test` (742), `pnpm typecheck`, `pnpm lint`, **59 Playwright e2e**.
 - **Next:** inline per-row waveform previews. Epic 7 needs a scoping decision.

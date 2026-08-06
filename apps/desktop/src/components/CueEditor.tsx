@@ -91,7 +91,12 @@ export function CueEditor({
 
   const refreshPresets = useCallback(async () => {
     try {
-      setPresets(await listCuePresets());
+      const rows = await listCuePresets();
+      // Guard the *shape*, not just the rejection. A command that resolves with
+      // null — an older build, a host that does not know this command yet —
+      // would otherwise put `null` into state and throw on the next `.length`,
+      // which unmounts the whole inspector rather than just the preset bar.
+      setPresets(Array.isArray(rows) ? rows : []);
     } catch {
       // A preset list that fails to load must not take the cue editor with it.
       setPresets([]);
