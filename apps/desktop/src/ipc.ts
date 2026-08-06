@@ -75,6 +75,9 @@ import type {
   PreferRule,
   ResolutionPlan,
   ResolveResult,
+  PathRewrite,
+  RewritePreview,
+  RewriteSpec,
 } from "./types";
 import type {
   ChatMessage,
@@ -1464,4 +1467,20 @@ export async function resolveDuplicates(
   plan: ResolutionPlan,
 ): Promise<ResolveResult> {
   return invoke<ResolveResult>("resolve_duplicates", { libraryPath, plan });
+}
+
+// ── Path rewriting ───────────────────────────────────────────────────────────
+
+export async function previewPathRewrite(
+  libraryPath: string,
+  spec: RewriteSpec,
+): Promise<RewritePreview> {
+  return invoke<RewritePreview>("preview_path_rewrite", { libraryPath, spec });
+}
+
+export async function applyPathRewrite(
+  libraryPath: string,
+  rewrites: PathRewrite[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_path_rewrite", { libraryPath, rewrites });
 }

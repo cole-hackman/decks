@@ -136,7 +136,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Find Duplicates | **done** | 3 strategies, duration bounds, preselection, bulk Prefer, review step, playlist re-pointing. Interruptible scan and manual merge outstanding | 5 |
-| Find Lost Tracks / Relocate | partial | Fuzzy filename+size. Missing prefix rewriting, all-tracks mode, extension change, merge-with-existing, pre-change backup | 5 |
+| Find Lost Tracks / Relocate | partial | Fuzzy match + prefix rewriting, all-tracks mode, extension change; backup rides on `WriteGuard`. Merge-with-existing and the 5-min re-check cadence outstanding | 5 |
 | Find Broken Tracks | **done** | Real decode check, two depths, per-playlist report. Deleting from disk deliberately not offered | 5 |
 | Find Tags & Album Art | **missing** | `crates/enrichment` is a 10-line stub | 4 |
 

@@ -12,6 +12,9 @@ import { WithProviders } from "../test-utils/providers";
 import type { OrganizeRow, Track } from "../types";
 
 vi.mock("../ipc", () => ({
+  // Used by the path-rewrite section mounted below.
+  previewPathRewrite: vi.fn(async () => ({ plan: { rewrites: [], skipped: [] }, considered: 0 })),
+  applyPathRewrite: vi.fn(),
   patternFields: vi.fn(),
   validatePattern: vi.fn(),
   previewOrganize: vi.fn(),

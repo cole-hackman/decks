@@ -8,6 +8,7 @@ import {
 import { useToast } from "./Toast";
 import { QuickMovePanel } from "./QuickMovePanel";
 import { WatchFolderPanel } from "./WatchFolderPanel";
+import { PathRewriteSection } from "./PathRewriteSection";
 import { UnusedFilesPanel } from "./UnusedFilesPanel";
 import { WriteTagsPanel } from "./WriteTagsPanel";
 import type {
@@ -318,6 +319,8 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
           onMoved={() => setRows(null)}
         />
         <WriteTagsPanel libraryPath={libraryPath} trackIds={targetIds} />
+        <PathRewriteSection libraryPath={libraryPath} />
+
         <UnusedFilesPanel libraryPath={libraryPath} />
       </div>
     </div>

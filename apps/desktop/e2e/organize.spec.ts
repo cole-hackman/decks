@@ -261,7 +261,7 @@ test("preview a move, then apply it", async ({ page }) => {
 
   await page.getByLabel("Target folder").fill("/music");
   await page.getByLabel("Subfolder level 1").selectOption("genre");
-  await page.getByRole("button", { name: "Preview" }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
 
   const preview = page.getByTestId("organize-preview");
   await expect(preview).toBeVisible();
@@ -282,7 +282,7 @@ test("a malformed pattern blocks the preview", async ({ page }) => {
 
   await page.getByLabel("Filename pattern").fill("%artist");
   await expect(page.getByRole("alert")).toContainText("unterminated");
-  await expect(page.getByRole("button", { name: "Preview" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeDisabled();
 });
 
 test("find unused files: scan, then confirm before deleting", async ({ page }) => {

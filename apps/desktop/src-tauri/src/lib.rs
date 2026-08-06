@@ -2833,6 +2833,8 @@ pub fn run() {
             duplicates::plan_duplicate_resolution,
             duplicates::resolve_duplicates,
             duplicates::preselect_keepers,
+            organizer::preview_path_rewrite,
+            organizer::apply_path_rewrite,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

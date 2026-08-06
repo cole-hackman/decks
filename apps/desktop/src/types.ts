@@ -908,3 +908,38 @@ export interface ResolveResult {
   archived: string[];
   staged: string[];
 }
+
+// ── Path rewriting (Epic 5) ──────────────────────────────────────────────────
+// Mirrors `relocate::rewrite`. See docs/lexicon/07-health.md.
+
+export interface RewriteSpec {
+  from_prefix: string;
+  to_prefix: string;
+  /** The WAV→MP3 re-encode case. */
+  new_extension: string | null;
+  /** Rewrite working paths too, not only missing ones. Off by default. */
+  all_tracks: boolean;
+}
+
+export type RewriteSkipReason =
+  | { kind: "no_match" }
+  | { kind: "not_missing" }
+  | { kind: "unchanged" }
+  | { kind: "taken"; detail: string };
+
+export interface PathRewrite {
+  track_id: string;
+  from: string;
+  to: string;
+}
+
+export interface RewritePlan {
+  rewrites: PathRewrite[];
+  /** `[track_id, path, reason]` for every track passed over. */
+  skipped: [string, string, RewriteSkipReason][];
+}
+
+export interface RewritePreview {
+  plan: RewritePlan;
+  considered: number;
+}

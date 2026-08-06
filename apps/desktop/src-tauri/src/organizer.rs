@@ -680,3 +680,93 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 }
+
+// ── Prefix rewriting (Epic 5) ────────────────────────────────────────────────
+//
+// The advanced relocate path: the user states a source prefix and a target
+// prefix, and every matching path is rewritten. Nothing is inferred — a tool
+// that guessed the rewrite would eventually guess wrong over a whole library.
+
+#[derive(Debug, serde::Serialize)]
+pub struct RewritePreview {
+    pub plan: relocate::rewrite::RewritePlan,
+    /// Tracks considered, so "12 rewritten" is not mistaken for "12 tracks".
+    pub considered: usize,
+}
+
+/// Plan a prefix rewrite without changing anything.
+#[tauri::command]
+pub async fn preview_path_rewrite(
+    app: tauri::AppHandle,
+    library_path: String,
+    spec: relocate::rewrite::RewriteSpec,
+) -> Result<RewritePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+        let mappings = path_mappings(&app);
+        let tracks = db.tracks().map_err(|e| e.to_string())?;
+
+        let existing: Vec<String> = tracks
+            .iter()
+            .filter_map(|t| t.folder_path.clone())
+            .collect();
+        let inputs: Vec<relocate::rewrite::RewriteInput> = tracks
+            .iter()
+            .filter_map(|t| {
+                let path = t.folder_path.clone()?;
+                // Missing-ness is judged through path mappings, so a library
+                // opened on a second machine is not reported as entirely
+                // missing before the user has typed a prefix.
+                let resolved = mappings.resolve(&path);
+                Some(relocate::rewrite::RewriteInput {
+                    track_id: t.id.clone(),
+                    missing: !resolved.exists(),
+                    path,
+                })
+            })
+            .collect();
+
+        Ok(RewritePreview {
+            considered: inputs.len(),
+            plan: relocate::rewrite::plan(&spec, &inputs, &existing),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stage a planned rewrite.
+///
+/// `TrackRelocate` per track, reviewed and applied by Sync under the write
+/// guard — which is also the "optional automatic backup before rewriting
+/// locations" the spec recommends, except that it is not optional here.
+#[tauri::command]
+pub async fn apply_path_rewrite(
+    app: tauri::AppHandle,
+    library_path: String,
+    rewrites: Vec<relocate::rewrite::Rewrite>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let mut staged = Vec::new();
+        for rewrite in &rewrites {
+            let record = cache
+                .stage_change(changes::NewChange {
+                    library_path: Some(library_path.clone()),
+                    kind: changes::ChangeKind::TrackRelocate,
+                    target_id: Some(rewrite.track_id.clone()),
+                    field: None,
+                    old_value: Some(serde_json::json!(rewrite.from)),
+                    new_value: Some(serde_json::json!(rewrite.to)),
+                    reason: Some("Path rewrite".to_string()),
+                    confidence: Some(1.0),
+                })
+                .map_err(|e| e.to_string())?;
+            staged.push(record.id);
+        }
+        Ok(staged)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

@@ -2026,5 +2026,24 @@ and the obvious implementation excludes unknown durations too — silently dropp
 has never been analysed, which is exactly the library most in need of a duplicate scan. Unknown is
 included, with a comment saying why.
 
+**Prefix matching has exactly one subtlety, and it is a pair.** Match case-insensitively and with
+separators interchangeable, because a user typing `D:\Music` means the folder stored as `D:/music/`
+— but keep the *remainder* in its original case, because lower-casing the rest of the path breaks
+every file on a case-sensitive filesystem. Getting one right and the other wrong produces a tool
+that either never matches or silently corrupts four thousand paths.
+
+**A collision does not have to pre-exist.** The spec's constraint is "you may only relocate to a
+path not already in the library", and the obvious reading is "check against the current paths". Two
+tracks in the *same plan* rewriting onto one path is the same collision, and only shows up if the
+set of taken paths grows as the plan is built.
+
+**No "detect" button, on purpose.** The fuzzy matcher exists for guessing; this is the path for
+when the user already knows. Adding inference here would make the deterministic tool
+non-deterministic, which is the one property it was chosen for.
+
+**The backup the spec recommends was already there.** `WriteGuard` takes one before Sync's first
+write, and it is not optional — so the honest note is "already covered, more strictly" rather than
+shipping a second backup mechanism nobody needs.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

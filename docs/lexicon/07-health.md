@@ -99,10 +99,39 @@ or restarting forces a re-check. Listing all missing files is done with an
 `Is file missing` smartlist rule rather than a bespoke view — a nice illustration of the smartlist
 engine paying for itself.
 
-*decks status* — **partial.** `crates/relocate` does fuzzy filename + size matching and surfaces
-through a `RelocateBanner`, and the Cleanup view exposes the flow. Missing: prefix rewriting,
-all-tracks mode, extension substitution, the single-track merge-with-existing case, pre-change
-backup, and the re-check cadence.
+*decks status* — **the advanced path is done; the single-track merge case and the re-check cadence
+are not.**
+
+`crates/relocate` already did fuzzy filename + size matching through the `RelocateBanner`.
+`relocate::rewrite` adds the deterministic half, at **Files → Rewrite Paths**: a source prefix, a
+target prefix, and every matching path is rewritten. **Nothing is inferred** — the spec calls this
+the deterministic path, and a tool that guessed the rewrite would eventually guess wrong across an
+entire library, so there is no "detect" button.
+
+Decisions, each tested:
+
+- **Separators and case are ignored when matching**, because a user typing `D:\Music` means the
+  folder stored as `D:/music/`. But **the remainder keeps its original case** — a rewrite that
+  lower-cased the rest of the path would break every file on a case-sensitive filesystem.
+- **All-tracks mode is off by default**, and warns when switched on. The common case is repairing
+  breakage; sweeping working paths into a rewrite is how a working library stops working.
+- **A path already in the library is refused**, per the spec's constraint — and so is a collision
+  between two rewrites in the *same plan*, which does not have to pre-exist to be a collision.
+- **An empty source prefix rewrites nothing.** It would match every path in the library.
+- **Extension substitution** handles the WAV→MP3 case, swapping only the last dot *after* the last
+  separator, so `/Music/v1.0/track` gains an extension rather than having `0` replaced.
+- The preview reports **"1 of 3 would be rewritten"**, not "1 rewritten" — and lists collisions but
+  not the thousands of paths that simply did not match, which would be noise rather than
+  information.
+
+Missing-ness is judged **through local path mappings**, so a library opened on a second machine is
+not reported as entirely missing before the user has typed anything.
+
+Rewrites stage as `TrackRelocate` and go through review and Sync — whose write guard takes the
+"optional automatic backup" the spec recommends, except that here it is not optional.
+
+Still missing: the **single-track merge-with-existing** case (relocating onto a file already in the
+library, replacing the other entry across every playlist) and the **5-minute re-check cadence**.
 
 *Epic* — **5**.
 
