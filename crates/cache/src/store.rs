@@ -1743,6 +1743,278 @@ impl CacheDb {
     }
 }
 
+// ── Play history ─────────────────────────────────────────────────────────────
+
+/// One imported session — the gig log's unit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistorySetRow {
+    pub id: String,
+    /// The `djmdHistory.ID` this came from.
+    pub source_id: String,
+    pub name: String,
+    pub played_at: Option<String>,
+    pub rating: Option<i64>,
+    pub location: Option<String>,
+    pub track_count: usize,
+}
+
+/// A track as it was at play time. **Snapshot, not a join.**
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryTrackRow {
+    pub id: String,
+    pub seq: i64,
+    /// The library id at play time. Kept for re-matching, never trusted — the
+    /// track may be gone, and the columns below are what the log shows.
+    pub content_id: Option<String>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub musical_key: Option<String>,
+    pub bpm: Option<f64>,
+    pub duration_secs: Option<i64>,
+    pub folder_path: Option<String>,
+}
+
+/// What one session looks like on the way in.
+#[derive(Debug, Clone)]
+pub struct IncomingHistorySet {
+    pub source_id: String,
+    pub name: String,
+    pub played_at: Option<String>,
+    pub tracks: Vec<IncomingHistoryTrack>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct IncomingHistoryTrack {
+    pub content_id: Option<String>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub musical_key: Option<String>,
+    pub bpm: Option<f64>,
+    pub duration_secs: Option<i64>,
+    pub folder_path: Option<String>,
+}
+
+/// What an import did.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HistoryImportReport {
+    pub imported: usize,
+    /// Already present — sets are never duplicated, per the spec.
+    pub already_known: usize,
+    /// Skipped because the user deleted them before. DJ apps log practice
+    /// sessions and false starts; a re-import must not resurrect them.
+    pub previously_deleted: usize,
+}
+
+impl CacheDb {
+    /// Import sessions, skipping ones already known and ones deleted before.
+    ///
+    /// **Snapshots.** The track data is copied in as given and never re-joined
+    /// to the library, because the spec is explicit that editing a track later
+    /// must not rewrite what history says was played.
+    pub fn import_history(
+        &mut self,
+        library_path: &str,
+        sets: &[IncomingHistorySet],
+    ) -> Result<HistoryImportReport> {
+        let known: std::collections::HashSet<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT source_id FROM history_sets WHERE library_path = ?1")?;
+            let rows =
+                stmt.query_map(rusqlite::params![library_path], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let deleted: std::collections::HashSet<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT source_id FROM history_deleted WHERE library_path = ?1")?;
+            let rows =
+                stmt.query_map(rusqlite::params![library_path], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+
+        let now = now_secs();
+        let mut report = HistoryImportReport::default();
+        let tx = self.conn.transaction()?;
+        for set in sets {
+            if deleted.contains(&set.source_id) {
+                report.previously_deleted += 1;
+                continue;
+            }
+            if known.contains(&set.source_id) {
+                report.already_known += 1;
+                continue;
+            }
+            let set_id = uuid::Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO history_sets
+                    (id, library_path, source_id, name, played_at, imported_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    set_id,
+                    library_path,
+                    set.source_id,
+                    set.name,
+                    set.played_at,
+                    now
+                ],
+            )?;
+            for (i, track) in set.tracks.iter().enumerate() {
+                tx.execute(
+                    "INSERT INTO history_tracks
+                        (id, set_id, seq, content_id, title, artist, album, genre,
+                         musical_key, bpm, duration_secs, folder_path)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    rusqlite::params![
+                        uuid::Uuid::new_v4().to_string(),
+                        set_id,
+                        (i as i64) + 1,
+                        track.content_id,
+                        track.title,
+                        track.artist,
+                        track.album,
+                        track.genre,
+                        track.musical_key,
+                        track.bpm,
+                        track.duration_secs,
+                        track.folder_path,
+                    ],
+                )?;
+            }
+            report.imported += 1;
+        }
+        tx.commit()?;
+        Ok(report)
+    }
+
+    pub fn list_history_sets(&self, library_path: &str) -> Result<Vec<HistorySetRow>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT s.id, s.source_id, s.name, s.played_at, s.rating, s.location,
+                    (SELECT COUNT(*) FROM history_tracks t WHERE t.set_id = s.id)
+             FROM history_sets s
+             WHERE s.library_path = ?1
+             ORDER BY s.played_at DESC, s.imported_at DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![library_path], |r| {
+            Ok(HistorySetRow {
+                id: r.get(0)?,
+                source_id: r.get(1)?,
+                name: r.get(2)?,
+                played_at: r.get(3)?,
+                rating: r.get(4)?,
+                location: r.get(5)?,
+                track_count: r.get::<_, i64>(6)? as usize,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    pub fn history_set_tracks(&self, set_id: &str) -> Result<Vec<HistoryTrackRow>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, seq, content_id, title, artist, album, genre,
+                    musical_key, bpm, duration_secs, folder_path
+             FROM history_tracks WHERE set_id = ?1 ORDER BY seq",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![set_id], |r| {
+            Ok(HistoryTrackRow {
+                id: r.get(0)?,
+                seq: r.get(1)?,
+                content_id: r.get(2)?,
+                title: r.get(3)?,
+                artist: r.get(4)?,
+                album: r.get(5)?,
+                genre: r.get(6)?,
+                musical_key: r.get(7)?,
+                bpm: r.get(8)?,
+                duration_secs: r.get(9)?,
+                folder_path: r.get(10)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    /// Rating and location — the two pieces of metadata the spec gives a set.
+    pub fn set_history_metadata(
+        &self,
+        set_id: &str,
+        rating: Option<i64>,
+        location: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE history_sets SET rating = ?2, location = ?3 WHERE id = ?1",
+            rusqlite::params![set_id, rating, location],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a set **and remember it**, so a re-import does not bring it back.
+    ///
+    /// The ledger is the whole point: DJ apps log practice sessions and false
+    /// starts, and deleting one has to stick.
+    pub fn delete_history_set(&self, library_path: &str, set_id: &str) -> Result<bool> {
+        let source_id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT source_id FROM history_sets WHERE id = ?1 AND library_path = ?2",
+                rusqlite::params![set_id, library_path],
+                |r| r.get(0),
+            )
+            .ok();
+        let Some(source_id) = source_id else {
+            return Ok(false);
+        };
+        self.conn.execute(
+            "DELETE FROM history_tracks WHERE set_id = ?1",
+            rusqlite::params![set_id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM history_sets WHERE id = ?1",
+            rusqlite::params![set_id],
+        )?;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO history_deleted (library_path, source_id, deleted_at)
+             VALUES (?1, ?2, ?3)",
+            rusqlite::params![library_path, source_id, now_secs()],
+        )?;
+        Ok(true)
+    }
+
+    /// Remove one track from a set. Returns whether a row went.
+    ///
+    /// The remaining tracks keep their `seq` values rather than being
+    /// renumbered: the number is the position in the set as played, and a set
+    /// that silently renumbers is no longer a record of what happened.
+    pub fn remove_history_track(&self, track_id: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "DELETE FROM history_tracks WHERE id = ?1",
+            rusqlite::params![track_id],
+        )? > 0)
+    }
+
+    /// Forget that a set was deleted, so the next import brings it back.
+    pub fn forget_deleted_history(&self, library_path: &str, source_id: &str) -> Result<bool> {
+        Ok(self.conn.execute(
+            "DELETE FROM history_deleted WHERE library_path = ?1 AND source_id = ?2",
+            rusqlite::params![library_path, source_id],
+        )? > 0)
+    }
+
+    pub fn deleted_history_ids(&self, library_path: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT source_id FROM history_deleted WHERE library_path = ?1 ORDER BY deleted_at DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![library_path], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+}
+
 // ── Favourite playlists ──────────────────────────────────────────────────────
 
 /// A starred playlist, with the hotkey position it holds.
@@ -3212,5 +3484,184 @@ mod tests {
         assert!(db.set_favourite_playlist_order("/db", &too_many).is_err());
         // The refusal happens before the delete, so the existing list survives.
         assert_eq!(db.list_favourite_playlists("/db").unwrap().len(), 1);
+    }
+
+    // ── Play history ─────────────────────────────────────────────────────
+
+    fn incoming(source_id: &str, titles: &[&str]) -> IncomingHistorySet {
+        IncomingHistorySet {
+            source_id: source_id.into(),
+            name: format!("Set {source_id}"),
+            played_at: Some("2026-05-01T22:00:00Z".into()),
+            tracks: titles
+                .iter()
+                .enumerate()
+                .map(|(i, t)| IncomingHistoryTrack {
+                    content_id: Some(format!("c{i}")),
+                    title: Some((*t).to_string()),
+                    artist: Some("Someone".into()),
+                    bpm: Some(128.0),
+                    ..Default::default()
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn importing_the_same_sets_twice_does_not_duplicate_them() {
+        // The spec: "sets are never duplicated".
+        let mut db = CacheDb::open_in_memory().unwrap();
+        let sets = vec![incoming("h1", &["A", "B"]), incoming("h2", &["C"])];
+
+        let first = db.import_history("/db", &sets).unwrap();
+        assert_eq!(first.imported, 2);
+        assert_eq!(first.already_known, 0);
+
+        let second = db.import_history("/db", &sets).unwrap();
+        assert_eq!(second.imported, 0);
+        assert_eq!(second.already_known, 2);
+        assert_eq!(db.list_history_sets("/db").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn a_deleted_set_is_not_resurrected_by_a_re_import() {
+        // DJ apps log practice sessions and false starts. Deleting one has to
+        // stick, which is the entire reason the ledger exists.
+        let mut db = CacheDb::open_in_memory().unwrap();
+        let sets = vec![incoming("h1", &["A"])];
+        db.import_history("/db", &sets).unwrap();
+
+        let id = db.list_history_sets("/db").unwrap()[0].id.clone();
+        assert!(db.delete_history_set("/db", &id).unwrap());
+        assert!(db.list_history_sets("/db").unwrap().is_empty());
+
+        let again = db.import_history("/db", &sets).unwrap();
+        assert_eq!(again.imported, 0);
+        assert_eq!(again.previously_deleted, 1);
+        assert!(db.list_history_sets("/db").unwrap().is_empty());
+        assert_eq!(db.deleted_history_ids("/db").unwrap(), vec!["h1"]);
+    }
+
+    #[test]
+    fn forgetting_a_deletion_lets_the_next_import_bring_it_back() {
+        let mut db = CacheDb::open_in_memory().unwrap();
+        let sets = vec![incoming("h1", &["A"])];
+        db.import_history("/db", &sets).unwrap();
+        let id = db.list_history_sets("/db").unwrap()[0].id.clone();
+        db.delete_history_set("/db", &id).unwrap();
+
+        assert!(db.forget_deleted_history("/db", "h1").unwrap());
+        assert_eq!(db.import_history("/db", &sets).unwrap().imported, 1);
+        assert_eq!(db.list_history_sets("/db").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn history_is_a_snapshot_and_does_not_follow_the_library() {
+        // The central design decision: editing a track later must not rewrite
+        // what the gig log says was played.
+        let mut db = CacheDb::open_in_memory().unwrap();
+        db.import_history("/db", &[incoming("h1", &["Original Title"])])
+            .unwrap();
+
+        let set_id = db.list_history_sets("/db").unwrap()[0].id.clone();
+        let tracks = db.history_set_tracks(&set_id).unwrap();
+        assert_eq!(tracks[0].title.as_deref(), Some("Original Title"));
+        // The content id is kept for re-matching but is not what is shown.
+        assert_eq!(tracks[0].content_id.as_deref(), Some("c0"));
+        assert_eq!(tracks[0].seq, 1);
+    }
+
+    #[test]
+    fn deleting_a_set_takes_its_tracks_and_leaves_the_others() {
+        let mut db = CacheDb::open_in_memory().unwrap();
+        db.import_history("/db", &[incoming("h1", &["A"]), incoming("h2", &["B"])])
+            .unwrap();
+        let sets = db.list_history_sets("/db").unwrap();
+        let doomed = sets.iter().find(|s| s.source_id == "h1").unwrap();
+        db.delete_history_set("/db", &doomed.id).unwrap();
+
+        let left = db.list_history_sets("/db").unwrap();
+        assert_eq!(left.len(), 1);
+        assert!(db.history_set_tracks(&doomed.id).unwrap().is_empty());
+        assert_eq!(db.history_set_tracks(&left[0].id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn deleting_an_unknown_set_is_not_an_error_and_records_nothing() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(!db.delete_history_set("/db", "nope").unwrap());
+        assert!(db.deleted_history_ids("/db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn removing_a_track_leaves_the_remaining_positions_alone() {
+        // The number is the position in the set as played. Renumbering would
+        // make the log claim a different set happened.
+        let mut db = CacheDb::open_in_memory().unwrap();
+        db.import_history("/db", &[incoming("h1", &["A", "B", "C"])])
+            .unwrap();
+        let set_id = db.list_history_sets("/db").unwrap()[0].id.clone();
+        let tracks = db.history_set_tracks(&set_id).unwrap();
+
+        assert!(db.remove_history_track(&tracks[1].id).unwrap());
+        let left = db.history_set_tracks(&set_id).unwrap();
+        assert_eq!(
+            left.iter().map(|t| t.seq).collect::<Vec<_>>(),
+            vec![1, 3],
+            "positions must not be renumbered"
+        );
+        assert!(!db.remove_history_track(&tracks[1].id).unwrap());
+    }
+
+    #[test]
+    fn a_set_takes_a_rating_and_a_location() {
+        let mut db = CacheDb::open_in_memory().unwrap();
+        db.import_history("/db", &[incoming("h1", &["A"])]).unwrap();
+        let id = db.list_history_sets("/db").unwrap()[0].id.clone();
+
+        db.set_history_metadata(&id, Some(4), Some("The Basement"))
+            .unwrap();
+        let row = &db.list_history_sets("/db").unwrap()[0];
+        assert_eq!(row.rating, Some(4));
+        assert_eq!(row.location.as_deref(), Some("The Basement"));
+
+        // ...and both can be cleared again.
+        db.set_history_metadata(&id, None, None).unwrap();
+        let row = &db.list_history_sets("/db").unwrap()[0];
+        assert_eq!(row.rating, None);
+        assert_eq!(row.location, None);
+    }
+
+    #[test]
+    fn history_is_scoped_to_one_library() {
+        let mut db = CacheDb::open_in_memory().unwrap();
+        db.import_history("/one", &[incoming("h1", &["A"])])
+            .unwrap();
+        assert_eq!(db.list_history_sets("/one").unwrap().len(), 1);
+        assert!(db.list_history_sets("/two").unwrap().is_empty());
+        // The same source id in another library imports cleanly.
+        assert_eq!(
+            db.import_history("/two", &[incoming("h1", &["A"])])
+                .unwrap()
+                .imported,
+            1
+        );
+    }
+
+    #[test]
+    fn sets_list_newest_first() {
+        let mut db = CacheDb::open_in_memory().unwrap();
+        let mut older = incoming("h1", &["A"]);
+        older.played_at = Some("2026-01-01T20:00:00Z".into());
+        let mut newer = incoming("h2", &["B"]);
+        newer.played_at = Some("2026-07-01T20:00:00Z".into());
+        db.import_history("/db", &[older, newer]).unwrap();
+
+        let got = db.list_history_sets("/db").unwrap();
+        assert_eq!(
+            got.iter().map(|s| s.source_id.as_str()).collect::<Vec<_>>(),
+            vec!["h2", "h1"]
+        );
+        assert_eq!(got[0].track_count, 1);
     }
 }

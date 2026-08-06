@@ -1113,3 +1113,54 @@ export interface FavouritePlaylist {
 
 /** Hotkeys stop at 9, so there is no point storing a tenth. */
 export const MAX_FAVOURITE_PLAYLISTS = 9;
+
+// ── Play history (Epic 6) ────────────────────────────────────────────────────
+
+export interface HistorySet {
+  id: string;
+  /** The `djmdHistory.ID` this came from — what makes re-import idempotent. */
+  source_id: string;
+  name: string;
+  played_at: string | null;
+  rating: number | null;
+  location: string | null;
+  track_count: number;
+}
+
+/** A track as it was at play time. A snapshot, not a join. */
+export interface HistoryTrack {
+  id: string;
+  seq: number;
+  content_id: string | null;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  musical_key: string | null;
+  bpm: number | null;
+  duration_secs: number | null;
+  folder_path: string | null;
+}
+
+export interface HistoryImportReport {
+  imported: number;
+  already_known: number;
+  previously_deleted: number;
+}
+
+/** How a snapshot row was matched back to a live track. */
+export type MatchKind = "content_id" | "path" | "filename" | "none";
+
+export interface HistoryMatch {
+  history_track_id: string;
+  title: string | null;
+  artist: string | null;
+  track_id: string | null;
+  kind: MatchKind;
+}
+
+export interface HistoryMatchReport {
+  matches: HistoryMatch[];
+  matched: number;
+  unmatched: number;
+}

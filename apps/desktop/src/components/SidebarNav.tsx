@@ -10,6 +10,7 @@ export type WorkspaceView =
   | "playlists"
   | "smartlists"
   | "playlist-tools"
+  | "history"
   | "tags"
   | "genre-cleanup"
   | "artist-cleanup"
@@ -139,6 +140,16 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
         <path d="M2 4h8M2 8h8M2 12h5" />
         <path d="M12.5 9.5v5M11 11l1.5-1.5L14 11" />
+      </svg>
+    ),
+  },
+  {
+    id: "history",
+    label: "History",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <circle cx="8" cy="8" r="6" />
+        <path d="M8 4.5V8l2.5 1.5" />
       </svg>
     ),
   },

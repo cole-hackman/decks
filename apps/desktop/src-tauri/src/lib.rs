@@ -8,6 +8,7 @@ mod csv_import;
 mod cue_generator;
 mod cues;
 mod duplicates;
+mod history;
 mod mixable;
 mod multi_edit;
 mod organizer;
@@ -2779,6 +2780,14 @@ pub fn run() {
             share::share_playlist,
             share::write_share_file,
             playlist_tools::playlist_occurrence,
+            history::import_history,
+            history::list_history_sets,
+            history::history_set_tracks,
+            history::set_history_metadata,
+            history::delete_history_set,
+            history::remove_history_track,
+            history::preview_history_as_playlist,
+            history::save_history_as_playlist,
             playlist_tools::list_favourite_playlists,
             playlist_tools::toggle_favourite_playlist,
             playlist_tools::set_favourite_playlist_order,

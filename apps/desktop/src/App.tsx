@@ -5,6 +5,7 @@ import { TrackDetailPanel } from "./components/TrackDetailPanel";
 import { MixableTracksPanel } from "./components/MixableTracksPanel";
 import { PlaylistToolsView } from "./components/PlaylistToolsView";
 import { FavouritePlaylistsBar } from "./components/FavouritePlaylistsBar";
+import { HistoryView } from "./components/HistoryView";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { PlaylistPanel } from "./components/PlaylistPanel";
@@ -619,6 +620,9 @@ export default function App() {
                 setInspector("details");
               }}
             />
+          )}
+          {currentView === "history" && (
+            <HistoryView libraryPath={libraryPath ?? ""} />
           )}
           {currentView === "playlist-tools" && (
             <PlaylistToolsView libraryPath={libraryPath ?? ""} />

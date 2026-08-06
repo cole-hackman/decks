@@ -219,7 +219,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       the browser, `1`–`9` opens and `Shift+1`–`9` files the selection. Drag-and-drop onto a
       favourite is not done: the track table has no drag source yet
 - [ ] Sidepanel (second track browser)
-- [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist
+- [x] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist —
+      cache migration **v17**; import is idempotent by `djmdHistory.ID`, and the re-match says
+      which rule matched rather than implying certainty
 - [x] Share/export: CSV, M3U, HTML/PDF with column selection — `crates/share`, in Playlist Tools.
       Default CSV columns are exactly what the `dj-setlist-builder` skill reads. Header
       drag-to-reorder not done; the picker orders by tick order

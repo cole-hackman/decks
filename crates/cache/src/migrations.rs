@@ -388,6 +388,62 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_favourite_playlists ON favourite_playlists(library_path, seq);
         ",
     ),
+    (
+        17,
+        "
+        -- Play history (Epic 6) — the gig log.
+        --
+        -- **These are snapshots, not a view.** The spec is explicit: editing a
+        -- track later must not rewrite what history says was played. So the
+        -- track data is copied in at import time and never re-joined to the
+        -- library afterwards. That is also what lets a set survive the track
+        -- being deleted from the library entirely.
+        CREATE TABLE history_sets (
+          id           TEXT PRIMARY KEY,
+          library_path TEXT NOT NULL,
+          -- The djmdHistory.ID this came from. Import matches on it, which is
+          -- what makes re-importing idempotent.
+          source_id    TEXT NOT NULL,
+          name         TEXT NOT NULL,
+          played_at    TEXT,
+          rating       INTEGER,
+          location     TEXT,
+          imported_at  INTEGER NOT NULL,
+          UNIQUE (library_path, source_id)
+        );
+
+        CREATE TABLE history_tracks (
+          id            TEXT PRIMARY KEY,
+          set_id        TEXT NOT NULL REFERENCES history_sets(id) ON DELETE CASCADE,
+          seq           INTEGER NOT NULL,
+          -- The library id at play time. Kept for re-matching, but never
+          -- trusted: the track may be gone, and the snapshot columns are what
+          -- the gig log actually shows.
+          content_id    TEXT,
+          title         TEXT,
+          artist        TEXT,
+          album         TEXT,
+          genre         TEXT,
+          musical_key   TEXT,
+          bpm           REAL,
+          duration_secs INTEGER,
+          folder_path   TEXT
+        );
+
+        -- The deleted-set ledger. DJ apps log practice sessions and false
+        -- starts; deleting one has to stick across re-imports, so the source
+        -- id is remembered rather than the row simply removed.
+        CREATE TABLE history_deleted (
+          library_path TEXT NOT NULL,
+          source_id    TEXT NOT NULL,
+          deleted_at   INTEGER NOT NULL,
+          PRIMARY KEY (library_path, source_id)
+        );
+
+        CREATE INDEX idx_history_sets_library ON history_sets(library_path, played_at DESC);
+        CREATE INDEX idx_history_tracks_set ON history_tracks(set_id, seq);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -672,6 +728,62 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM smartlists", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn history_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO history_sets (id, library_path, source_id, name, played_at, imported_at)
+             VALUES ('s1', '/db', 'h1', 'Basement', '2026-05-01T22:00:00Z', 1770000000);
+             INSERT INTO history_tracks (id, set_id, seq, content_id, title)
+             VALUES ('t1', 's1', 1, '1', 'Alpha');
+             INSERT INTO history_deleted (library_path, source_id, deleted_at)
+             VALUES ('/db', 'h3', 1770000000);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM history_tracks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_history_set_is_unique_per_source_within_one_library() {
+        // Import matches on (library_path, source_id); without the constraint
+        // a second import would duplicate every set.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO history_sets (id, library_path, source_id, name, imported_at)
+             VALUES ('s1', '/db', 'h1', 'Basement', 1770000000);",
+        )
+        .unwrap();
+        assert!(conn
+            .execute_batch(
+                "INSERT INTO history_sets (id, library_path, source_id, name, imported_at)
+                 VALUES ('s2', '/db', 'h1', 'Basement', 1770000000);",
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn deleting_a_history_set_takes_its_tracks_with_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute_batch(
+            "INSERT INTO history_sets (id, library_path, source_id, name, imported_at)
+             VALUES ('s1', '/db', 'h1', 'Basement', 1770000000);
+             INSERT INTO history_tracks (id, set_id, seq, title) VALUES ('t1', 's1', 1, 'Alpha');
+             DELETE FROM history_sets WHERE id = 's1';",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM history_tracks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

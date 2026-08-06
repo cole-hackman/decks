@@ -20,6 +20,10 @@ import type {
   ShareExport,
   ShareFormat,
   FavouritePlaylist,
+  HistorySet,
+  HistoryTrack,
+  HistoryImportReport,
+  HistoryMatchReport,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1714,6 +1718,65 @@ export async function addTracksToPlaylist(
   return invoke<string[]>("add_tracks_to_playlist", {
     libraryPath,
     playlistId,
+    trackIds,
+  });
+}
+
+// ── Play history (Epic 6) ────────────────────────────────────────────────────
+
+export async function importHistory(
+  libraryPath: string,
+): Promise<HistoryImportReport> {
+  return invoke<HistoryImportReport>("import_history", { libraryPath });
+}
+
+export async function listHistorySets(
+  libraryPath: string,
+): Promise<HistorySet[]> {
+  return invoke<HistorySet[]>("list_history_sets", { libraryPath });
+}
+
+export async function historySetTracks(setId: string): Promise<HistoryTrack[]> {
+  return invoke<HistoryTrack[]>("history_set_tracks", { setId });
+}
+
+export async function setHistoryMetadata(
+  setId: string,
+  rating: number | null,
+  location: string | null,
+): Promise<void> {
+  return invoke<void>("set_history_metadata", { setId, rating, location });
+}
+
+export async function deleteHistorySet(
+  libraryPath: string,
+  setId: string,
+): Promise<boolean> {
+  return invoke<boolean>("delete_history_set", { libraryPath, setId });
+}
+
+export async function removeHistoryTrack(trackId: string): Promise<boolean> {
+  return invoke<boolean>("remove_history_track", { trackId });
+}
+
+export async function previewHistoryAsPlaylist(
+  libraryPath: string,
+  setId: string,
+): Promise<HistoryMatchReport> {
+  return invoke<HistoryMatchReport>("preview_history_as_playlist", {
+    libraryPath,
+    setId,
+  });
+}
+
+export async function saveHistoryAsPlaylist(
+  libraryPath: string,
+  name: string,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("save_history_as_playlist", {
+    libraryPath,
+    name,
     trackIds,
   });
 }

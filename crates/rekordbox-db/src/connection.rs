@@ -92,6 +92,18 @@ impl RekordboxDb {
         queries::playlists::playlist_occurrence(&self.conn)
     }
 
+    // ── History ──────────────────────────────────────────────────────────────
+
+    /// Play sessions Rekordbox has logged, newest first.
+    pub fn history_sets(&self) -> Result<Vec<queries::history::HistorySet>> {
+        queries::history::sets(&self.conn)
+    }
+
+    /// The tracks in one session, in play order.
+    pub fn history_entries(&self, history_id: &str) -> Result<Vec<queries::history::HistoryEntry>> {
+        queries::history::entries(&self.conn, history_id)
+    }
+
     // ── Health ───────────────────────────────────────────────────────────────
 
     pub fn duplicate_tracks(&self) -> Result<Vec<DuplicateGroup>> {

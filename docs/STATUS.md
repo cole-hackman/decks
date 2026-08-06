@@ -1,5 +1,38 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 7): play history
+
+The gig log. **History** in the sidebar imports every session Rekordbox has logged, from
+`djmdHistory` / `djmdSongHistory` into our own snapshot tables (cache migration **v17**).
+
+**The snapshot rule is the whole design.** History is a historical record, not a view over current
+data: the track data is copied in at import time and never re-joined to the library, so editing a
+track later does not rewrite what the log says you played — and a set survives its tracks being
+deleted from the library entirely. The view says so in as many words, because otherwise a row
+differing from the library looks like a bug.
+
+Decisions, each tested:
+
+- **Import is idempotent** by `djmdHistory.ID`. Sets are never duplicated, and the report says how
+  many were already known.
+- **The deleted-set ledger remembers the source id**, so a re-import does not resurrect the
+  practice sessions and false starts you cleared out. The report counts those separately — "why is
+  my deleted set not back?" should never be a mystery.
+- **Rekordbox's own tombstone is honoured.** A set deleted in Rekordbox is not imported at all.
+- **Save as playlist re-matches id → path → filename, and names which rule hit.** "We found
+  something with the same filename" is a materially weaker claim than "this is the same track", and
+  the user sees the difference before anything is staged (ADR-0008).
+- **An ambiguous filename is no match rather than a guess.** Two library tracks called `a.mp3` and
+  the row comes back unmatched — picking one would silently put the wrong track in the set.
+- **Removing a track from a set does not renumber the rest.** The number is the position in the set
+  as played; renumbering would make the log claim a different set happened.
+- **The deletion confirmation says it sticks**, and that audio files and the library are untouched.
+
+Nothing here writes to `master.db`; saving a set as a playlist stages changes like everything else.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 558, typecheck, lint, `pnpm e2e` 43 — all green.
+
 ## 2026-08-06 — Epic 6 (part 6): favourite playlists
 
 The spec calls it a fast filing system, and that is exactly the shape: star up to nine playlists,

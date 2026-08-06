@@ -34,3 +34,17 @@ INSERT INTO djmdCue (ID, ContentID, InMsec, OutMsec, Kind, Color, Commnt) VALUES
     (1, 1,  4000, NULL, 0, -1, 'Intro'),
     (2, 1, 32000, NULL, 1,  1, 'Drop'),
     (3, 2, 16000, NULL, 1,  2, 'Build');
+
+-- History: two sessions. The second replays a track from the first, which is
+-- what makes the snapshot rule worth testing.
+INSERT INTO djmdHistory (ID, Seq, Name, Attribute, ParentID, DateCreated, rb_local_deleted) VALUES
+    ('h1', 1, '2026-05-01 Basement', 0, NULL, '2026-05-01T22:00:00Z', 0),
+    ('h2', 2, '2026-06-12 Rooftop',  0, NULL, '2026-06-12T21:30:00Z', 0),
+    ('h3', 3, 'Deleted Session',     0, NULL, '2026-06-13T21:30:00Z', 1);
+
+INSERT INTO djmdSongHistory (ID, HistoryID, ContentID, TrackNo) VALUES
+    ('sh1', 'h1', '1', 1),
+    ('sh2', 'h1', '2', 2),
+    ('sh3', 'h2', '1', 1),
+    ('sh4', 'h2', '3', 2),
+    ('sh5', 'h3', '1', 1);

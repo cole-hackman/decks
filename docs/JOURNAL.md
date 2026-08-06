@@ -2222,6 +2222,46 @@ worth doing the doc edits as one all-or-nothing pass in future.
 
 **Next in Epic 6:** Track Timeline, the sidepanel, and History snapshots.
 
+## 2026-08-06 — Epic 6 (part 7): play history
+
+**A snapshot is a different kind of table, and the schema should say so.** The temptation with
+history is to store ids and join at read time — less data, always "current". That is exactly the
+bug: a gig log that changes when you rename a track is not a log. Copying the columns in *is* the
+feature, and the comment on the table has to explain it or someone will optimise it back into a
+view.
+
+**Idempotency needs a stable external key.** `djmdHistory.ID` is what makes re-import safe, and
+`UNIQUE (library_path, source_id)` is what makes the guarantee structural rather than a matter of
+the import code being careful.
+
+**Deletion needs a ledger, not just a delete.** Removing the row means the next import brings it
+straight back — worse than not offering delete at all, because the user thinks it worked.
+Remembering the source id is three columns and it is the entire feature.
+
+**Report the skip, or the feature looks broken.** The import counts "skipped (deleted before)"
+separately from "already known". Without it, a user who deleted a set and re-imported sees nothing
+happen and reasonably concludes the import is broken.
+
+**Fuzzy matching must label its own confidence.** Re-matching by filename is a real fallback and a
+materially weaker claim than matching by id. Returning *which rule fired* costs one enum and lets
+the UI say "same filename — the file moved" instead of implying certainty. Same ADR-0008 instinct
+as the cue-generator confidences.
+
+**Ambiguity is not a tie to break.** Two library tracks with the same filename: picking one gives
+the user a playlist with the wrong track in it and no indication. Unmatched is the honest answer,
+and the one they can act on.
+
+**Do not renumber what records an order that happened.** Removing track 2 from a set leaves 1 and
+3. Closing the gap is right for a playlist and wrong for a log — the number is not a position in a
+list, it is what happened third.
+
+**The all-or-nothing docs pass worked.** Last time a mid-script assert left `STATUS.md` unwritten
+while the code went in. Building every edit in memory and only writing once they all resolve caught
+two stale anchors this time — including a `PARITY.md` row the *previous* commit had silently failed
+to update. Validate first, write last.
+
+**Next in Epic 6:** Track Timeline and the sidepanel.
+
 ## 2026-08-06 — Epic 6 (part 5): key leading-zero option
 
 **Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a
