@@ -36,6 +36,7 @@ import { useFilterContext } from "./hooks/useFilterContext";
 import { useLibrary } from "./hooks/useLibrary";
 import { useTrackContextActions } from "./hooks/useTrackContextActions";
 import { TrackContextMenu } from "./components/TrackContextMenu";
+import { MultiTrackEditor } from "./components/MultiTrackEditor";
 import { TagPickerModal } from "./components/TagPickerModal";
 import {
   activeFilterCount,
@@ -94,6 +95,9 @@ export default function App() {
   const [tagPickerTrackIds, setTagPickerTrackIds] = useState<Set<string> | null>(
     null,
   );
+  // The manual editor's selection, frozen when it opens: editing forty tracks
+  // while the table's selection changes underneath would save to the wrong set.
+  const [editorTrackIds, setEditorTrackIds] = useState<string[] | null>(null);
 
   const { data: tracks = [] } = useLibrary(libraryPath);
   const { ctx: filterCtx, missingFilesLoading } = useFilterContext(
@@ -263,6 +267,16 @@ export default function App() {
           (currentView === "library" || currentView === "playlists") &&
           selectedTrackIds.size > 0,
         run: () => setTagPickerTrackIds(new Set(selectedTrackIds)),
+      },
+      {
+        id: "library.editTracks",
+        label: "Edit the selected tracks",
+        group: "Library",
+        defaultBinding: { key: "e" },
+        enabled:
+          (currentView === "library" || currentView === "playlists") &&
+          selectedTrackIds.size > 0,
+        run: () => setEditorTrackIds([...selectedTrackIds]),
       },
       {
         id: "app.dismiss",
@@ -668,6 +682,14 @@ export default function App() {
         onClose={() => setContextMenu(null)}
         actions={trackContextActions}
       />
+
+      {editorTrackIds && (
+        <MultiTrackEditor
+          libraryPath={libraryPath}
+          trackIds={editorTrackIds}
+          onClose={() => setEditorTrackIds(null)}
+        />
+      )}
 
       {tagPickerTrackIds && (
         <TagPickerModal

@@ -1868,5 +1868,31 @@ patterns the manual names. A blocklist that arrives pre-populated will eventuall
 the user wanted, and they will have no idea where it came from — the button says exactly what it
 adds, and they chose to press it.
 
+**The multi-track editor is one rule wearing a form.** Everything about it follows from: a field
+the user did not touch must not be written. The naive build — load the values, send them all back
+on Save — is *correct for one track* and catastrophic for forty, because the form has to show
+something in every field and whatever it shows becomes what you saved. The bug would look like the
+feature working.
+
+**The fix is a type, not a check.** `FieldValue::Multiple` carries no value, so there is no way to
+express "write `<multiple values>`" even by accident, and the apply command takes the *edited*
+fields rather than the form. In the UI the same idea is a placeholder rather than text — nothing
+there to submit. Guards you can forget to write are worse than shapes that cannot represent the
+mistake.
+
+**"Empty" needed defining before the form could be honest.** A missing value and an empty string
+are the same field state, because a `<input>` cannot tell them apart and "clear this" must not
+behave differently depending on how the field became empty. But *one track missing the field while
+the others agree* is a **disagreement**, not agreement — showing "House" over a half-empty
+selection would make Save indistinguishable from doing nothing.
+
+**Freezing the selection when the editor opens** is the sort of thing that only bites later:
+without it, clicking the table behind an open editor changes which tracks Save writes to, and
+nothing about the screen says so.
+
+**Album art stayed out**, and saying why matters more than doing it: `decks` has no album art
+anywhere, so this would not be "finish the editor", it would be "add album art and then put it in
+the editor". Recorded in the spec as a named omission rather than a silent gap.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

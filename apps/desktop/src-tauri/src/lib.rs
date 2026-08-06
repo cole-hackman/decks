@@ -4,6 +4,7 @@ mod claude_agent;
 mod csv_import;
 mod cue_generator;
 mod cues;
+mod multi_edit;
 mod organizer;
 mod recipes;
 mod smartlists;
@@ -2749,6 +2750,9 @@ pub fn run() {
             csv_import::csv_import_fields,
             csv_import::csv_import_preview,
             csv_import::csv_import_apply,
+            multi_edit::multi_edit_fields,
+            multi_edit::multi_edit_form,
+            multi_edit::multi_edit_apply,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

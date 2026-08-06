@@ -1,5 +1,44 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 4): the manual multi-track editor
+
+`E` over a selection opens a field editor; `changes::multi_edit` collapses the fields and plans the
+writes.
+
+**The whole feature turns on one rule: a field the user did not touch is not written.** Open the
+editor on forty tracks, change the genre, press Save — and the other nine fields must come out
+exactly as they went in, even though the form had to show *something* in each of them. Get that
+wrong and the editor silently flattens a library to whatever the first track happened to hold.
+
+So the form's state is not "the values", it is "the values plus which ones were edited".
+`FieldValue::Multiple` is what a field shows when the selection disagrees, and it is a value the
+caller can never accidentally write, because **it is not a value at all** — in the UI it is a
+placeholder, not text. The apply command takes only the *edited* fields, never the whole form:
+sending the form back would mean `<multiple values>` had to be represented somehow, and any
+representation of it is one save away from flattening the selection.
+
+Other decisions, each tested:
+
+- **A missing value and an empty string are the same field state.** A form cannot tell them apart,
+  and "clear this field" must not behave differently depending on how the field became empty.
+- **One track missing the field is a disagreement**, not agreement on what the others hold —
+  otherwise the editor shows "House" while half the selection is empty, and Save is
+  indistinguishable from doing nothing.
+- **A track already holding the value produces no change.** Most of a large selection is usually
+  already right; staging forty no-ops would bury the two that matter.
+- **Clearing a field is a real edit**, distinct from not touching it. Whitespace is a value the
+  user typed; only empty clears.
+
+`Enter` saves, `Esc` and Cancel discard. The selection is frozen when the editor opens — editing
+forty tracks while the table's selection changes underneath would save to the wrong set.
+
+Deliberately not done: `←`/`→` auto-saving navigation between tracks, `Tab` to the Recipes page,
+and album art (replace / remove / Reload). `decks` has no album art anywhere, which makes it a
+separate feature rather than part of this one.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 443, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 3): CSV import and the common-text blocklist
 
 **Import Tags From CSV** lands in `crates/track-matcher::csv_import`, alongside the existing

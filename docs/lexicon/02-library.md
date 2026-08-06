@@ -170,8 +170,31 @@ import, per-tag number hotkeys, and Field-Mapper export.
 *Album art* — replace, remove, or `Reload` (re-read art changed outside Lexicon) for any number of
 tracks.
 
-*decks status* — **missing.** `decks` edits through staged changes and Smart Fixes; there is no
-multi-track field editor and no album art anywhere.
+*decks status* — **done, except album art.** `E` opens the editor over the selection;
+`changes::multi_edit` collapses the fields and plans the writes.
+
+**The whole feature turns on one rule: a field the user did not touch is not written.** Open the
+editor on forty tracks, change the genre, press Save — and the other nine fields must come out
+exactly as they went in, even though the form had to show *something* in each of them. So the
+form's state is not "the values", it is "the values plus which ones were edited", and
+`FieldValue::Multiple` is a value the caller can never accidentally write because it is not a value
+at all. In the UI it is a **placeholder**, not text.
+
+Other decisions, each tested:
+
+- **A missing value and an empty string are the same field state.** A form cannot tell them apart,
+  and "clear this field" must not behave differently depending on how the field became empty.
+- **One track missing the field is a disagreement**, not agreement on the value the others hold —
+  otherwise the editor would show "House" while half the selection was empty, and pressing Save
+  would be indistinguishable from doing nothing.
+- **A track already holding the value produces no change.** Most of a forty-track selection is
+  usually already right; staging forty no-ops would bury the two that matter.
+- **Clearing a field is a real edit**, distinct from not touching it.
+- Edits stage as `TrackMetadataEdit` and go through review and Sync. The editor never writes.
+
+`Enter` saves, `Esc` discards, `Cancel` discards. **Not implemented:** `←`/`→` auto-saving
+navigation between tracks, `Tab` to the Recipes page, and album art (replace / remove / Reload) —
+`decks` has no album art anywhere, which is a separate feature rather than part of this one.
 
 *Epic* — **5**.
 
