@@ -218,8 +218,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
 - [ ] Favorite Playlists with hotkeys
 - [ ] Sidepanel (second track browser)
 - [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist
-- [ ] Share/export: CSV, M3U, HTML/PDF with column selection — also the input format the
-      `dj-setlist-builder` skill expects
+- [x] Share/export: CSV, M3U, HTML/PDF with column selection — `crates/share`, in Playlist Tools.
+      Default CSV columns are exactly what the `dj-setlist-builder` skill reads. Header
+      drag-to-reorder not done; the picker orders by tick order
 - [ ] Colors → nearest on sync; key conversion leading-zero option
 
 ---

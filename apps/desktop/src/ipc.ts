@@ -16,6 +16,9 @@ import type {
   PlaylistRenamePlan,
   RewriteOrderPlan,
   OccurrenceReport,
+  ShareColumn,
+  ShareExport,
+  ShareFormat,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1632,4 +1635,42 @@ export async function playlistOccurrence(
   n: number,
 ): Promise<OccurrenceReport> {
   return invoke<OccurrenceReport>("playlist_occurrence", { path, n });
+}
+
+// ── Share / export (Epic 6) ──────────────────────────────────────────────────
+
+export async function sharePlaylist(
+  path: string,
+  playlistId: string,
+  format: ShareFormat,
+  columns: ShareColumn[],
+): Promise<ShareExport> {
+  return invoke<ShareExport>("share_playlist", {
+    path,
+    playlistId,
+    format,
+    columns,
+  });
+}
+
+const SHARE_FILTERS: Record<string, { name: string; extensions: string[] }> = {
+  csv: { name: "CSV", extensions: ["csv"] },
+  m3u: { name: "M3U playlist", extensions: ["m3u8", "m3u"] },
+  html: { name: "HTML", extensions: ["html"] },
+};
+
+/** Save an export. Returns the path written, or `null` if the user cancelled. */
+export async function saveShareFile(
+  format: ShareFormat,
+  defaultName: string,
+  contents: string,
+): Promise<string | null> {
+  const path = await save({
+    title: "Export playlist",
+    defaultPath: defaultName,
+    filters: [SHARE_FILTERS[format] ?? { name: "Text", extensions: ["txt"] }],
+  });
+  if (!path) return null;
+  await invoke<void>("write_share_file", { path, contents });
+  return path;
 }

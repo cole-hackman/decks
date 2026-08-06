@@ -1,5 +1,42 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 4): share / export
+
+`crates/share` renders five outputs — quick copy, quick copy numbered, CSV, M3U and
+printer-friendly HTML — reachable from **Playlist Tools → Share**.
+
+The spec draws a line and so does the UI: **sharing produces a file, syncing updates Rekordbox.**
+Nothing here stages a change or touches `master.db`.
+
+Rendering lives in Rust rather than the renderer, so the CLI and MCP server can reach the same
+export and CSV escaping has exactly one implementation.
+
+Decisions, each tested:
+
+- **CSV formula injection is defused.** A field starting `=`, `+`, `-` or `@` is quoted *and*
+  prefixed with `'`. Comments are free text a DJ pasted from somewhere, and a comment reading
+  `=cmd|...` is a live payload the moment the export is opened in Excel. The prefix is visible
+  deliberately — silently mangling the value would be worse.
+- **M3U says what it could not carry.** An M3U is a list of paths; a track without one cannot be in
+  it. Handing back a quietly short playlist is how a set goes missing on the night, so the pathless
+  titles come back with the export and the UI names them.
+- **HTML is self-contained** — inline CSS, no external references, no scripts — so it works off a
+  USB stick with no network. PDF is the browser's Save to PDF over it, which is how Lexicon does it
+  too. A PDF writer here would be a large dependency reimplementing a print dialog.
+- **A playlist name cannot become a path.** `Friday 8/6` exports as `Friday 8-6.csv`, and a name
+  that sanitises to nothing falls back to `playlist` rather than `.` or `""`.
+- **The default CSV columns are title / artist / BPM / key / duration** — exactly what the
+  user-level `dj-setlist-builder` skill reads, so an export drops straight into that tooling.
+- **A missing artist does not leave a dangling dash.** `- Title` reads as a field the reader is
+  meant to notice; a bare title reads as a bootleg, which is what it is.
+- **Hours are spelled out**, so a 90-minute live set does not read as `30:00`.
+
+Not done: dragging header columns to reorder them. The picker orders by the order columns were
+ticked, which covers the same intent for a list being built rather than rearranged.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 529, typecheck, lint, `pnpm e2e` 38 — all green.
+
 ## 2026-08-06 — Epic 6 (part 3): playlist occurrence
 
 "Which tracks appear in exactly N playlists?" — **Playlist Tools → Occurrence**. `decks` had the

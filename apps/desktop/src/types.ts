@@ -1064,3 +1064,39 @@ export interface RewriteOrderPlan {
   appended: string[];
   unchanged: boolean;
 }
+
+// ── Share / export (Epic 6) ──────────────────────────────────────────────────
+
+export type ShareFormat =
+  | "quick_copy"
+  | "quick_copy_numbered"
+  | "csv"
+  | "m3u"
+  | "html";
+
+/** Mirrors `share::Column`. A closed set: an unknown name fails to parse
+ *  rather than becoming a blank column that looks like missing data. */
+export type ShareColumn =
+  | "title"
+  | "artist"
+  | "album"
+  | "genre"
+  | "key"
+  | "bpm"
+  | "duration"
+  | "rating"
+  | "year"
+  | "comment"
+  | "bitrate"
+  | "play_count"
+  | "energy"
+  | "path";
+
+export interface ShareExport {
+  content: string;
+  /** Sanitised suggested filename. */
+  filename: string;
+  track_count: number;
+  /** Titles the format could not carry — M3U tracks with no file path. */
+  skipped: string[];
+}

@@ -22,10 +22,10 @@ regardless of how much of Lexicon they represent.
 | Files | 5 | 6 | 0 | 0 |
 | Health | 2 | 2 | 1 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 |
-| Streaming | 0 | 1 | 8 | 0 |
+| Streaming | 1 | 1 | 7 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **38** | **35** | **18** | **16** |
+| **Total** | **39** | **35** | **17** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -157,10 +157,14 @@ of library *editing*, *automation*, or *set preparation*.
 
 ## Streaming — `08-streaming.md`
 
-All **missing** except Track Matcher (partial: no `.m3u8`, no separator choice, no playlist
-creation, no onward search). Beatport / Beatsource / Tidal / SoundCloud sources, Beatport catalog +
-cart + purchase-replacement, Charts, Store Links, Track Discovery, Send To, Transfer Streaming To
-Local, Share/export (CSV/M3U/HTML/PDF). **Epic 7**, except Share/export → **Epic 6**.
+| Feature | Status | Notes | Epic |
+|---|---|---|---|
+| Share / export (CSV, M3U, HTML/PDF, quick copy) | **done** | `crates/share`, in Playlist Tools. CSV formula injection defused; M3U reports the pathless tracks it could not carry; HTML self-contained, PDF via the browser. Header drag-to-reorder not done — the picker orders by tick order | 6 |
+| Track Matcher | partial | No `.m3u8`, no separator choice, no playlist creation, no onward search | 7 |
+
+Everything else is **missing** and belongs to **Epic 7**: Beatport / Beatsource / Tidal /
+SoundCloud sources, Beatport catalog + cart + purchase-replacement, Charts, Store Links, Track
+Discovery, Send To, Transfer Streaming To Local.
 
 ## History & backup — `09-history-backup.md`
 

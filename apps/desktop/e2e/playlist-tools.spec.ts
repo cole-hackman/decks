@@ -170,6 +170,38 @@ test.beforeEach(async ({ page }) => {
               staged.push({ kind: "PlaylistReorderTrack" });
               return "c1";
 
+            case "share_playlist": {
+              const ids = members[String(args.playlistId)] ?? [];
+              const rows = ids.map((id) => tracks.find((t) => t.id === id)!);
+              if (args.format === "csv") {
+                const cols = args.columns as string[];
+                const header = cols.join(",");
+                const body = rows
+                  .map((t) =>
+                    cols
+                      .map((c) =>
+                        c === "title" ? t.title : c === "bpm" ? String(t.bpm) : "",
+                      )
+                      .join(","),
+                  )
+                  .join("\n");
+                return {
+                  content: `${header}\n${body}`,
+                  filename: "Warmup.csv",
+                  track_count: rows.length,
+                  skipped: [],
+                };
+              }
+              return {
+                content: rows.map((t) => `${t.artist} - ${t.title}`).join("\n"),
+                filename: "Warmup.txt",
+                track_count: rows.length,
+                skipped: [],
+              };
+            }
+            case "write_share_file":
+              return null;
+
             case "playlist_occurrence": {
               const counts = new Map<string, number>();
               tracks.forEach((t) => {
@@ -317,4 +349,35 @@ test("occurrence: exactly N, with the distribution to pick N from", async ({
     .getByRole("button", { name: "1", exact: true })
     .click();
   await expect(result).toContainText("2 track(s) are in exactly 1 playlist(s).");
+});
+
+test("share: pick columns, preview the CSV, and see the order honoured", async ({
+  page,
+}) => {
+  await openTools(page);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+
+  await expect(
+    page.getByText(/Sharing produces a file. Syncing updates Rekordbox/),
+  ).toBeVisible();
+
+  await page.getByLabel("Playlist to share").selectOption("p1");
+  await page.getByRole("button", { name: "Preview export" }).click();
+
+  const preview = page.getByTestId("share-preview");
+  await expect(preview).toContainText("2 track(s)");
+  await expect(preview).toContainText("Warmup.csv");
+  // Default columns lead with title.
+  await expect(preview).toContainText("title,artist,bpm,key,duration");
+});
+
+test("share: HTML says how to get a PDF instead of pretending to write one", async ({
+  page,
+}) => {
+  await openTools(page);
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  await page.getByLabel("Export format").selectOption("html");
+  await expect(page.getByTestId("share-format-blurb")).toContainText(
+    "Use the browser's Save to PDF",
+  );
 });

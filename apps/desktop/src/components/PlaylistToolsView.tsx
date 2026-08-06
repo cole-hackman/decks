@@ -14,6 +14,7 @@ import {
   getPlaylist,
 } from "../ipc";
 import { useToast } from "./Toast";
+import { SharePlaylistSection } from "./SharePlaylistSection";
 import type {
   CrossReferenceMode,
   CrossReferencePreview,
@@ -37,7 +38,8 @@ type Tool =
   | "cross-reference"
   | "prefix"
   | "rewrite-order"
-  | "occurrence";
+  | "occurrence"
+  | "share";
 
 const TOOLS: { id: Tool; label: string; blurb: string }[] = [
   {
@@ -69,6 +71,12 @@ const TOOLS: { id: Tool; label: string; blurb: string }[] = [
     label: "Rewrite Order",
     blurb:
       "Persist a sort as the playlist's stored order, so it reaches the CDJ that way.",
+  },
+  {
+    id: "share",
+    label: "Share",
+    blurb:
+      "Export a playlist as CSV, M3U or printer-friendly HTML — or copy it to the clipboard.",
   },
   {
     id: "occurrence",
@@ -281,7 +289,7 @@ export function PlaylistToolsView({ libraryPath }: Props) {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {tool !== "sort" && tool !== "occurrence" && (
+        {tool !== "sort" && tool !== "occurrence" && tool !== "share" && (
           <div className="w-64 shrink-0 overflow-auto border-r border-border p-2 text-xs">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-muted">
@@ -683,6 +691,14 @@ export function PlaylistToolsView({ libraryPath }: Props) {
                   </ul>
                 ))}
             </div>
+          )}
+
+          {/* ── Share ───────────────────────────────────────────────── */}
+          {tool === "share" && (
+            <SharePlaylistSection
+              libraryPath={libraryPath}
+              playlists={playlists}
+            />
           )}
 
           {/* ── Occurrence ──────────────────────────────────────────── */}

@@ -13,6 +13,7 @@ mod multi_edit;
 mod organizer;
 mod playlist_tools;
 mod recipes;
+mod share;
 mod smartlists;
 mod undo;
 mod watch;
@@ -2772,6 +2773,8 @@ pub fn run() {
             playlist_tools::preview_cross_reference,
             playlist_tools::preview_playlist_prefix,
             playlist_tools::apply_playlist_prefix,
+            share::share_playlist,
+            share::write_share_file,
             playlist_tools::playlist_occurrence,
             playlist_tools::preview_rewrite_order,
             playlist_tools::apply_rewrite_order,

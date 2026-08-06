@@ -2164,6 +2164,33 @@ one-shot query into something explorable. Cheap: the count map was already built
 **Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, History
 snapshots, and share/export.
 
+## 2026-08-06 — Epic 6 (part 4): share / export
+
+**An export is an attack surface.** CSV is the obvious one — a leading `=` in a free-text comment
+becomes an executable formula the moment the file opens in Excel — but the same shape shows up in
+the HTML (escape everything) and in the filename (a playlist called `../..` is a path). Three
+different escapes, one habit: whenever library data crosses into a *format*, ask what that format
+executes.
+
+**Say what the export could not include.** An M3U cannot hold a track with no file path. Silently
+dropping it produces a playlist that is quietly short, and the DJ finds out on the night. The
+skipped titles ride back with the content, and the UI names them — same principle as the undo
+entries carrying their blocked reasons.
+
+**Do not reimplement a print dialog.** The spec says HTML/PDF; Lexicon's PDF is the browser's Save
+to PDF, and copying that is not a shortcut but the right answer. A PDF writer would be a large
+dependency to duplicate something every OS already ships.
+
+**Self-contained means it works on the night.** The exported HTML has inline CSS and no external
+references, because the realistic reading environment is a laptop on a USB stick with no network.
+Worth asking of any artefact that leaves the app.
+
+**One decimal on BPM.** `128.0300003` is not a different fact about the track than `128.03`. Format
+at the boundary where a human reads it, not where the number is stored.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
+snapshots.
+
 ---
 
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
