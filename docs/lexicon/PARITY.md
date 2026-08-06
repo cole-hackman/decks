@@ -18,14 +18,14 @@ regardless of how much of Lexicon they represent.
 | Library & browser | 13 | 3 | 2 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
-| Player, cues, generator | 8 | 6 | 2 | 0 | 0 |
+| Player, cues, generator | 9 | 6 | 1 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 2 | 1 | 1 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **50** | **26** | **18** | **2** | **16** |
+| **Total** | **51** | **26** | **17** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -127,7 +127,7 @@ They were previously miscounted as `partial` and `missing`.
 | Hotkeys: rebinding, global, inline hints | partial | Rebinding + persistence + conflict detection exist in the registry; no settings UI yet, and no system-wide hotkeys | 2 |
 | **Action registry** | **done** | `lib/actions.ts` — bindings, rebinding, conflict detection, search. App globals migrated onto it | 2 |
 | Action Center (`Cmd+Space`) | **done** | Palette over the registry with fuzzy search and arrow navigation | 2 |
-| Find Popup (`Cmd+F`) | **missing** | | 2 |
+| Find Popup (`Cmd+F`) | **done** | Playlists + smartlists + tracks in one box, per-section caps, tiered (not fuzzy) ranking, per-result queue / add-selection actions | 6 |
 | **Cue Point Generator** | partial | Template engine + custom cue anchors ship; **structural detection (drop/breakdown/fade-out) is not implemented** | 3 |
 | Cue templates w/ anchors | **done** | Offsets in beats relative to anchors, name/colour/enabled/order, keep-cue-position, overflow trimming, Rekordbox duplicate-memory-cue guard | 3 |
 | Custom cue anchors | **done** | Name+colour / name-only / colour-only matching, exactly Lexicon's rules | 3 |

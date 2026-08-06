@@ -34,6 +34,8 @@ import { useAppStore } from "./store/appStore";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { usePlayQueue } from "./hooks/usePlayQueue";
 import { PlayQueuePanel } from "./components/PlayQueuePanel";
+import { FindPopup } from "./components/FindPopup";
+import { usePlaylists } from "./hooks/usePlaylists";
 import { useStagedChanges } from "./hooks/useStagedChanges";
 import { ActionProvider } from "./hooks/useActions";
 import { ActionCenter } from "./components/ActionCenter";
@@ -59,11 +61,13 @@ import {
   listTags,
   keyCompatibility,
   applyPlaylistMerge,
+  listSmartlists,
+  addTracksToPlaylist,
 } from "./ipc";
 import { useToast } from "./components/Toast";
 import { useDialog } from "./hooks/useDialog";
 import { useQuery } from "@tanstack/react-query";
-import type { Track } from "./types";
+import type { Track, Smartlist } from "./types";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
@@ -183,6 +187,24 @@ export default function App() {
     endedAt: audio.endedAt,
   });
   const [queueOpen, setQueueOpen] = useState(false);
+  /** Find Popup — `Cmd+F`. Content, as opposed to the Action Center's commands. */
+  const [findOpen, setFindOpen] = useState(false);
+  const { data: allPlaylists = [] } = usePlaylists(libraryPath);
+  const [findSmartlists, setFindSmartlists] = useState<Smartlist[]>([]);
+
+  // Smartlists live in the cache DB rather than `master.db`, so they are not
+  // part of any query the browser already runs. Loaded once the popup is
+  // actually opened — there is no reason to read them on every launch.
+  useEffect(() => {
+    if (!findOpen || !libraryPath) return;
+    let live = true;
+    void listSmartlists(libraryPath)
+      .then((rows) => live && setFindSmartlists(rows))
+      .catch(() => live && setFindSmartlists([]));
+    return () => {
+      live = false;
+    };
+  }, [findOpen, libraryPath]);
   const { data: changes = [] } = useStagedChanges(libraryPath);
   const proposedCount = changes.filter((c) => c.status === "Proposed").length;
   const acceptedCount = changes.filter((c) => c.status === "Accepted").length;
@@ -383,6 +405,13 @@ export default function App() {
         group: "View",
         defaultBinding: { key: "\\", meta: true },
         run: () => setSidepanelOpen((v) => !v),
+      },
+      {
+        id: "view.find",
+        label: "Find…",
+        group: "View",
+        defaultBinding: { key: "f", meta: true },
+        run: () => setFindOpen(true),
       },
       {
         id: "view.toggleQueue",
@@ -934,6 +963,50 @@ export default function App() {
         availableGenres={availableGenres}
         availableTags={availableTags}
         missingFilesLoading={missingFilesLoading}
+      />
+
+      <FindPopup
+        open={findOpen}
+        onClose={() => setFindOpen(false)}
+        tracks={tracks}
+        playlists={allPlaylists}
+        smartlists={findSmartlists}
+        selectedTracks={tracks.filter((t) => selectedTrackIds.has(t.id))}
+        onPlayTrack={(track) => queue.startPlaying([track])}
+        onQueueTrack={(track) => {
+          queue.addToQueue([track]);
+          setQueueOpen(true);
+        }}
+        onOpenPlaylist={(playlistId) => {
+          setFocusPlaylistId(playlistId);
+          setCurrentView("playlists");
+        }}
+        onOpenSmartlist={() => setCurrentView("smartlists")}
+        onAddSelectionToPlaylist={
+          selectedTrackIds.size > 0
+            ? (playlistId, name) => {
+                void addTracksToPlaylist(
+                  libraryPath ?? "",
+                  playlistId,
+                  Array.from(selectedTrackIds),
+                )
+                  .then((staged) =>
+                    toast({
+                      variant: "success",
+                      message: `Staged ${staged.length} addition(s) to ${name}.`,
+                      detail: "Review and apply in the Sync panel.",
+                    }),
+                  )
+                  .catch((e: unknown) =>
+                    toast({
+                      variant: "error",
+                      message: "Could not add to playlist",
+                      detail: e instanceof Error ? e.message : String(e),
+                    }),
+                  );
+              }
+            : undefined
+        }
       />
 
       <TrackContextMenu
