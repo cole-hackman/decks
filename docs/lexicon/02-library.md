@@ -40,10 +40,42 @@ Only **full label matches** — partial matching is deliberately unsupported for
 sort by tag *count* per track.
 
 *decks status* — **partial.** Virtualized table with resizable columns, inline per-column search,
-multi-select, right-click actions, Camelot-tinted keys, an Energy column and inline tag chips all
-exist. Missing: inline per-row waveform previews, the `None` keyword, numeric/date operators, the
-tag query language, key-notation-aware search, the compatible-key indicator, and spreadsheet
-keyboard navigation.
+multi-select, right-click actions, Camelot-tinted keys, an Energy column, inline tag chips, the
+full operator and tag query languages, key-notation-aware search, the compatible-key indicator and
+**spreadsheet keyboard navigation** all exist. Missing: inline per-row waveform previews.
+
+**Spreadsheet keyboard navigation** is a cell cursor — a focused (row, column) pair, drawn as an
+inset ring so it reads *on top of* the row selection rather than competing with it. Arrows walk it,
+`Cmd`/`Ctrl` promotes an arrow to a jump (first/last row, first/last column), `Home`/`End` move
+within the row, the page keys move by the actual viewport height, and `Tab` walks the row rather
+than leaving the table. Shift extends the row selection from an **anchor**, so shift-↓↓↑ leaves two
+rows rather than growing the other way.
+
+Movement **clamps rather than wraps**, in both axes. Wrapping is briefly clever and then
+permanently confusing: holding `↓` in a 4,000-track library should stop at the bottom, not return
+to the top and let the next keystroke edit the wrong track. `→` at the last column is a no-op for
+the same reason — spilling onto the next row would move you to a different track without saying so.
+
+`Enter`, `F2` or any printable character opens an inline editor; typing seeds it with the character,
+`Enter`/`F2` with the current value. `Enter` commits and moves down, `Tab` commits and moves right,
+`Escape` abandons. Only fields the applier's allowlist will actually write are editable — title,
+artist, genre, BPM, key. Energy is derived, Time is a property of the file, and Tags have their own
+storage and their own picker; a cell the user could type into whose value then vanished at sync
+time would be worse than a read-only one, so those cells say `aria-readonly` and refuse to open.
+
+Two details that are load-bearing rather than cosmetic:
+
+- **An edit stages; it never writes.** Committing calls `multi_edit_apply`, which proposes a
+  `TrackMetadataEdit` for review and Sync exactly like the multi-track editor. Inline editing is a
+  faster way to *propose* a change, not a way around the pipeline.
+- **Escape must not commit.** Closing the editor unmounts its `<input>`, which fires `onBlur` —
+  so the naive implementation makes cancelling save. A cancel that silently writes is the worst
+  failure this feature could have; there is a test pinning it.
+
+A focused grid also takes ownership of the arrows, `Home`/`End`, the page keys and printable
+characters away from the global shortcut layer, the same way a focused input does. The `j`/`k`
+bindings therefore stop moving once the table has focus — a deliberate trade, since a grid where
+`J` cannot be typed into a genre is not a spreadsheet. They still work everywhere else.
 
 *Epic* — **1** (operators, shared with the rules engine), **2** (compatible-key indicator).
 

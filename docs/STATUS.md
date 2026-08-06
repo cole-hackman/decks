@@ -1,5 +1,40 @@
 # Status
 
+## 2026-08-06 — Spreadsheet keyboard navigation
+
+The browser could move rows with j/k and the arrows. What it lacked was a **cell cursor** — a
+focused (row, column) pair you can walk, page through, and open for editing without the mouse.
+Per `docs/lexicon/02-library.md §Browser`.
+
+`lib/grid-nav.ts` holds the movement rules as pure functions, so the edge cases are testable
+without rendering a virtualized table. Movement **clamps rather than wraps** in both axes: holding
+`↓` in a 4,000-track library stops at the bottom instead of returning to the top and letting the
+next keystroke edit the wrong track, and `→` at the last column is a no-op rather than a jump to a
+different row.
+
+Inline editing opens on `Enter`, `F2` or any printable character, and **stages** through
+`multi_edit_apply` — a `TrackMetadataEdit` for review and Sync, exactly like the multi-track
+editor. Inline editing is a faster way to propose a change, not a way around the pipeline. Only
+fields the applier will actually write are editable; Energy, Time and Tags say `aria-readonly` and
+refuse to open, because a cell whose value silently vanished at sync time is worse than one that
+cannot be typed into.
+
+Two bugs the tests caught:
+
+- **Escape committed.** Closing the editor unmounts its `<input>`, which fires `onBlur`, which
+  commits. A cancel that silently saves is the worst failure this feature could have. Fixed with a
+  ref checked before the commit runs, and pinned by a test.
+- A **no-op edit staged a change.** Re-committing an unchanged value filled the review panel with
+  rows that do nothing, which is how people stop reading it.
+
+`useKeyboardShortcuts` now yields to a focused `role="grid"` the same way it yields to an input —
+otherwise the global arrow bindings fired alongside the cursor and moved twice. The consequence is
+that `j`/`k` stop moving once the table has focus, which is deliberate: a grid where `J` cannot be
+typed into a genre is not a spreadsheet. They still work everywhere else.
+
+**Next:** inline per-row waveform previews are the last `missing` row in Library & browser. Epic 7
+(streaming) still needs a scoping decision from the user.
+
 ## 2026-08-06 — Delete from disk, with guard rails
 
 Delete-from-disk was declined three times during Epic 5 — Find Broken Tracks, Archive cleanup,

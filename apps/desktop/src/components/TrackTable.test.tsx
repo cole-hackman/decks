@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Track } from "../types";
@@ -23,6 +24,7 @@ vi.mock("@tanstack/react-virtual", () => ({
       })),
     getTotalSize: () => count * estimateSize(),
     measureElement: () => {},
+    scrollToIndex: () => {},
   }),
 }));
 
@@ -34,8 +36,9 @@ import { useLibrary } from "../hooks/useLibrary";
 vi.mock("../ipc", () => ({
   searchHasOperators: vi.fn(),
   searchTracks: vi.fn(),
+  multiEditApply: vi.fn(),
 }));
-import { searchHasOperators, searchTracks } from "../ipc";
+import { searchHasOperators, searchTracks, multiEditApply } from "../ipc";
 
 import { TrackTable } from "./TrackTable";
 import { EMPTY_FILTERS, type Filters, type FilterContext } from "../lib/filters";
@@ -98,6 +101,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(useLibrary).mockReturnValue({
     data: TRACKS,
     isLoading: false,
@@ -105,6 +109,7 @@ beforeEach(() => {
   } as ReturnType<typeof useLibrary>);
   vi.mocked(searchHasOperators).mockResolvedValue(false);
   vi.mocked(searchTracks).mockResolvedValue([]);
+  vi.mocked(multiEditApply).mockResolvedValue([]);
 });
 
 describe("TrackTable", () => {
@@ -318,6 +323,175 @@ describe("TrackTable", () => {
     );
     expect(await screen.findByTestId("search-error")).toHaveTextContent(
       "showing a plain text match instead",
+    );
+  });
+});
+
+describe("TrackTable — spreadsheet keyboard navigation", () => {
+  function renderGrid(overrides: Record<string, unknown> = {}) {
+    const onSelectionChange = vi.fn();
+    const onSelect = vi.fn();
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={onSelectionChange}
+        onSelect={onSelect}
+        {...overrides}
+      />,
+      { wrapper },
+    );
+    return { grid: screen.getByRole("grid"), onSelectionChange, onSelect };
+  }
+
+  /** The cursor cell, identified by the ring `aria-selected` marks. */
+  const cursorCell = () =>
+    document.querySelector('[role="gridcell"][aria-selected="true"]');
+
+  it("is a grid, and takes focus", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    expect(grid).toHaveAttribute("aria-rowcount", "2");
+    await user.click(grid);
+    expect(grid).toHaveFocus();
+  });
+
+  it("places the cursor on the first cell when focused, and moves right", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await waitFor(() => expect(cursorCell()).toHaveTextContent("Dark Matter"));
+
+    await user.keyboard("{ArrowRight}");
+    expect(cursorCell()).toHaveTextContent("Surgeon");
+  });
+
+  it("moves down a row and reports the selection", async () => {
+    const user = userEvent.setup();
+    const { grid, onSelectionChange, onSelect } = renderGrid();
+    grid.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(cursorCell()).toHaveTextContent("Acid Rain");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["2"]));
+    expect(onSelect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "2" }),
+    );
+  });
+
+  it("clamps at the last row instead of wrapping to the top", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+    expect(cursorCell()).toHaveTextContent("Acid Rain");
+  });
+
+  it("extends the selection with shift, and shrinks it back", async () => {
+    const user = userEvent.setup();
+    const { grid, onSelectionChange } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Shift>}{ArrowDown}{/Shift}");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["1", "2"]));
+
+    await user.keyboard("{Shift>}{ArrowUp}{/Shift}");
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(["1"]));
+  });
+
+  it("opens an editor on Enter, seeded with the current value", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByLabelText("Edit Title")).toHaveValue(
+      "Dark Matter",
+    );
+  });
+
+  it("opens an editor on a printable key, seeded with what was typed", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("N");
+    expect(await screen.findByLabelText("Edit Title")).toHaveValue("N");
+  });
+
+  it("stages the edit through the review pipeline, never a direct write", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Enter}");
+    const input = await screen.findByLabelText("Edit Title");
+    await user.clear(input);
+    await user.type(input, "New Title");
+    await user.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(multiEditApply).toHaveBeenCalledWith(
+        "/tmp/master.db",
+        ["1"],
+        [{ field: "title", value: "New Title" }],
+      ),
+    );
+  });
+
+  it("does not stage anything when the value came back unchanged", async () => {
+    // A review panel filling with no-op rows is how people stop reading it.
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByLabelText("Edit Title");
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Edit Title")).not.toBeInTheDocument(),
+    );
+    expect(multiEditApply).not.toHaveBeenCalled();
+  });
+
+  it("Escape abandons the edit without staging", async () => {
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Enter}");
+    const input = await screen.findByLabelText("Edit Title");
+    await user.clear(input);
+    await user.type(input, "Discarded");
+    await user.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Edit Title")).not.toBeInTheDocument(),
+    );
+    expect(multiEditApply).not.toHaveBeenCalled();
+  });
+
+  it("refuses to edit a column the applier cannot write", async () => {
+    // Energy is derived and cache-only. A cell the user could type into whose
+    // value then vanished at sync time is worse than a read-only one.
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    // Title → Artist → BPM → Key → Energy
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}");
+    expect(cursorCell()).toHaveAttribute("aria-readonly", "true");
+    await user.keyboard("{Enter}");
+    expect(screen.queryByLabelText(/^Edit /)).not.toBeInTheDocument();
+  });
+
+  it("surfaces a staging failure instead of silently dropping the edit", async () => {
+    vi.mocked(multiEditApply).mockRejectedValue(new Error("cache locked"));
+    const user = userEvent.setup();
+    const { grid } = renderGrid();
+    grid.focus();
+    await user.keyboard("{Enter}");
+    const input = await screen.findByLabelText("Edit Title");
+    await user.clear(input);
+    await user.type(input, "New Title");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByTestId("cell-edit-error")).toHaveTextContent(
+      "cache locked",
     );
   });
 });

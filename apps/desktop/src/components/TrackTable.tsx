@@ -17,7 +17,15 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { EmptyState } from "./EmptyState";
 import { ErrorPanel } from "./ErrorPanel";
 import { applyFilters, type FilterContext, type Filters } from "../lib/filters";
-import { searchHasOperators, searchTracks } from "../ipc";
+import { searchHasOperators, searchTracks, multiEditApply } from "../ipc";
+import {
+  moveCell,
+  moveForKey,
+  startsEdit,
+  initialEditValue,
+  selectionRange,
+  type Cell,
+} from "../lib/grid-nav";
 import { colorForKey, toCamelot } from "../lib/camelot";
 import { EnergyBar } from "./EnergyBar";
 import type { Track } from "../types";
@@ -25,6 +33,41 @@ import type { Track } from "../types";
 const ROW_H = 28;
 
 const MAX_INLINE_TAGS = 3;
+
+/**
+ * Column id → the field name `multi_edit_apply` writes.
+ *
+ * Only fields the applier's allowlist will actually write appear here. A cell
+ * the user could type into whose value then vanished at sync time would be
+ * worse than one that simply is not editable — so Energy (derived, cache-only),
+ * Time (a property of the file) and Tags (its own storage, its own picker) are
+ * deliberately absent.
+ */
+const EDITABLE_COLUMNS: Record<string, string> = {
+  title: "title",
+  artist: "artist",
+  genre: "genre",
+  bpm: "bpm",
+  musical_key: "key",
+};
+
+/** The cell's current value as edit-ready text. */
+function editableText(track: Track, columnId: string): string {
+  switch (columnId) {
+    case "title":
+      return track.title ?? "";
+    case "artist":
+      return track.artist ?? "";
+    case "genre":
+      return track.genre ?? "";
+    case "musical_key":
+      return track.musical_key ?? "";
+    case "bpm":
+      return track.bpm != null && track.bpm > 0 ? String(track.bpm) : "";
+    default:
+      return "";
+  }
+}
 
 function buildColumns(
   tagsByTrack: Map<string, Set<string>>,
@@ -227,6 +270,29 @@ export function TrackTable({
   const [showColumnFilters, setShowColumnFilters] = useState(false);
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null);
   const [isAddingCues, setIsAddingCues] = useState(false);
+  /**
+   * The cell cursor — a focused (row, column) pair, per
+   * `docs/lexicon/02-library.md §Browser`.
+   *
+   * `null` until the grid is focused, so the table looks exactly as it did
+   * for anyone who never touches the keyboard.
+   */
+  const [cursor, setCursor] = useState<Cell | null>(null);
+  /** Where a shift-extended selection started. */
+  const [anchorRow, setAnchorRow] = useState<number | null>(null);
+  /** The open cell editor, if any. */
+  const [editing, setEditing] = useState<{ cell: Cell; value: string } | null>(
+    null,
+  );
+  const [editError, setEditError] = useState<string | null>(null);
+  /**
+   * Set for the instant between Escape and the editor unmounting.
+   *
+   * Closing the editor unmounts its `<input>`, which fires `onBlur` — so
+   * without this, cancelling an edit would commit it. A cancel that silently
+   * saves is the worst failure this feature could have.
+   */
+  const cancelledEdit = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -386,6 +452,9 @@ export function TrackTable({
     [rows, lastSelectedIdx, onSelect, onSelectionChange, virtualizer],
   );
 
+  // These stay global for when focus is *outside* the table — after clicking a
+  // playlist, say. `useKeyboardShortcuts` yields to a focused `role="grid"`,
+  // so they never fire alongside the cell cursor below.
   useKeyboardShortcuts(
     useMemo(
       () => [
@@ -393,17 +462,185 @@ export function TrackTable({
         { key: "k", handler: () => moveSelection(-1) },
         { key: "arrowdown", handler: () => moveSelection(1) },
         { key: "arrowup", handler: () => moveSelection(-1) },
-        {
-          key: "a",
-          meta: true,
-          handler: (e) => {
-            e.preventDefault();
-            onSelectionChange(new Set(rows.map((r) => r.original.id)));
-          },
-        },
       ],
-      [moveSelection, rows, onSelectionChange],
+      [moveSelection],
     ),
+  );
+
+  // ── Cell cursor ────────────────────────────────────────────────────────────
+
+  const visibleColumns = table.getVisibleLeafColumns();
+
+  /** Rows a page key covers, from the actual viewport rather than a constant. */
+  const pageRows = Math.max(
+    1,
+    Math.floor((containerRef.current?.clientHeight ?? ROW_H * 20) / ROW_H) - 1,
+  );
+
+  /** Put the cursor somewhere sane the first time the grid takes focus. */
+  const ensureCursor = useCallback((): Cell => {
+    if (cursor) return cursor;
+    const row = lastSelectedIdx ?? 0;
+    const seed = { row: Math.max(0, Math.min(rows.length - 1, row)), col: 0 };
+    setCursor(seed);
+    return seed;
+  }, [cursor, lastSelectedIdx, rows.length]);
+
+  const openEditor = useCallback(
+    (cell: Cell, seed: string) => {
+      const column = visibleColumns[cell.col];
+      const row = rows[cell.row];
+      if (!column || !row || !EDITABLE_COLUMNS[column.id]) return false;
+      setEditError(null);
+      setEditing({ cell, value: seed });
+      return true;
+    },
+    [visibleColumns, rows],
+  );
+
+  /**
+   * Commit an edit as a staged change.
+   *
+   * Nothing is written to `master.db` here — it goes through
+   * `multi_edit_apply`, which stages a `TrackMetadataEdit` for review and Sync
+   * exactly like the multi-track editor. An inline cell edit is a faster way to
+   * *propose* a change, not a way around the pipeline.
+   */
+  const commitEdit = useCallback(
+    async (next?: Cell) => {
+      if (!editing) return;
+      if (cancelledEdit.current) {
+        cancelledEdit.current = false;
+        return;
+      }
+      const column = visibleColumns[editing.cell.col];
+      const row = rows[editing.cell.row];
+      const field = column && EDITABLE_COLUMNS[column.id];
+      setEditing(null);
+      if (next) setCursor(next);
+      if (!field || !row) return;
+
+      const value = editing.value.trim();
+      // An unchanged value must not stage a no-op change; the review panel
+      // filling with rows that do nothing is how people stop reading it.
+      if (value === editableText(row.original, column.id).trim()) return;
+
+      try {
+        await multiEditApply(libraryPath, [row.original.id], [
+          { field, value: value === "" ? null : value },
+        ]);
+        await queryClient.invalidateQueries({
+          queryKey: ["staged-changes", libraryPath],
+        });
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [editing, visibleColumns, rows, libraryPath, queryClient],
+  );
+
+  const handleGridKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (rows.length === 0) return;
+
+      // While the editor is open the input owns its own keys; only the three
+      // that close it reach here.
+      if (editing) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          cancelledEdit.current = true;
+          setEditing(null);
+          setEditError(null);
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          void commitEdit(
+            moveCell(editing.cell, "down", {
+              rows: rows.length,
+              cols: visibleColumns.length,
+            }),
+          );
+        } else if (event.key === "Tab") {
+          event.preventDefault();
+          void commitEdit(
+            moveCell(editing.cell, event.shiftKey ? "left" : "right", {
+              rows: rows.length,
+              cols: visibleColumns.length,
+            }),
+          );
+        }
+        return;
+      }
+
+      const current = ensureCursor();
+      const size = { rows: rows.length, cols: visibleColumns.length };
+
+      if (event.key === "a" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        onSelectionChange(new Set(rows.map((r) => r.original.id)));
+        return;
+      }
+
+      const move = moveForKey(event);
+      if (move) {
+        event.preventDefault();
+        const next = moveCell(current, move, size, pageRows);
+        setCursor(next);
+        virtualizer.scrollToIndex(next.row, { align: "auto" });
+
+        if (event.shiftKey) {
+          // Extend from the anchor, so shift-↓↓↑ leaves two rows rather than
+          // growing in the other direction.
+          const anchor = anchorRow ?? current.row;
+          setAnchorRow(anchor);
+          onSelectionChange(
+            new Set(
+              selectionRange(anchor, next.row)
+                .map((i) => rows[i]?.original.id)
+                .filter((id): id is string => id != null),
+            ),
+          );
+        } else {
+          setAnchorRow(next.row);
+          setLastSelectedIdx(next.row);
+          onSelectionChange(new Set([rows[next.row].original.id]));
+          onSelect(rows[next.row].original);
+        }
+        return;
+      }
+
+      if (event.key === "Tab") {
+        // Tab walks the row rather than leaving the table — the one place a
+        // grid legitimately overrides the browser, and only while a cell is
+        // focused.
+        event.preventDefault();
+        setCursor(moveCell(current, event.shiftKey ? "left" : "right", size));
+        return;
+      }
+
+      if (startsEdit(event)) {
+        const column = visibleColumns[current.col];
+        const row = rows[current.row];
+        if (!column || !row) return;
+        const seed = initialEditValue(
+          event,
+          editableText(row.original, column.id),
+        );
+        if (openEditor(current, seed)) event.preventDefault();
+      }
+    },
+    [
+      rows,
+      editing,
+      commitEdit,
+      visibleColumns,
+      ensureCursor,
+      pageRows,
+      virtualizer,
+      anchorRow,
+      onSelectionChange,
+      onSelect,
+      openEditor,
+    ],
   );
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -527,7 +764,19 @@ export function TrackTable({
       </div>
 
       {/* Virtualized rows */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto overflow-x-auto">
+      <div
+        ref={containerRef}
+        role="grid"
+        aria-label="Tracks"
+        aria-rowcount={rows.length}
+        aria-colcount={visibleColumns.length}
+        tabIndex={0}
+        onKeyDown={handleGridKeyDown}
+        onFocus={() => {
+          if (!cursor) ensureCursor();
+        }}
+        className="flex-1 overflow-y-auto overflow-x-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent/40"
+      >
         <div
           style={{
             height: virtualizer.getTotalSize(),
@@ -542,6 +791,8 @@ export function TrackTable({
               <div
                 key={row.id}
                 data-index={vItem.index}
+                role="row"
+                aria-rowindex={vItem.index + 1}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -564,14 +815,32 @@ export function TrackTable({
                   onTrackContextMenu(row.original, { x: e.clientX, y: e.clientY });
                 }}
               >
-                {row.getVisibleCells().map((cell) => {
+                {row.getVisibleCells().map((cell, colIndex) => {
                   const meta = cell.column.columnDef.meta as
                     | { align?: string }
                     | undefined;
                   const align = meta?.align;
+                  const isCursor =
+                    cursor?.row === vItem.index && cursor?.col === colIndex;
+                  const isEditingCell =
+                    editing?.cell.row === vItem.index &&
+                    editing?.cell.col === colIndex;
+                  const editable = Boolean(EDITABLE_COLUMNS[cell.column.id]);
                   return (
                     <div
                       key={cell.id}
+                      role="gridcell"
+                      aria-colindex={colIndex + 1}
+                      aria-selected={isCursor || undefined}
+                      aria-readonly={editable ? undefined : true}
+                      onDoubleClick={() => {
+                        if (!editable) return;
+                        setCursor({ row: vItem.index, col: colIndex });
+                        openEditor(
+                          { row: vItem.index, col: colIndex },
+                          editableText(row.original, cell.column.id),
+                        );
+                      }}
                       style={{
                         width: cell.column.getSize(),
                         minWidth: cell.column.getSize(),
@@ -585,9 +854,32 @@ export function TrackTable({
                             ? "text-center font-mono tabular-nums text-[11px]"
                             : "",
                         isSelected ? "text-ink" : "",
+                        // The cursor is an inset ring rather than a background,
+                        // so it reads on top of the selection highlight instead
+                        // of competing with it.
+                        isCursor
+                          ? "shadow-[inset_0_0_0_1px_rgb(var(--accent))]"
+                          : "",
                       ].join(" ")}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {isEditingCell ? (
+                        <input
+                          autoFocus
+                          value={editing.value}
+                          aria-label={`Edit ${String(cell.column.columnDef.header)}`}
+                          onChange={(e) =>
+                            setEditing({
+                              cell: editing.cell,
+                              value: e.target.value,
+                            })
+                          }
+                          onBlur={() => void commitEdit()}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-base px-1 py-0 text-[12px] text-ink outline-none ring-1 ring-accent"
+                        />
+                      ) : (
+                        flexRender(cell.column.columnDef.cell, cell.getContext())
+                      )}
                     </div>
                   );
                 })}
@@ -595,6 +887,15 @@ export function TrackTable({
             );
           })}
         </div>
+
+        {editError != null && (
+          <div
+            className="pointer-events-none sticky bottom-0 left-0 bg-red-500/10 px-3 py-1 text-[11px] text-red-400"
+            data-testid="cell-edit-error"
+          >
+            Could not stage that edit: {editError}
+          </div>
+        )}
 
         {searchError != null && (
           // Say the operator search failed. Silently falling back to the plain

@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
 | Interop & sync | 5 | 5 | 1 | 1 | 11 |
-| Library & browser | 12 | 3 | 3 | 0 | 0 |
+| Library & browser | 13 | 3 | 2 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
 | Player, cues, generator | 7 | 6 | 3 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **48** | **26** | **20** | **2** | **16** |
+| **Total** | **49** | **26** | **19** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -73,7 +73,7 @@ They were previously miscounted as `partial` and `missing`.
 | Search operators (`None`, `>`, `<`, ranges, `!`) | **done** | `smartlists::search` parses the box into rules the same evaluator runs — one implementation, not two | 1 |
 | Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
 | Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
-| Spreadsheet keyboard navigation | **missing** | | 2 |
+| Spreadsheet keyboard navigation | **done** | Cell cursor, arrows/jumps/Home/End/page keys, shift-extend from an anchor, Tab within the row, inline edit that stages rather than writes. Clamps, never wraps | 6 |
 | Inline per-row waveform preview | **missing** | | 2 |
 | Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |
 | Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |

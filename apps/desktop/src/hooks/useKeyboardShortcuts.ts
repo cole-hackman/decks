@@ -13,6 +13,10 @@ function isEditable(target: EventTarget | null): boolean {
   if (tag === "BUTTON" || tag === "A") return true;
   if (target.getAttribute("role") === "button") return true;
   if (target.isContentEditable) return true;
+  // A focused grid owns the arrows, Home/End, the page keys and printable
+  // characters for the same reason an input does — it is a spreadsheet, and a
+  // global binding firing alongside its cell cursor would move twice.
+  if (target.closest('[role="grid"]')) return true;
   return false;
 }
 
