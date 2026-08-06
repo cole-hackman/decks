@@ -1543,8 +1543,12 @@ real tags in people's files with nothing. Not writing it makes the feature safe 
 `skipped` count in the result. Easy call once stated, easy to get wrong if never stated.
 
 **Toolchain note for future sessions:** the container's clippy is 1.94 and CI's is 1.97. A clean
-local `cargo clippy --workspace --all-targets -- -D warnings` is necessary but not sufficient —
-`unnecessary_sort_by` only fired on CI. Expect one round-trip per PR on new lints.
+local `cargo clippy --workspace --all-targets -- -D warnings` is necessary but not sufficient.
+`unnecessary_sort_by` caught us twice in one session — it fires on `sort_by(|a, b| b.k.cmp(&a.k))`
+where the key is `Ord`, and wants `sort_by_key(|x| Reverse(x.k))`. Float comparisons using
+`partial_cmp` do **not** trigger it, which is why most of `stratum-dsp` is unaffected. When adding
+a descending sort over an integer key, write `sort_by_key(Reverse(..))` first and save the
+round-trip.
 
 **Local Path Mappings** looked like the smallest thing in the epic and turned out to be the one with
 the most reach. Storing and resolving a prefix is twenty lines; deciding *where* resolution applies

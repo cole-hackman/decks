@@ -132,7 +132,7 @@ pub fn scan_watch_folders(
     }
 
     // Oldest first: the natural triage order is the order they landed.
-    out.arrivals.sort_by(|a, b| b.age_secs.cmp(&a.age_secs));
+    out.arrivals.sort_by_key(|a| std::cmp::Reverse(a.age_secs));
     out
 }
 
