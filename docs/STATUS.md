@@ -1,5 +1,34 @@
 # Status
 
+## 2026-08-06 — Play queue
+
+The transport played one file and emitted `playback-ended`. This is the list that decides what
+happens next. Per `docs/lexicon/05-cues-player.md §Music player`.
+
+`lib/play-queue.ts` holds the list arithmetic as pure functions — advancing past a track removed
+while it played, shuffling only the part that has not played yet — so it is testable without a
+`rodio` sink. `usePlayQueue` resolves ids to tracks and drives the transport; `PlayQueuePanel`
+draws it.
+
+Four decisions:
+
+- **Track ids, not tracks.** The queue survives a library refresh, a filter change and a re-sort.
+  Holding whole `Track` objects would pin stale copies of rows the user has since edited.
+- **One list with a marker in it**, not a "now playing" box above a separate list.
+- **`Clear` keeps the playing track.** Clear means "nothing after this", not "stop the music".
+  `Shuffle` likewise only permutes what has not played — shuffling history would move the marker
+  under the playing track and read as the queue losing its place mid-set.
+- **Advance is driven by a timestamp, not a flag.** A boolean `ended` would stay `true` after the
+  first end and the second track would never advance. There is a test for exactly that.
+
+`useAudioPlayer` gained `endedAt`; `useKeyboardShortcuts` was untouched. The queue is
+**per-session and in-memory** — a queue is what you are about to play right now, and persisting it
+would mean opening the app tomorrow to last night's leftovers.
+
+**Next:** Find Popup (`Cmd+F`) is the natural follow-on — it consumes the queue for its
+per-result "add to queue" action. After that, inline per-row waveform previews and cue templates.
+Epic 7 (streaming) still needs a scoping decision from the user.
+
 ## 2026-08-06 — Spreadsheet keyboard navigation
 
 The browser could move rows with j/k and the arrows. What it lacked was a **cell cursor** — a

@@ -32,6 +32,8 @@ import { RelocateBanner } from "./components/RelocateBanner";
 import { ResizablePanel } from "./components/ui/ResizablePanel";
 import { useAppStore } from "./store/appStore";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
+import { usePlayQueue } from "./hooks/usePlayQueue";
+import { PlayQueuePanel } from "./components/PlayQueuePanel";
 import { useStagedChanges } from "./hooks/useStagedChanges";
 import { ActionProvider } from "./hooks/useActions";
 import { ActionCenter } from "./components/ActionCenter";
@@ -168,6 +170,19 @@ export default function App() {
   };
 
   const audio = useAudioPlayer(selectedTrack);
+  /**
+   * The play queue.
+   *
+   * `audio.play` starts the transport; the queue decides *what* it starts, and
+   * advances when `playback-ended` fires. Per
+   * `docs/lexicon/05-cues-player.md §Music player`.
+   */
+  const queue = usePlayQueue({
+    library: tracks,
+    play: audio.play,
+    endedAt: audio.endedAt,
+  });
+  const [queueOpen, setQueueOpen] = useState(false);
   const { data: changes = [] } = useStagedChanges(libraryPath);
   const proposedCount = changes.filter((c) => c.status === "Proposed").length;
   const acceptedCount = changes.filter((c) => c.status === "Accepted").length;
@@ -190,9 +205,29 @@ export default function App() {
     setContextMenu({ track, anchor, playlistId: options?.playlistId });
   };
 
+  /**
+   * The tracks a context action should apply to.
+   *
+   * The right-clicked row joins the selection if it was not in it, so a queue
+   * action never quietly excludes the row you actually clicked.
+   */
+  const contextSelection = (track: Track): Track[] => {
+    if (!selectedTrackIds.has(track.id)) return [track];
+    const chosen = tracks.filter((t) => selectedTrackIds.has(t.id));
+    return chosen.length > 0 ? chosen : [track];
+  };
+
   const trackContextActions = useTrackContextActions({
     libraryPath: libraryPath ?? "",
     playlistId: contextMenu?.playlistId,
+    onAddToQueue: (track) => {
+      queue.addToQueue(contextSelection(track));
+      setQueueOpen(true);
+    },
+    onPlayNext: (track) => {
+      queue.playNextInQueue(contextSelection(track));
+      setQueueOpen(true);
+    },
     onShowDetails: (track) => {
       setSelectedTrack(track);
       setSelectedTrackIds(new Set([track.id]));
@@ -350,6 +385,24 @@ export default function App() {
         run: () => setSidepanelOpen((v) => !v),
       },
       {
+        id: "view.toggleQueue",
+        label: "Toggle Play Queue",
+        group: "View",
+        run: () => setQueueOpen((v) => !v),
+      },
+      {
+        id: "player.next",
+        label: "Next in queue",
+        group: "Player",
+        run: () => queue.skipForward(),
+      },
+      {
+        id: "player.previous",
+        label: "Previous in queue",
+        group: "Player",
+        run: () => queue.skipBack(),
+      },
+      {
         id: "player.playPause",
         label: "Play / pause",
         group: "Player",
@@ -401,7 +454,7 @@ export default function App() {
         },
       },
     ],
-    [currentView, inspector, audio, selectedTrackIds, actionCenterOpen],
+    [currentView, inspector, audio, queue, selectedTrackIds, actionCenterOpen],
   );
 
   // Apply theme class to <html>
@@ -532,6 +585,23 @@ export default function App() {
             }`}
           >
             Sidepanel
+          </button>
+          <button
+            onClick={() => setQueueOpen((v) => !v)}
+            aria-label={queueOpen ? "Close play queue" : "Open play queue"}
+            title="What plays after this"
+            className={`rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors duration-150 hover:bg-elevated ${
+              queueOpen
+                ? "text-accent-hover"
+                : "text-ink-secondary hover:text-ink"
+            }`}
+          >
+            Queue
+            {queue.state.items.length > 0 && (
+              <span className="ml-1 text-[10px] text-ink-faint">
+                {queue.state.items.length}
+              </span>
+            )}
           </button>
           {showInspectorToggles && (
             <button
@@ -779,6 +849,14 @@ export default function App() {
               onTrackContextMenu={handleTrackContextMenu}
             />
           </ResizablePanel>
+        )}
+
+        {queueOpen && (
+          <PlayQueuePanel
+            queue={queue}
+            onReveal={handleTrackSelect}
+            onClose={() => setQueueOpen(false)}
+          />
         )}
 
         {inspector !== null && (

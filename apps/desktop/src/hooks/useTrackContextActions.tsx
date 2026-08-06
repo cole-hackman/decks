@@ -30,6 +30,10 @@ interface Options {
   /** Opens Mixable Tracks seeded from this track — the spec's
    *  "right-click → Track tools → Find mixable tracks". */
   onFindMixable?: (track: Track) => void;
+  /** Appends the selection to the play queue — the spec's "Add to queue". */
+  onAddToQueue?: (track: Track) => void;
+  /** Inserts the selection straight after the playing track. */
+  onPlayNext?: (track: Track) => void;
 }
 
 /** Builds the right-click action set for a Track. Memoised so the menu
@@ -42,6 +46,8 @@ export function useTrackContextActions({
   onSendToFiles,
   onFindMixable,
   onCreatePlaylist,
+  onAddToQueue,
+  onPlayNext,
 }: Options): TrackContextMenuAction[] {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -240,6 +246,34 @@ export function useTrackContextActions({
         ),
         onSelect: doPlay,
       },
+      ...(onPlayNext
+        ? [
+            {
+              id: "play-next",
+              label: "Play next",
+              icon: (
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path d="M3 2.5a.5.5 0 01.76-.43l6 4a.5.5 0 010 .86l-6 4A.5.5 0 013 10.5v-8zM11.5 2h1.5v12h-1.5z" />
+                </svg>
+              ),
+              onSelect: onPlayNext,
+            },
+          ]
+        : []),
+      ...(onAddToQueue
+        ? [
+            {
+              id: "add-to-queue",
+              label: "Add to queue",
+              icon: (
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path d="M1 3h9v1.5H1V3zm0 4h9v1.5H1V7zm0 4h6v1.5H1V11zm12-6h1.5v3H17v1.5h-2.5v3H13v-3h-2.5V8H13V5z" />
+                </svg>
+              ),
+              onSelect: onAddToQueue,
+            },
+          ]
+        : []),
       {
         id: "analyze",
         label: "Analyse audio",
@@ -399,5 +433,7 @@ export function useTrackContextActions({
     onSendToFiles,
     onFindMixable,
     onCreatePlaylist,
+    onAddToQueue,
+    onPlayNext,
   ]);
 }

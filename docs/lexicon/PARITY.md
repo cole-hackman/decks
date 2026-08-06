@@ -18,14 +18,14 @@ regardless of how much of Lexicon they represent.
 | Library & browser | 13 | 3 | 2 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
-| Player, cues, generator | 7 | 6 | 3 | 0 | 0 |
+| Player, cues, generator | 8 | 6 | 2 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 2 | 1 | 1 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **49** | **26** | **19** | **2** | **16** |
+| **Total** | **50** | **26** | **18** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -117,7 +117,7 @@ They were previously miscounted as `partial` and `missing`.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Playback + waveform scrub | partial | `rodio`; no queue, no autoplay | 2 |
-| Play queue | **missing** | | 2 |
+| Play queue | **done** | Add to queue / Play next, reorder, shuffle-upcoming-only, clear-but-keep-playing, autoplay on `playback-ended`. Per-session and in-memory by design | 6 |
 | Cue CRUD | **done** | Set/play/delete/move/colour via `CueEditor`, all through staged changes. New `ChangeKind::TrackDeleteCue`. Placement is on the cue list + slot grid, not yet drag-on-waveform | 2 |
 | Loops | partial | Loop length in beats via `OutMsec`. **Active loops need a `djmdCue` column we do not model** — deferred | 2 |
 | Quantize (incl. grid-move-carries-cues) | **done** | 1/2/4/16/64-beat snapping; a grid nudge moves only cues already on the grid | 2 |

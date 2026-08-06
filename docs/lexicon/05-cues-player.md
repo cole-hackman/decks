@@ -18,8 +18,34 @@ delete, play immediately, or `View` it in the collection. Edit menu offers `Shuf
 `Clear Queue`.
 
 *decks status* — **partial.** `rodio` transport with play/pause, seek, interactive waveform
-scrubbing, and a `playback-ended` event exists in `apps/desktop/src-tauri/src/audio.rs`. No queue,
-no autoplay, no beat jump.
+scrubbing and a `playback-ended` event in `apps/desktop/src-tauri/src/audio.rs`, plus a **play
+queue with autoplay**. No beat jump.
+
+**The queue** is `lib/play-queue.ts` (pure list arithmetic), `usePlayQueue` (resolving ids to
+tracks and driving the transport) and `PlayQueuePanel`. Right-click offers `Add to queue` and
+`Play next`; the panel reorders, removes, jumps, shuffles and clears; `Cmd+K` reaches
+`Toggle Play Queue`, `Next in queue` and `Previous in queue`.
+
+Four decisions worth recording:
+
+- **Track ids, not tracks.** The queue survives a library refresh, a filter change and a re-sort.
+  Holding whole `Track` objects would pin stale copies of rows the user has since edited.
+- **One list with a marker in it**, not a "now playing" box above a separate list. The queue is the
+  thing the user reasons about; splitting it in two makes "what comes after this" harder to read.
+- **`Clear Queue` keeps the playing track**, leaving it as the sole entry. Clear means "nothing
+  after this", not "stop the music" — stopping is the transport's job and has its own control.
+  `Shuffle` likewise only permutes what has *not* played, since shuffling history would move the
+  marker under the playing track and read as the queue losing its place mid-set.
+- **Advance is driven by a timestamp, not a flag.** `playback-ended` sets `endedAt = Date.now()`;
+  a boolean would stay `true` after the first end and the second track would never advance.
+
+**The queue is per-session and in-memory.** A queue is what you are about to play right now;
+persisting it would mean opening the app tomorrow to last night's leftovers. Playlists are the
+thing that persists.
+
+Reordering is up/down buttons rather than drag-and-drop: the track table has no drag *source* yet,
+so a drop target here would be half a feature. The buttons work from the keyboard, and dnd-kit can
+replace them later without changing the queue's semantics.
 
 *Epic* — **2**.
 

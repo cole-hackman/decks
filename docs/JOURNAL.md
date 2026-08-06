@@ -2467,3 +2467,23 @@ first), CSV import, the duplicates work.
 - Verified: `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (657),
   `pnpm typecheck`, `pnpm lint`, 52 Playwright e2e.
 - **Next:** inline per-row waveform previews; Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (play queue)
+
+### Plan
+- Build the play queue: the foundational half of the remaining player work, and what Find Popup
+  needs before its per-result actions can exist.
+
+### End of session
+- **Shipped:** `lib/play-queue.ts` (32 tests), `usePlayQueue`, `PlayQueuePanel` (15 tests), the
+  `Add to queue` / `Play next` context actions, a header toggle, three command-palette entries,
+  and an e2e spec.
+- **The subtle one:** `playback-ended` had to become a timestamp rather than a boolean. With a
+  boolean the flag stays `true` after the first end and the queue never advances again. Pinned by
+  a test that ends two tracks in a row.
+- **Scope held deliberately:** reordering is up/down buttons, not drag-and-drop, because the track
+  table has no drag source — a drop target here would be half a feature. Written down in
+  `05-cues-player.md` rather than left as a silent gap.
+- Verified: `pnpm test` (704), `pnpm typecheck`, `pnpm lint`, 55 Playwright e2e.
+- **Next:** Find Popup (`Cmd+F`) consumes the queue; then inline waveform previews and cue
+  templates. Epic 7 needs a scoping decision.
