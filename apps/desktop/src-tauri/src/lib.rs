@@ -1649,6 +1649,13 @@ async fn sync_preview(
 ) -> Result<Vec<PendingChange>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let cache = cache_db(&app)?;
+
+        // Materialise smartlists into plain playlists before collecting the
+        // change set, so the staged rows are picked up by this same sync run.
+        if options.all_smartlists_to_playlists {
+            smartlists::stage_materialization(&app, &library_path)?;
+        }
+
         let all = cache
             .list_changes(Some(&library_path))
             .map_err(|e| e.to_string())?;
@@ -2579,6 +2586,7 @@ pub fn run() {
             smartlists::preview_smartlist,
             smartlists::generate_smartlists,
             smartlists::smartlist_counts,
+            smartlists::smartlist_compatibility,
             list_tracks_with_cues,
             list_tracks_in_any_playlist,
             list_tracks_with_missing_files,

@@ -282,3 +282,108 @@ pub async fn smartlist_counts(
     .await
     .map_err(|e| e.to_string())?
 }
+
+/// Stage `PlaylistCreate` + `PlaylistAddTrack` changes for every smartlist, so
+/// they land in Rekordbox as plain playlists. This is what
+/// `SyncOptions.all_smartlists_to_playlists` turns on.
+///
+/// Smartlists named `Excluded From Sync…`, and tracks carrying a custom tag of
+/// that name, are skipped. Returns the staged change IDs.
+pub fn stage_materialization(
+    app: &tauri::AppHandle,
+    library_path: &str,
+) -> Result<Vec<String>, String> {
+    let cache = cache_db(app)?;
+    let lists = cache
+        .list_smartlists(library_path)
+        .map_err(|e| e.to_string())?;
+    if lists.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let db = open_db(library_path)?;
+    let needs_missing = lists.iter().any(mentions_missing_files);
+    let (tracks, ctx) = build_context(app, library_path, &db, needs_missing)?;
+
+    // Tracks carrying the `Excluded From Sync` custom tag never leave decks.
+    let excluded_tracks: HashSet<String> = match cache.list_tags(None) {
+        Ok(tags) => {
+            let ids: HashSet<String> = tags
+                .into_iter()
+                .filter(|t| smartlists::is_exclusion_tag(&t.name))
+                .map(|t| t.id)
+                .collect();
+            if ids.is_empty() {
+                HashSet::new()
+            } else {
+                ctx.tags_by_track
+                    .iter()
+                    .filter(|(_, bound)| bound.iter().any(|t| ids.contains(t)))
+                    .map(|(track_id, _)| track_id.clone())
+                    .collect()
+            }
+        }
+        Err(_) => HashSet::new(),
+    };
+
+    let mut staged = Vec::new();
+    for list in &lists {
+        if smartlists::is_excluded_by_name(&list.name) {
+            continue;
+        }
+        let members: Vec<String> = evaluate(list, &tracks, &ctx)
+            .into_iter()
+            .filter(|id| !excluded_tracks.contains(id))
+            .collect();
+
+        // The playlist ID must be stable between preview and apply, so derive
+        // it from the smartlist rather than generating a fresh UUID each run.
+        let playlist_id = format!("smartlist-{}", list.id);
+        for change in smartlists::materialize_changes(library_path, list, &playlist_id, &members) {
+            let record = cache.stage_change(change).map_err(|e| e.to_string())?;
+            staged.push(record.id);
+        }
+    }
+    Ok(staged)
+}
+
+/// Rekordbox compatibility for each smartlist, for the editor's indicator.
+#[tauri::command]
+pub async fn smartlist_compatibility(
+    app: tauri::AppHandle,
+    library_path: String,
+) -> Result<HashMap<String, smartlists::Compatibility>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let lists = cache
+            .list_smartlists(&library_path)
+            .map_err(|e| e.to_string())?;
+        // Map each tag id to its category so the 4-category MyTag cap can be
+        // evaluated; degrade to zero categories if tags cannot be read.
+        let tag_category: HashMap<String, String> = cache
+            .list_tags(None)
+            .map(|tags| tags.into_iter().map(|t| (t.id, t.category_id)).collect())
+            .unwrap_or_default();
+
+        Ok(lists
+            .into_iter()
+            .map(|l| {
+                let categories: HashSet<&String> = l
+                    .clauses
+                    .iter()
+                    .flat_map(|c| c.rules.iter())
+                    .filter_map(|r| match &r.value {
+                        smartlists::Value::Tags(ids) => Some(ids),
+                        _ => None,
+                    })
+                    .flatten()
+                    .filter_map(|id| tag_category.get(id))
+                    .collect();
+                let compat = smartlists::rekordbox_compatibility(&l, categories.len());
+                (l.id, compat)
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

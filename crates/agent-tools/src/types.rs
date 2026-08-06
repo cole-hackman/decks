@@ -60,6 +60,13 @@ pub enum ToolRequest {
         fields: Vec<String>,
         limit: Option<usize>,
     },
+    SmartlistList {
+        library_path: String,
+    },
+    SmartlistEvaluate {
+        library_path: String,
+        id: String,
+    },
     RelocateScan {
         library_path: String,
         #[serde(default)]

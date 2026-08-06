@@ -12,6 +12,7 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 decks-core = { path = "../decks-core" }
 cache = { path = "../cache" }
+smartlists = { path = "../smartlists" }
 changes = { path = "../changes" }
 audio-tags = { path = "../audio-tags" }
 audio-analysis = { path = "../audio-analysis" }

@@ -27,10 +27,15 @@ pub mod eval;
 pub mod generator;
 pub mod key;
 pub mod model;
+pub mod sync;
 pub mod throttle;
 
 pub use eval::{evaluate, matches, EvalContext};
 pub use generator::{generate, only_missing, GeneratedSmartlist, GeneratorSpec, LEXICON_FOLDER};
 pub use key::canonical_key;
 pub use model::{Clause, Combinator, Field, FieldKind, Operator, Rule, Smartlist, Value};
+pub use sync::{
+    is_excluded_by_name, is_exclusion_tag, materialize_changes, rekordbox_compatibility,
+    Compatibility, EXCLUDED_FROM_SYNC,
+};
 pub use throttle::{RecomputeCache, RECOMPUTE_INTERVAL_SECS};
