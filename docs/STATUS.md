@@ -1,5 +1,20 @@
 # Status
 
+## Blockers — verified, not assumed (2026-08-06)
+
+The three Epic 4 items still open cannot be built *in this environment*, for reasons that are about
+the environment rather than the design:
+
+| Item | Blocker | Evidence |
+|---|---|---|
+| Enrichment (Find Tags, album art) | Outbound egress to metadata APIs is blocked. | `curl https://musicbrainz.org/ws/2/...` returns `CONNECT tunnel failed, response 403`. Writing response parsers against invented JSON shapes would be untestable code in a production path. |
+| Energy / Danceability | No audio to calibrate against. `fixtures/audio/` holds only `.gitkeep`; real fixtures are gitignored. | An uncalibrated 1–10 scale would be a number we could not defend, which is exactly what ADR-0008 exists to prevent. |
+| Beatshift Fixer | Both of the above, plus a re-encoding dependency. | Detecting beatshift needs real encoder-padded MP3s; fixing it needs a re-encoder. |
+
+None of these is deferred by preference. Each needs either network access or a real (gitignored)
+fixture library, both of which are available on a developer machine and not here. The design work
+for all three is recorded in `docs/lexicon/` and `docs/ROADMAP.md`.
+
 ## 2026-08-06 — Epic 4 (part 2): Field Mappings
 
 `crates/changes::field_mappings` — the projection engine for fields the target does not have.

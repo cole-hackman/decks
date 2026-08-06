@@ -39,6 +39,17 @@ Playlist Tools) with identical text. Not a transcription error on our side.
 | D | **New tracks are export-only.** Importing an arrival stages a `TrackCreate` change that sync deliberately refuses. | A `djmdContent` row needs columns `decks` does not model and cannot verify against a real schema. A half-populated row in a performing library is worse than no row, so new tracks go through Rekordbox's own XML import — which the export emits them into, and which the refusal message names. |
 | B | **`FileNameL` / `FileNameS` are written only when present.** Rekordbox stores a denormalised filename alongside `FolderPath`; `decks` does not model those columns and has no real fixture to verify them against. | The `TrackRelocate` applier probes `PRAGMA table_info` and writes them if the database has them. Assuming would fail the whole sync on a schema we have not seen; skipping would leave Rekordbox showing a stale filename. |
 
+## Environment blockers
+
+Verified in the Claude Code container on 2026-08-06, and relevant to whoever picks these up next:
+
+- **Metadata APIs are unreachable.** `musicbrainz.org` returns `403` through the agent proxy, so
+  the enrichment providers cannot be written *or* verified here — only on a machine with open
+  egress. Response parsers written against invented shapes would be untestable production code.
+- **There is no audio to calibrate against.** `fixtures/audio/` contains only `.gitkeep`; real
+  fixtures are gitignored by design. Energy, Danceability and beatshift detection all need real
+  encoder-padded, genre-varied audio before their numbers mean anything.
+
 ## Open questions for the project owner
 
 1. **Camelot vs Open Key.** Lexicon avoids Camelot for licensing reasons and ships Open Key.
