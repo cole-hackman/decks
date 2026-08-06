@@ -1251,6 +1251,92 @@ impl CacheDb {
     }
 }
 
+/// A remembered quick-move destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickMoveFolder {
+    pub id: String,
+    pub path: String,
+    pub favourite: bool,
+    pub last_used_at: i64,
+}
+
+/// Quick move destinations (Epic 4).
+///
+/// Favourites first, then most-recently-used. Like path mappings, these belong
+/// to the computer rather than to a library — "the folder I file house tracks
+/// into" is a fact about this disk.
+impl CacheDb {
+    pub fn list_quick_move_folders(&self) -> Result<Vec<QuickMoveFolder>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, path, favourite, last_used_at FROM quick_move_folders
+             ORDER BY favourite DESC, last_used_at DESC",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(QuickMoveFolder {
+                id: r.get(0)?,
+                path: r.get(1)?,
+                favourite: r.get::<_, i64>(2)? != 0,
+                last_used_at: r.get(3)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Remember a destination, or refresh its recency if already known.
+    ///
+    /// Upsert rather than insert: using the same folder twice should move it up
+    /// the list, not create a duplicate entry.
+    pub fn record_quick_move_folder(&self, path: &str) -> Result<String> {
+        let path = path.trim();
+        if path.is_empty() {
+            anyhow::bail!("a folder path is required");
+        }
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM quick_move_folders WHERE path = ?1",
+            rusqlite::params![path],
+            |r| r.get::<_, String>(0),
+        ) {
+            self.conn.execute(
+                "UPDATE quick_move_folders SET last_used_at = ?1 WHERE id = ?2",
+                rusqlite::params![now_secs(), id],
+            )?;
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO quick_move_folders (id, path, favourite, last_used_at)
+             VALUES (?1, ?2, 0, ?3)",
+            rusqlite::params![id, path, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    /// Toggle the favourite flag, returning its new state.
+    pub fn toggle_quick_move_favourite(&self, id: &str) -> Result<bool> {
+        let current: i64 = self.conn.query_row(
+            "SELECT favourite FROM quick_move_folders WHERE id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )?;
+        let next = if current == 0 { 1 } else { 0 };
+        self.conn.execute(
+            "UPDATE quick_move_folders SET favourite = ?1 WHERE id = ?2",
+            rusqlite::params![next, id],
+        )?;
+        Ok(next == 1)
+    }
+
+    pub fn delete_quick_move_folder(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM quick_move_folders WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+}
+
 fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     let clauses_json: String = r.get(4)?;
     let clauses: Vec<Clause> = serde_json::from_str(&clauses_json).unwrap_or_default();
@@ -1270,6 +1356,51 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn recording_the_same_quick_move_folder_twice_does_not_duplicate_it() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let first = db.record_quick_move_folder("/Music/House").unwrap();
+        let second = db.record_quick_move_folder("/Music/House").unwrap();
+        assert_eq!(first, second);
+        assert_eq!(db.list_quick_move_folders().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn quick_move_favourites_sort_ahead_of_plain_recents() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.record_quick_move_folder("/Music/House").unwrap();
+        let techno = db.record_quick_move_folder("/Music/Techno").unwrap();
+        assert!(db.toggle_quick_move_favourite(&techno).unwrap());
+
+        let list = db.list_quick_move_folders().unwrap();
+        assert_eq!(list[0].path, "/Music/Techno");
+        assert!(list[0].favourite);
+        assert!(!list[1].favourite);
+    }
+
+    #[test]
+    fn toggling_a_favourite_twice_returns_it_to_plain() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.record_quick_move_folder("/Music/House").unwrap();
+        assert!(db.toggle_quick_move_favourite(&id).unwrap());
+        assert!(!db.toggle_quick_move_favourite(&id).unwrap());
+    }
+
+    #[test]
+    fn quick_move_folders_can_be_forgotten() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.record_quick_move_folder("/Music/House").unwrap();
+        assert!(db.delete_quick_move_folder(&id).unwrap());
+        assert!(!db.delete_quick_move_folder(&id).unwrap());
+        assert!(db.list_quick_move_folders().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_empty_quick_move_path_is_refused() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.record_quick_move_folder("   ").is_err());
+    }
 
     #[test]
     fn path_mappings_round_trip_and_delete() {

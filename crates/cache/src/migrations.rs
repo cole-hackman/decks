@@ -189,6 +189,24 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_path_mappings_seq ON path_mappings(seq);
         ",
     ),
+    (
+        9,
+        "
+        -- Quick move destinations (Epic 4). Recently-used folders, with a
+        -- favourite flag; favourites get hotkeys 1-9 in the picker.
+        --
+        -- Like path_mappings and for the same reason, not keyed by
+        -- library_path: 'the folder I file house tracks into' is a fact about
+        -- this computer's disk, not about one Rekordbox database.
+        CREATE TABLE quick_move_folders (
+          id           TEXT PRIMARY KEY,
+          path         TEXT NOT NULL UNIQUE,
+          favourite    INTEGER NOT NULL DEFAULT 0,
+          last_used_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX idx_quick_move_recent ON quick_move_folders(favourite DESC, last_used_at DESC);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -304,6 +322,21 @@ mod tests {
         .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn quick_move_folders_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO quick_move_folders (id, path) VALUES ('q1', '/Music/House')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quick_move_folders", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }

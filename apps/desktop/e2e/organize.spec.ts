@@ -90,6 +90,14 @@ test.beforeEach(async ({ page }) => {
       }
 
       const staged: Array<Record<string, unknown>> = [];
+      let quickMoveFolders = [
+        {
+          id: "q1",
+          path: "/music/Techno",
+          favourite: true,
+          last_used_at: 2,
+        },
+      ];
 
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string, args: Record<string, unknown>) => {
@@ -129,6 +137,19 @@ test.beforeEach(async ({ page }) => {
               }
               return [...p.matchAll(/%([^%]+)%/g)].map((m) => m[1]);
             }
+            case "list_quick_move_folders":
+              return quickMoveFolders;
+            case "record_quick_move_folder":
+              return "q1";
+            case "toggle_quick_move_favourite": {
+              quickMoveFolders = quickMoveFolders.map((f) =>
+                f.id === args.id ? { ...f, favourite: !f.favourite } : f,
+              );
+              return true;
+            }
+            case "delete_quick_move_folder":
+              quickMoveFolders = quickMoveFolders.filter((f) => f.id !== args.id);
+              return true;
             case "write_tags_bulk": {
               const selection = args.selection as Record<string, boolean>;
               // Only "genre" is populated on both fixture tracks, so a
@@ -268,4 +289,22 @@ test("write tags: nothing selected by default, then write the ticked field", asy
   await page.getByLabel("Genre").check();
   await write.click();
   await expect(page.getByText(/Wrote 2 file\(s\)/)).toBeVisible();
+});
+
+test("quick move: hotkey 1 sends the selection to the first favourite", async ({
+  page,
+}) => {
+  await openOrganize(page);
+  await expect(
+    page.getByRole("button", { name: "/music/Techno", exact: true }),
+  ).toBeVisible();
+
+  // Focus something that is not a text field, then press the hotkey.
+  await page.getByRole("heading", { name: "Quick Move" }).click();
+  await page.keyboard.press("1");
+
+  // Only the first fixture track moves — the second already renders to where
+  // it is, so it is not part of the move.
+  await expect(page.getByText(/Moved 1 file\(s\) to \/music\/Techno/)).toBeVisible();
+  await expect(page.getByText(/full sync clears the old locations/)).toBeVisible();
 });

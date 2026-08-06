@@ -39,6 +39,7 @@ import type {
   TagFieldSelection,
   WriteTagsResult,
   PathMappingRow,
+  QuickMoveFolder,
 } from "./types";
 import type {
   ChatMessage,
@@ -1058,4 +1059,20 @@ export async function previewPathMapping(
   storedPath: string,
 ): Promise<[string, boolean]> {
   return invoke<[string, boolean]>("preview_path_mapping", { storedPath });
+}
+
+export async function listQuickMoveFolders(): Promise<QuickMoveFolder[]> {
+  return invoke<QuickMoveFolder[]>("list_quick_move_folders");
+}
+
+export async function recordQuickMoveFolder(path: string): Promise<string> {
+  return invoke<string>("record_quick_move_folder", { path });
+}
+
+export async function toggleQuickMoveFavourite(id: string): Promise<boolean> {
+  return invoke<boolean>("toggle_quick_move_favourite", { id });
+}
+
+export async function deleteQuickMoveFolder(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_quick_move_folder", { id });
 }

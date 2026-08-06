@@ -106,7 +106,15 @@ folders get hotkeys 1–9**. A hotkey opens the popup itself.
 *Critical follow-up* — after moving files you must **Full Sync** to the DJ app. A partial sync
 leaves the old locations behind; only a full sync clears them.
 
-*decks status* — **missing.**
+*decks status* — **done.** `QuickMovePanel` (Files view) with cache migration v9 behind it.
+Destinations are remembered on use (upsert, so the same folder moves up the list rather than
+duplicating), favourites sort first and get hotkeys 1–9, and the hotkeys are ignored while a text
+field has focus so typing a path does not fire a move on every digit. Moving reuses the Move &
+Rename planner, so collisions and `TrackRelocate` staging behave identically, and the success
+message repeats the full-sync warning.
+
+Not done: opening the picker itself from a hotkey, and the right-click → Send to entry point —
+this lives in the Files view rather than the track context menu for now.
 
 *Epic* — **4**.
 

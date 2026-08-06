@@ -16,6 +16,14 @@ vi.mock("../ipc", () => ({
   validatePattern: vi.fn(),
   previewOrganize: vi.fn(),
   applyOrganize: vi.fn(),
+  // Used by the panels mounted below Move & Rename.
+  listQuickMoveFolders: vi.fn(async () => []),
+  recordQuickMoveFolder: vi.fn(),
+  toggleQuickMoveFavourite: vi.fn(),
+  deleteQuickMoveFolder: vi.fn(),
+  writeTagsBulk: vi.fn(),
+  scanUnusedFiles: vi.fn(),
+  deleteUnusedFiles: vi.fn(),
 }));
 
 function track(id: string, title: string): Track {
@@ -92,7 +100,9 @@ describe("OrganizeFilesView", () => {
   it("targets the selection when there is one", async () => {
     const user = userEvent.setup();
     renderView(["t2"]);
-    expect(await screen.findByText(/1 selected track/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/1 selected track\(s\) — everything here writes to disk/),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => {
       expect(previewOrganize).toHaveBeenCalledWith(
@@ -106,7 +116,7 @@ describe("OrganizeFilesView", () => {
   it("falls back to every track when nothing is selected", async () => {
     const user = userEvent.setup();
     renderView();
-    expect(await screen.findByText(/All 2 track/)).toBeInTheDocument();
+    expect(await screen.findByText(/^All 2 track\(s\)/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => {
       expect(previewOrganize).toHaveBeenCalledWith(

@@ -464,3 +464,10 @@ export interface PathMappingRow {
   from: string;
   to: string;
 }
+
+export interface QuickMoveFolder {
+  id: string;
+  path: string;
+  favourite: boolean;
+  last_used_at: number;
+}

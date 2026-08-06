@@ -1557,5 +1557,22 @@ added since v5. A mapping is a fact about the *computer*, not about a library, a
 the moment a library is opened — before anything has been recorded against that library's path.
 Noted in the migration itself so the inconsistency reads as a decision rather than an oversight.
 
-**Next:** the rest of Epic 4. Watch folder and the incoming auto-advance flow are the natural
-follow-on, since they are what makes auto-move-on-done meaningful.
+**Quick move cost almost nothing** because the planner was already there — it is `apply_organize`
+with a target folder and no subfolder levels. That is the payoff for having built the pure planner
+first rather than putting the logic in the command handler.
+
+Two small things worth remembering. Recording a destination is an upsert keyed on the path, so
+using a folder twice promotes it rather than duplicating it — an append-only recents list degrades
+into noise fast. And the 1–9 hotkeys have to bail out when focus is in a text field, or typing
+`/Music/1` into the "remember this folder" box fires a move mid-keystroke. Both are the kind of
+thing that only shows up when you actually use the feature, so both have tests.
+
+Mounting a fourth panel in the Files view also squeezed the Move & Rename preview to zero height —
+flex children without `shrink-0` get compressed once the siblings fill the container. Caught by
+Playwright reporting the element as "hidden" while it was plainly in the DOM; vitest could not have
+seen it, since jsdom has no layout.
+
+**Next:** the rest of Epic 4. The watch folder is what remains of the automation story, and it needs
+a decision first: importing a *new* file into the library is a `master.db` write, so it has to go
+through a new `ChangeKind::TrackCreate` and the XML-export path rather than the watcher writing
+anything directly. Worth designing before building.

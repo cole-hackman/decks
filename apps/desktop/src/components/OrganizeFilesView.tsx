@@ -6,6 +6,7 @@ import {
   validatePattern,
 } from "../ipc";
 import { useToast } from "./Toast";
+import { QuickMovePanel } from "./QuickMovePanel";
 import { UnusedFilesPanel } from "./UnusedFilesPanel";
 import { WriteTagsPanel } from "./WriteTagsPanel";
 import type {
@@ -274,7 +275,7 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
       </div>
 
       {rows != null && (
-        <div data-testid="organize-preview" className="overflow-auto">
+        <div data-testid="organize-preview" className="shrink-0 overflow-x-auto">
           {rows.length === 0 ? (
             <p className="text-xs text-muted">No tracks with a file path to move.</p>
           ) : (
@@ -308,6 +309,12 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
       )}
 
       <div className="mt-4">
+        <QuickMovePanel
+          libraryPath={libraryPath}
+          trackIds={targetIds}
+          renamePattern={pattern}
+          onMoved={() => setRows(null)}
+        />
         <WriteTagsPanel libraryPath={libraryPath} trackIds={targetIds} />
         <UnusedFilesPanel libraryPath={libraryPath} />
       </div>

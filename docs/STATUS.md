@@ -92,12 +92,19 @@ track is not missing), Move & Rename's sources, Write Tags, and — the one that
 unused-file sweep's known-path set, since without it every mapped track would look unused and land
 on the delete list.
 
-**What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move with favourite
-folders, field mappings, auto-write-on-change, enrichment (Find Tags & album art),
+**Quick move** (cache migration **v9**) closes the slice: remembered destinations, favourites first,
+hotkeys 1–9. Recording a folder is an upsert, so using the same one twice moves it up the list
+rather than duplicating it, and the hotkeys are ignored while a text field has focus — otherwise
+typing a path fires a move on every digit. The move itself reuses the Move & Rename planner, so
+collisions and `TrackRelocate` staging behave identically, and the success message repeats the
+full-sync warning the manual is emphatic about.
+
+**What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move's context-menu
+entry point, field mappings, auto-write-on-change, enrichment (Find Tags & album art),
 Energy/Danceability, Beatshift Fixer, and the Automatic Actions settings group.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 313, typecheck, lint, `pnpm e2e` 15 — all green. One CI-only clippy lint
+clean, `pnpm test` 324, typecheck, lint, `pnpm e2e` 16 — all green. One CI-only clippy lint
 (`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
 `cargo clippy` passing locally does not guarantee CI.
 

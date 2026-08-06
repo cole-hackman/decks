@@ -522,6 +522,43 @@ pub fn resolve_path(mappings: &PathMappings, stored: &str) -> PathBuf {
     mappings.resolve(stored)
 }
 
+// ── Quick move ───────────────────────────────────────────────────────────────
+
+/// Destinations this computer has moved tracks to before.
+///
+/// Favourites first, then most recent. The picker gives favourites hotkeys 1–9,
+/// which is the whole reason the flag exists — a DJ filing a night's downloads
+/// wants one keystroke per track, not a folder browser per track.
+#[tauri::command]
+pub fn list_quick_move_folders(
+    app: tauri::AppHandle,
+) -> Result<Vec<cache::store::QuickMoveFolder>, String> {
+    cache_db(&app)?
+        .list_quick_move_folders()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn record_quick_move_folder(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    cache_db(&app)?
+        .record_quick_move_folder(&path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_quick_move_favourite(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    cache_db(&app)?
+        .toggle_quick_move_favourite(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_quick_move_folder(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    cache_db(&app)?
+        .delete_quick_move_folder(&id)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

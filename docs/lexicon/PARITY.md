@@ -19,13 +19,13 @@ regardless of how much of Lexicon they represent.
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
-| Files | 4 | 4 | 3 | 0 |
+| Files | 4 | 5 | 2 | 0 |
 | Health | 0 | 3 | 2 | 0 |
 | Recipes & editing | 1 | 2 | 4 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **21** | **38** | **28** | **16** |
+| **Total** | **21** | **39** | **27** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -125,7 +125,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
-| Quick move + favourite folders | **missing** | | 4 |
+| Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9; no context-menu entry | 4 |
 | Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |

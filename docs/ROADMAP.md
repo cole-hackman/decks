@@ -143,7 +143,7 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 - [x] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
       current year/month/decade)
 - [x] Move & Rename over a selection, preview-then-apply, staging `TrackRelocate` per moved file
-- [ ] Quick move with favourited folders on hotkeys 1–9
+- [x] Quick move with favourited folders on hotkeys 1–9
 - [x] Bulk Write Tags (ID3) with per-field selection
 - [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining
 - [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
