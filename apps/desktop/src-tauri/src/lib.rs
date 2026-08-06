@@ -1562,10 +1562,14 @@ async fn get_row_waveforms(
                 continue;
             };
             let ext_path = dat_path.with_extension("EXT");
-            let source = if ext_path.exists() { ext_path } else { dat_path };
+            let source = if ext_path.exists() {
+                ext_path
+            } else {
+                dat_path
+            };
 
-            let preview = decks_core::rekordbox_db::anlz::read_preview_waveform(&source)
-                .unwrap_or_default();
+            let preview =
+                decks_core::rekordbox_db::anlz::read_preview_waveform(&source).unwrap_or_default();
             let squashed = decks_core::rekordbox_db::anlz::downsample_preview(&preview, bars);
             if !squashed.is_empty() {
                 out.insert(track_id, squashed);

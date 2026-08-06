@@ -616,6 +616,9 @@ mod tests {
                 *slot = true;
             }
         }
-        assert!(covered.iter().all(|c| *c), "some points were never bucketed");
+        assert!(
+            covered.iter().all(|c| *c),
+            "some points were never bucketed"
+        );
     }
 }
