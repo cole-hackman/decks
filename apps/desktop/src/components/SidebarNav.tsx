@@ -15,6 +15,7 @@ export type WorkspaceView =
   | "smart-fixes"
   | "duplicates"
   | "matcher"
+  | "organize"
   | "sync"
   | "analytics"
   | "changes"
@@ -147,6 +148,16 @@ const NAV_ITEMS: NavItem[] = [
         <circle cx="6.5" cy="6.5" r="4" />
         <path d="M9.5 9.5L13.5 13.5" />
         <path d="M4 6.5h5M6.5 4v5" />
+      </svg>
+    ),
+  },
+  {
+    id: "organize",
+    label: "Move & Rename",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <path d="M10 13h6m0 0-2-2m2 2-2 2" />
       </svg>
     ),
   },

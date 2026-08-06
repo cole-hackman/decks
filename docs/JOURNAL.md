@@ -1495,3 +1495,39 @@ properly, and the placement machinery is useful on its own today for anyone who 
 existing `stratum-dsp` chroma and novelty curves, with energy contrast separating drop from
 breakdown, and fade-out from low frequencies only. Evaluate against hand-placed cues on a
 genre-labelled fixture set, and report per-anchor accuracy rather than claiming a number.
+
+## 2026-08-06 — Session: Epic 4 part 1
+
+**Why the file organiser first, out of everything in Epic 4:** the pattern language is pure, fully
+specified by worked examples in the manual, and has no dependency on anything `decks` does not
+already have. It is the highest-confidence piece of a large epic, and the rest of the epic
+(watch folder, quick move, auto-move-on-done) all consume it. Building it first means the risky
+parts get to lean on something already tested.
+
+**The rule that shaped the design:** "if a field is empty the track still moves to the target
+folder, just without that subfolder level." Read past that and the obvious implementation — skip
+the track when a level cannot be resolved — silently orphans files in the incoming folder, which is
+exactly the failure a bulk mover must not have. Every level resolves to `Option<String>` and the
+`None`s are filtered out, not propagated.
+
+**Purity was worth the small awkwardness.** `plan_batch` takes `&dyn Fn(&Path) -> bool` as its
+existence oracle instead of calling `Path::exists` itself. It costs one parameter and buys unit
+tests for every collision case, including the subtle one: a file already sitting at its correct
+destination must not be pushed to `(2)` by its own existence.
+
+**A bug fell out of the work rather than being looked for.** Wiring `TrackRelocate` meant reading
+the applier's field allowlist, which is where `RelocateBanner`'s `field: "folder_path"` turned out
+to be rejected — the existing relocate flow staged changes that could never apply. Fixed here
+because the new change kind is exactly what it needed.
+
+**Deliberately not guessed:** `FileNameL`/`FileNameS` are well-known Rekordbox columns but are not
+modelled in this repo and there is no real fixture to check against. Rather than assume, the
+applier probes `PRAGMA table_info` and writes them if present. Feature detection, not a stub.
+
+**Also deliberate:** `ReleaseDecade` is not in the manual's table of special subfolder patterns —
+those are all date-of-run buckets. But a decade computed from *today* is the same string for every
+track in a run, so filing by release decade is the obviously intended use and it costs nothing.
+Recorded in GAPS rather than left as an undocumented divergence.
+
+**Next:** the rest of Epic 4. Watch folder and the incoming auto-advance flow are the natural
+follow-on, since they are what makes auto-move-on-done meaningful.

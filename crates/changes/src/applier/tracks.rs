@@ -164,6 +164,68 @@ pub(super) fn apply_delete(tx: &Transaction, change: &crate::StagedChange) -> an
     Ok(())
 }
 
+/// Columns that carry a track's filename alongside `FolderPath`.
+///
+/// Rekordbox 7 stores the full path in `FolderPath` and a denormalised copy of
+/// the filename in `FileNameL` / `FileNameS`. Only `FolderPath` is modelled and
+/// read by `decks`, so the filename columns are written **only if they exist**
+/// — detected per-database rather than assumed. Writing a column that is not
+/// there would fail the whole sync; leaving a stale filename behind would make
+/// Rekordbox display the old name next to the new path.
+const FILENAME_COLUMNS: &[&str] = &["FileNameL", "FileNameS"];
+
+fn has_column(tx: &Transaction, table: &str, column: &str) -> anyhow::Result<bool> {
+    let mut stmt = tx.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// `TrackRelocate`:
+/// - `target_id` = content (track) ID
+/// - `new_value` = `{ "folder_path": "…", "file_name": "…" }`
+///
+/// The move on disk has already happened — this is the database catching up.
+pub(super) fn apply_relocate(tx: &Transaction, change: &StagedChange) -> anyhow::Result<()> {
+    let target_id = change
+        .target_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing target_id"))?;
+    let new_value = change
+        .new_value
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing new_value"))?;
+    let folder_path = new_value
+        .get("folder_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Missing folder_path"))?;
+    let file_name = new_value.get("file_name").and_then(Value::as_str);
+
+    let rows = tx.execute(
+        "UPDATE djmdContent SET FolderPath = ? WHERE ID = ?",
+        params![folder_path, target_id],
+    )?;
+    if rows == 0 {
+        bail!("No rows updated (target_id {} not found)", target_id);
+    }
+
+    if let Some(file_name) = file_name {
+        for column in FILENAME_COLUMNS {
+            if has_column(tx, "djmdContent", column)? {
+                tx.execute(
+                    &format!("UPDATE djmdContent SET {column} = ? WHERE ID = ?"),
+                    params![file_name, target_id],
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn json_to_sql(v: &Value) -> anyhow::Result<rusqlite::types::Value> {
     Ok(match v {
         Value::String(s) => rusqlite::types::Value::Text(s.clone()),
@@ -462,5 +524,116 @@ mod tests {
         );
         // And the original value lands in the DB.
         assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("C\u{266D} Major"));
+    }
+
+    fn relocate_change(new_value: Value) -> StagedChange {
+        StagedChange {
+            id: "c".into(),
+            library_path: None,
+            kind: ChangeKind::TrackRelocate,
+            target_id: Some("t1".into()),
+            field: None,
+            old_value: None,
+            new_value: Some(new_value),
+            reason: None,
+            confidence: None,
+            status: ChangeStatus::Accepted,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn folder_path_for(tx: &Transaction, id: &str) -> Option<String> {
+        tx.query_row(
+            "SELECT FolderPath FROM djmdContent WHERE ID = ?",
+            params![id],
+            |r| r.get(0),
+        )
+        .ok()
+    }
+
+    #[test]
+    fn relocate_updates_the_folder_path() {
+        let mut conn = fixture();
+        conn.execute_batch("ALTER TABLE djmdContent ADD COLUMN FolderPath TEXT;")
+            .unwrap();
+        let tx = conn.transaction().unwrap();
+        apply_relocate(
+            &tx,
+            &relocate_change(serde_json::json!({
+                "folder_path": "/Music/House/A - B.mp3",
+                "file_name": "A - B.mp3",
+            })),
+        )
+        .unwrap();
+        assert_eq!(
+            folder_path_for(&tx, "t1").as_deref(),
+            Some("/Music/House/A - B.mp3")
+        );
+    }
+
+    #[test]
+    fn relocate_writes_the_filename_columns_when_the_database_has_them() {
+        let mut conn = fixture();
+        conn.execute_batch(
+            "ALTER TABLE djmdContent ADD COLUMN FolderPath TEXT;
+             ALTER TABLE djmdContent ADD COLUMN FileNameL TEXT;",
+        )
+        .unwrap();
+        let tx = conn.transaction().unwrap();
+        apply_relocate(
+            &tx,
+            &relocate_change(serde_json::json!({
+                "folder_path": "/Music/A - B.mp3",
+                "file_name": "A - B.mp3",
+            })),
+        )
+        .unwrap();
+        let name: String = tx
+            .query_row(
+                "SELECT FileNameL FROM djmdContent WHERE ID = 't1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "A - B.mp3");
+    }
+
+    #[test]
+    fn relocate_succeeds_on_a_database_without_the_filename_columns() {
+        // FileNameS is absent in this fixture; the relocate must not fail the
+        // whole sync over a column we only opportunistically write.
+        let mut conn = fixture();
+        conn.execute_batch("ALTER TABLE djmdContent ADD COLUMN FolderPath TEXT;")
+            .unwrap();
+        let tx = conn.transaction().unwrap();
+        assert!(apply_relocate(
+            &tx,
+            &relocate_change(serde_json::json!({
+                "folder_path": "/Music/A - B.mp3",
+                "file_name": "A - B.mp3",
+            })),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn relocating_an_unknown_track_is_an_error_rather_than_a_silent_no_op() {
+        let mut conn = fixture();
+        conn.execute_batch("ALTER TABLE djmdContent ADD COLUMN FolderPath TEXT;")
+            .unwrap();
+        let tx = conn.transaction().unwrap();
+        let mut change = relocate_change(serde_json::json!({ "folder_path": "/x.mp3" }));
+        change.target_id = Some("missing".into());
+        assert!(apply_relocate(&tx, &change).is_err());
+    }
+
+    #[test]
+    fn relocate_requires_a_folder_path() {
+        let mut conn = fixture();
+        conn.execute_batch("ALTER TABLE djmdContent ADD COLUMN FolderPath TEXT;")
+            .unwrap();
+        let tx = conn.transaction().unwrap();
+        assert!(apply_relocate(&tx, &relocate_change(serde_json::json!({}))).is_err());
     }
 }

@@ -373,3 +373,46 @@ export interface GeneratePreview {
   skipped: SkippedCue[];
   anchors: ResolvedAnchor[];
 }
+
+// ── File organiser (Epic 4) ──────────────────────────────────────────────────
+
+export type SubfolderPattern =
+  | { kind: "field"; name: string }
+  | { kind: "bitrate_bucket" }
+  | { kind: "first_tag" }
+  | { kind: "current_year" }
+  | { kind: "current_month" }
+  | { kind: "current_decade" }
+  | { kind: "release_decade" };
+
+export interface SubfolderSpec {
+  levels: SubfolderPattern[];
+}
+
+export interface OrganizeRequest {
+  /** Absent renames in place. */
+  target_folder?: string | null;
+  /** Absent keeps the existing filename. */
+  filename_pattern?: string | null;
+  subfolders: SubfolderSpec;
+}
+
+export interface OrganizeRow {
+  track_id: string;
+  source: string;
+  /** Null when the file is already where it belongs. */
+  destination: string | null;
+  title: string;
+  artist: string | null;
+}
+
+export interface OrganizeResult {
+  moved: string[];
+  failed: [string, string][];
+  staged: string[];
+}
+
+export interface PatternField {
+  name: string;
+  supported: boolean;
+}

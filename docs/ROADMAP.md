@@ -139,9 +139,10 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 [`07-health.md`](lexicon/07-health.md#find-tags--album-art).
 
 - [ ] Watch folder → Incoming, with auto-advance on `Selected done` and a hotkey
-- [ ] Rename pattern language: `%field%`, literals, `{}` optional segments
-- [ ] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
+- [x] Rename pattern language: `%field%`, literals, `{}` optional segments
+- [x] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
       current year/month/decade)
+- [x] Move & Rename over a selection, preview-then-apply, staging `TrackRelocate` per moved file
 - [ ] Quick move with favourited folders on hotkeys 1–9
 - [ ] Bulk Write Tags (ID3) with per-field selection
 - [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining

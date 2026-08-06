@@ -46,7 +46,11 @@ target folder is configured, nothing moves — but renaming still happens.
 field. `Genre` then `BPM` yields `…/Music/House/128/track.mp3`. **If a field is empty the track
 still moves to the target folder, just without that subfolder level** — no orphaning.
 
-*decks status* — **missing.**
+*decks status* — **partial.** `crates/file-organizer::subfolder` implements the three levels, the
+empty-level rule and all five special patterns; `OrganizeFilesView` (sidebar → Move & Rename) runs
+it over the selection with a full preview, and each move stages a `TrackRelocate` change. What is
+missing is the *auto* half — this runs on demand, not when an incoming track is marked done, because
+there is no watch folder yet.
 
 *Epic* — **4**.
 
@@ -63,6 +67,8 @@ still moves to the target folder, just without that subfolder level** — no orp
   `Daft Punk - Get Lucky ()` on a keyless track, while `%artist% - %title% {(%key%)}` yields
   `Daft Punk - Get Lucky`.
 - Optional segments compose: `%artist% - %title% {%key%}{|%bpm%}`.
+- Optional segments do **not** nest in `decks`; nesting is a parse error rather than a surprise.
+- Renders are trimmed, since a dropped segment usually strands its separator.
 
 *Field vocabulary* (verbatim from the manual, and identical to the Lexicon field list):
 `artist, title, albumTitle, label, remixer, mix, composer, producer, grouping, lyricist, comment,
@@ -79,7 +85,13 @@ trackNumber, energy, danceability, popularity, extra1, extra2`
 | Current month | Zero-padded `01`–`12` |
 | Current decade | A range, e.g. `1990 - 1999` |
 
-*decks status* — **missing.**
+`decks` adds one more, `Release decade`, for the decade of the track's own release year — see
+`GAPS.md` §Deliberate divergences.
+
+*decks status* — **done.** `crates/file-organizer::pattern` implements the language;
+`validate_pattern` and `pattern_fields` back the editor, which marks the fields `decks` cannot
+supply yet rather than rendering them blank. Illegal filename characters become `-`, and a render
+that is nothing but punctuation falls back to the original filename.
 
 *Epic* — **4**.
 

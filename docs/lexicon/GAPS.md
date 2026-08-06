@@ -30,6 +30,13 @@ cross-checked.
 The manual file contains the **Smartlists** section twice (once under Playlists, once under
 Playlist Tools) with identical text. Not a transcription error on our side.
 
+## Deliberate divergences
+
+| # | Divergence | Why |
+|---|---|---|
+| A | **`ReleaseDecade` subfolder pattern.** The manual's special-subfolder table lists only date-of-run buckets (current year / month / decade). `decks` also offers the decade of the track's *release* year. | A decade computed from today is the same string for every track in a run; filing a library by release decade is the obviously intended use, and it costs nothing. The manual's `1990 - 1999` example format is preserved. |
+| B | **`FileNameL` / `FileNameS` are written only when present.** Rekordbox stores a denormalised filename alongside `FolderPath`; `decks` does not model those columns and has no real fixture to verify them against. | The `TrackRelocate` applier probes `PRAGMA table_info` and writes them if the database has them. Assuming would fail the whole sync on a schema we have not seen; skipping would leave Rekordbox showing a stale filename. |
+
 ## Open questions for the project owner
 
 1. **Camelot vs Open Key.** Lexicon avoids Camelot for licensing reasons and ships Open Key.

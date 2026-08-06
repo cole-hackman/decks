@@ -29,6 +29,10 @@ import type {
   CueTemplate,
   CustomAnchorRule,
   GeneratePreview,
+  OrganizeRequest,
+  OrganizeResult,
+  OrganizeRow,
+  PatternField,
 } from "./types";
 import type {
   ChatMessage,
@@ -970,4 +974,33 @@ export async function suggestAnchorRules(
   trackId: string,
 ): Promise<CustomAnchorRule[]> {
   return invoke<CustomAnchorRule[]>("suggest_anchor_rules", { libraryPath, trackId });
+}
+
+// ── File organiser (Epic 4) ──────────────────────────────────────────────────
+
+export async function patternFields(): Promise<PatternField[]> {
+  return invoke<PatternField[]>("pattern_fields");
+}
+
+export async function validatePattern(pattern: string): Promise<string[]> {
+  return invoke<string[]>("validate_pattern", { pattern });
+}
+
+export async function previewOrganize(
+  libraryPath: string,
+  trackIds: string[],
+  request: OrganizeRequest,
+): Promise<OrganizeRow[]> {
+  return invoke<OrganizeRow[]>("preview_organize", {
+    libraryPath,
+    trackIds,
+    request,
+  });
+}
+
+export async function applyOrganize(
+  libraryPath: string,
+  rows: OrganizeRow[],
+): Promise<OrganizeResult> {
+  return invoke<OrganizeResult>("apply_organize", { libraryPath, rows });
 }

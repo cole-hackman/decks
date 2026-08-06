@@ -24,6 +24,7 @@ members = [
     "crates/track-matcher",
     "crates/smartlists",
     "crates/cue-generator",
+    "crates/file-organizer",
 ]
 
 [workspace.package]

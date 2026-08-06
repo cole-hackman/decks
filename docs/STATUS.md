@@ -1,5 +1,63 @@
 # Status
 
+## 2026-08-06 — Epic 4 (part 1): Move & Rename
+
+New `crates/file-organizer`, three pure layers with no filesystem access anywhere in the crate:
+
+**`pattern`** — the `%field%` template language. `%field%` interpolates, literal text passes
+through, and `{ … }` marks an optional segment that is emitted only when *every* field inside it
+has a value. That last construct is the whole point: `%artist% - %title% (%key%)` on a keyless
+track leaves `Daft Punk - Get Lucky ()`, while `{(%key%)}` leaves nothing behind. Renders are
+trimmed, because a dropped segment nearly always strands the space that separated it. Optional
+segments deliberately do not nest — one level covers every documented use, and rejecting nesting
+gives a clear error rather than a surprise. Every worked example from the manual is a test.
+
+**`subfolder`** — up to three nested levels, each independently optional, plus the computed
+patterns: bitrate as `320+`/`320-` buckets rather than raw numbers, first tag, current year, current
+month zero-padded, current decade as a range. **An empty field drops its level, not the move** — a
+track with no genre still lands in the target folder, one level shallower. Anything else orphans
+files. A missing bitrate drops the level rather than defaulting into `320-` and mislabelling a
+lossless file. Field values are sanitised per component, so `Drum & Bass / Jungle` is one folder
+and cannot invent a second level.
+
+**`plan`** — combines the two into destination paths, taking an existence oracle as an argument so
+collisions, no-op moves and empty renders are all unit-testable. Collisions suffix ` (2)`, both
+against the filesystem and against destinations claimed earlier in the same batch: two tracks can
+legitimately render to the same name, and overwriting one with the other destroys audio. A render
+containing nothing but punctuation falls back to the existing filename, so an untagged track never
+becomes `-.mp3`.
+
+**New `ChangeKind::TrackRelocate`.** Moving files is a filesystem operation; telling Rekordbox
+where they went is a staged change like everything else. The applier writes `FolderPath`, and
+writes `FileNameL`/`FileNameS` **only if the database has them** — detected per-database with
+`PRAGMA table_info` rather than assumed, since `decks` does not model those columns.
+
+This also fixes a live bug: `RelocateBanner` staged path updates as
+`TrackMetadataEdit { field: "folder_path" }`, which is not a `djmdContent` column and was rejected
+by the applier's allowlist — so relocations staged from the UI never actually applied. It now
+stages `TrackRelocate`. The frontend `ChangeKind` union was also missing `TrackDelete`,
+`TrackAddCue` and `TrackDeleteCue`; it now mirrors the Rust enum.
+
+Four Tauri commands in `src-tauri/src/organizer.rs`. `pattern_fields` returns the manual's full
+28-field vocabulary with a `supported` flag, so the editor can say "decks cannot fill remixer yet"
+instead of quietly rendering blanks. `preview_organize` plans without touching anything;
+`apply_organize` executes exactly the rows it is handed back, so what runs is what the user read.
+A file that cannot be moved fails alone — one locked file must not abandon the other 500.
+`fs::rename` falls back to copy-then-remove for cross-filesystem moves, which is the common case
+(downloads on the internal disk, library on an external one).
+
+New `OrganizeFilesView`, reachable from the sidebar as **Move & Rename**, acting on the selection
+or the whole library. Preview lists rows that would *not* change too, and the success toast says a
+sync is still needed — per the manual, a partial sync leaves the old locations behind.
+
+**What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move with favourite
+folders, bulk Write Tags with per-field selection, field mappings, enrichment (Find Tags & album
+art), Energy/Danceability, Beatshift Fixer, Find Unused Files, local path mappings, and the
+Automatic Actions settings group.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 301, typecheck, lint, `pnpm e2e` 13 — all green.
+
 ## 2026-08-06 — Epic 3 (part 1): cue templates and custom cue anchors
 New `crates/cue-generator`, split in two so detection can land later without touching the placement logic:
 

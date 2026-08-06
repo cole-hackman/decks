@@ -21,6 +21,12 @@ pub enum ChangeStatus {
 pub enum ChangeKind {
     TrackMetadataEdit,
     TrackDelete,
+    /// The file moved on disk; `master.db` needs to be told where it went.
+    /// Distinct from `TrackMetadataEdit` because it touches several columns at
+    /// once and because the filesystem move has already happened by the time
+    /// this is staged — a rejected relocate leaves the database pointing at a
+    /// file that is no longer there.
+    TrackRelocate,
     CueMetadataEdit,
     TrackAddCue,
     TrackDeleteCue,

@@ -129,6 +129,7 @@ fn apply_single(
     match change.kind {
         ChangeKind::TrackMetadataEdit => tracks::apply_metadata_edit(tx, change, options, warnings),
         ChangeKind::TrackDelete => tracks::apply_delete(tx, change),
+        ChangeKind::TrackRelocate => tracks::apply_relocate(tx, change),
         ChangeKind::TrackAddCue => cues::apply_add_cue(tx, change, options),
         ChangeKind::CueMetadataEdit => cues::apply_metadata_edit(tx, change),
         ChangeKind::TrackDeleteCue => cues::apply_delete_cue(tx, change),

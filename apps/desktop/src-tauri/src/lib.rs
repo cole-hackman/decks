@@ -2,6 +2,7 @@ mod audio;
 mod claude_agent;
 mod cue_generator;
 mod cues;
+mod organizer;
 mod smartlists;
 
 use std::collections::HashMap;
@@ -2583,6 +2584,10 @@ pub fn run() {
             cue_generator::preview_generated_cues,
             cue_generator::apply_generated_cues,
             cue_generator::suggest_anchor_rules,
+            organizer::pattern_fields,
+            organizer::validate_pattern,
+            organizer::preview_organize,
+            organizer::apply_organize,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,
