@@ -208,4 +208,46 @@ describe("TrackTable", () => {
     const keyCell = screen.getByText("8A");
     expect(keyCell).toHaveStyle({ color: "#9F4FCA" });
   });
+  it("marks only the keys that mix with the selected track", async () => {
+    // A positive mark only: an unmarked row means "not compatible or we cannot
+    // tell", and marking every non-match would drown the ones that are.
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+        compatibleWith={["8A"]}
+      />,
+      { wrapper },
+    );
+    // Fixture keys are 8A and 11B; only 8A mixes.
+    const marks = await screen.findAllByLabelText(
+      "mixes with the selected track",
+    );
+    expect(marks).toHaveLength(1);
+    expect(marks[0].parentElement?.textContent).toContain("8A");
+  });
+
+  it("marks nothing when there is no reference key", async () => {
+    // Better no indicator at all than one that marks the whole library.
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+        compatibleWith={[]}
+      />,
+      { wrapper },
+    );
+    await screen.findByText("Dark Matter");
+    expect(
+      screen.queryAllByLabelText("mixes with the selected track"),
+    ).toHaveLength(0);
+  });
 });

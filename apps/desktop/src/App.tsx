@@ -55,6 +55,7 @@ import {
   getTheme,
   listTagCategories,
   listTags,
+  keyCompatibility,
 } from "./ipc";
 import { useQuery } from "@tanstack/react-query";
 import type { Track } from "./types";
@@ -95,6 +96,10 @@ export default function App() {
   /** The Sidepanel: a second track browser, for building a set from two
    *  playlists at once. Per docs/lexicon/00-overview.md §Sidepanel. */
   const [sidepanelOpen, setSidepanelOpen] = useState(false);
+  /** Keys that mix out of the selected track, for the browser's indicator.
+   *  Follows the global Key Mixing Mode — the spec makes it one setting shared
+   *  between here and Mixable Tracks. */
+  const [compatibleWith, setCompatibleWith] = useState<string[]>([]);
   const [pendingAgentPrompt, setPendingAgentPrompt] = useState<string | null>(
     null,
   );
@@ -212,6 +217,26 @@ export default function App() {
       setCurrentView("organize");
     },
   });
+
+  useEffect(() => {
+    const key = selectedTrack?.musical_key;
+    if (!libraryPath || key == null || key === "") {
+      setCompatibleWith([]);
+      return;
+    }
+    let cancelled = false;
+    keyCompatibility(key)
+      .then((keys) => {
+        if (!cancelled) setCompatibleWith(Array.isArray(keys) ? keys : []);
+      })
+      // Best-effort: no indicator is better than a wrong one.
+      .catch(() => {
+        if (!cancelled) setCompatibleWith([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryPath, selectedTrack?.musical_key]);
 
   const handleSelectionChange = (ids: Set<string>) => {
     setSelectedTrackIds(ids);
@@ -568,6 +593,7 @@ export default function App() {
                 onSelect={handleTrackSelect}
                 onTrackContextMenu={handleTrackContextMenu}
                 tagLabelById={tagLabelById}
+                compatibleWith={compatibleWith}
               />
             </>
           )}

@@ -163,6 +163,16 @@ pub async fn find_mixable_tracks(
     .map_err(|e| e.to_string())?
 }
 
+/// The keys that mix out of one key, under the stored Key Mixing Mode.
+///
+/// The browser's compatible-key indicator. The spec makes the mode a single
+/// global shared with Mixable Tracks, so both read it from the same place
+/// rather than each carrying their own.
+#[tauri::command]
+pub fn key_compatibility(app: tauri::AppHandle, key: String) -> Result<Vec<String>, String> {
+    Ok(compatible_keys(&key, stored_key_mixing_mode(&app)))
+}
+
 // ── Templates ────────────────────────────────────────────────────────────────
 
 #[tauri::command]

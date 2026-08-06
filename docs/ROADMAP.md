@@ -103,7 +103,8 @@ Turns `decks` from a viewer into an editor, and is a hard prerequisite for Epic 
 - [ ] Cue Destination round-trip: hidden merged memory cues restored on sync
 - [x] Action Center (`Cmd/Ctrl+Space`)
 - [ ] Find Popup (`Cmd/Ctrl+F`)
-- [ ] Compatible-key indicator in the browser
+- [x] Compatible-key indicator in the browser — a dot on keys that mix out of the selected track,
+      reading the same global Key Mixing Mode as Mixable Tracks (Epic 6)
 
 **Acceptance:** load a track, place and colour cues by keyboard alone, turn one into an active loop,
 nudge the beatgrid and watch on-grid cues follow, sync to Rekordbox, verify in Rekordbox.

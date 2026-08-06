@@ -2318,6 +2318,18 @@ a promise about muscle memory (favourites). A snapshot is a different kind of ta
 Absence is not a value (the timeline). Six of those are the same instinct wearing different
 clothes: **say what you actually know, and nothing more.**
 
+## 2026-08-06 — compatible-key indicator
+
+**Delete unreachable code, then bring it back when it has a caller.** I wrote `key_compatibility`
+during Mixable Tracks, found nothing called it, and removed it — the epic had just opened by fixing
+exactly that problem in `score_transition`, so shipping a fresh one would have been absurd. It
+returns now with a consumer. The rule holds in both directions: no unreachable commands, and no
+reimplementing something you deleted for the right reason.
+
+**An indicator should mark the signal, not the noise.** Marking incompatible keys too would be
+"more informative" and completely useless — most rows are incompatible. One dot on the ones that
+work is the whole feature.
+
 **Next:** Epic 7 — streaming. Beatport / Beatsource / Tidal / SoundCloud sources, the Beatport
 catalog and cart, Charts, Store Links, Track Discovery, Send To, Transfer Streaming To Local. All
 of it needs network access and accounts, so the first question is which parts can exist at all

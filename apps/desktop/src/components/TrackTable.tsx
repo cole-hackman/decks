@@ -17,7 +17,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { EmptyState } from "./EmptyState";
 import { ErrorPanel } from "./ErrorPanel";
 import { applyFilters, type FilterContext, type Filters } from "../lib/filters";
-import { colorForKey } from "../lib/camelot";
+import { colorForKey, toCamelot } from "../lib/camelot";
 import { EnergyBar } from "./EnergyBar";
 import type { Track } from "../types";
 
@@ -29,6 +29,10 @@ function buildColumns(
   tagsByTrack: Map<string, Set<string>>,
   tagLabelById: Record<string, string>,
   showTagsColumn: boolean,
+  /** Camelot codes that mix out of the reference track, under the global Key
+   *  Mixing Mode. Empty when there is no reference or its key is unreadable —
+   *  in which case no row is marked, rather than every row being marked. */
+  compatibleKeys: Set<string>,
 ): ColumnDef<Track>[] {
   const cols: ColumnDef<Track>[] = [
     {
@@ -64,9 +68,26 @@ function buildColumns(
         const value = info.getValue<string | null>();
         if (value == null || value === "") return "—";
         const color = colorForKey(value);
+        const camelot = toCamelot(value);
+        // Only ever a *positive* mark. An unmarked row means "not compatible
+        // or we cannot tell", and those are not worth distinguishing at a
+        // glance; marking every non-match would drown the ones that are.
+        const mixes =
+          compatibleKeys.size > 0 &&
+          camelot != null &&
+          compatibleKeys.has(camelot);
         return (
-          <span style={color ? { color } : undefined} className="font-mono">
+          <span
+            style={color ? { color } : undefined}
+            className="font-mono"
+            title={mixes ? "Mixes with the selected track" : undefined}
+          >
             {value}
+            {mixes && (
+              <span className="ml-0.5 text-accent" aria-label="mixes with the selected track">
+                •
+              </span>
+            )}
           </span>
         );
       },
@@ -176,6 +197,10 @@ interface Props {
   onSelectionChange: (ids: Set<string>) => void;
   onSelect: (track: Track) => void;
   onTrackContextMenu?: (track: Track, anchor: { x: number; y: number }) => void;
+  /** Camelot codes that mix out of a reference track, for the compatible-key
+   *  indicator. Per `docs/lexicon/04-analysis.md §Mixable Tracks`, the set
+   *  follows the global Key Mixing Mode. */
+  compatibleWith?: string[];
   tracksOverride?: Track[];
   /** Lookup table from tag-id → display label, used by the inline Tags column. */
   tagLabelById?: Record<string, string>;
@@ -189,6 +214,7 @@ export function TrackTable({
   onSelectionChange,
   onSelect,
   onTrackContextMenu,
+  compatibleWith,
   tracksOverride,
   tagLabelById,
 }: Props) {
@@ -209,9 +235,20 @@ export function TrackTable({
   }, [fetchedTracks, filters, filterCtx, tracksOverride]);
 
   const showTagsColumn = filterCtx.tagsByTrack.size > 0;
+  const compatibleKeys = useMemo(
+    () => new Set(compatibleWith ?? []),
+    [compatibleWith],
+  );
+
   const columns = useMemo(
-    () => buildColumns(filterCtx.tagsByTrack, tagLabelById ?? {}, showTagsColumn),
-    [filterCtx.tagsByTrack, tagLabelById, showTagsColumn],
+    () =>
+      buildColumns(
+        filterCtx.tagsByTrack,
+        tagLabelById ?? {},
+        showTagsColumn,
+        compatibleKeys,
+      ),
+    [filterCtx.tagsByTrack, tagLabelById, showTagsColumn, compatibleKeys],
   );
 
   const table = useReactTable({

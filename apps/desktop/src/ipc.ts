@@ -1526,6 +1526,11 @@ export async function mixableDefaultOptions(): Promise<MixableOptions> {
   return invoke<MixableOptions>("mixable_default_options");
 }
 
+/** The keys that mix out of `key`, under the global Key Mixing Mode. */
+export async function keyCompatibility(key: string): Promise<string[]> {
+  return invoke<string[]>("key_compatibility", { key });
+}
+
 export async function getKeyMixingMode(): Promise<KeyMixingMode> {
   return invoke<KeyMixingMode>("get_key_mixing_mode");
 }

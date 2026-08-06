@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 5 | 6 | 1 | 11 |
-| Library & browser | 8 | 6 | 3 | 0 |
+| Library & browser | 9 | 6 | 2 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 |
 | History & backup | 3 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **44** | **34** | **14** | **16** |
+| **Total** | **45** | **34** | **13** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -60,7 +60,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Key-notation-aware search | **partial** | `canonical_key` handles Camelot / Open Key / musical spellings in smartlist rules; not yet wired into the browser search box | 1 |
 | Spreadsheet keyboard navigation | **missing** | | 2 |
 | Inline per-row waveform preview | **missing** | | 2 |
-| Compatible-key indicator | **missing** | | 2 |
+| Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |
 | Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |
 | Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |
 | Playlists tree | partial | No folder-drop, no M3U import, no drag-between, no create-from-selection | 6 |

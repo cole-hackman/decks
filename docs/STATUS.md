@@ -1,5 +1,26 @@
 # Status
 
+## 2026-08-06 — compatible-key indicator (Epic 2 loose end)
+
+The spec describes the Key Mixing Mode as one global setting shared between Mixable Tracks and
+**the track browser's compatible-key indicator**. Epic 6 built the setting and the first half; this
+is the second. Select a track and the keys that mix out of it get a dot.
+
+Two decisions:
+
+- **A positive mark only.** An unmarked row means "not compatible *or* we cannot tell", and those
+  are not worth distinguishing at a glance — marking every non-match would drown the ones that are.
+- **No reference key means no marks**, not marks on everything. Better no indicator than one that
+  highlights the library.
+
+This also gives `mixable::key_compatibility` a caller. I wrote it during the Mixable Tracks slice,
+noticed nothing called it, and deleted it rather than ship an unreachable command — the same
+"stranded capability" problem the epic opened by fixing. It comes back now because there is
+something to reach it.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 591, typecheck, lint, `pnpm e2e` 46 — all green.
+
 ## 2026-08-06 — Epic 6 (part 9): sidepanel — and Epic 6 closes
 
 A **second track browser** on the right, resizable, toggled from the header or by `Cmd/Ctrl+\`.
