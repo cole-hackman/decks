@@ -207,7 +207,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       Danceability / Happiness) need fields `Track` does not carry — same gap as label/mix/remixer
 - [x] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing, global, with the
       compatible-key set surfaced in the panel
-- [ ] Track Timeline (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
+- [x] Track Timeline — BPM / Energy / Rating / Key, coloured by key or **BPM change**; hidden past
+      200 tracks; also renders for history sets. Danceability / Popularity / Happiness are not
+      modelled (Epic 4) (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
       BPM-change bar colouring)
 - [x] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order** — all five, in a
       Playlist Tools view. Sort needed a new `ChangeKind::PlaylistReorder` (writes

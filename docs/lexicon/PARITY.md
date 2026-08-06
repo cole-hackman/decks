@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 5 | 6 | 1 | 11 |
-| Library & browser | 6 | 6 | 4 | 0 |
+| Library & browser | 7 | 6 | 3 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 |
 | History & backup | 3 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **42** | **34** | **15** | **16** |
+| **Total** | **43** | **34** | **14** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -61,7 +61,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Spreadsheet keyboard navigation | **missing** | | 2 |
 | Inline per-row waveform preview | **missing** | | 2 |
 | Compatible-key indicator | **missing** | | 2 |
-| Track Timeline | **missing** | | 6 |
+| Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |
 | Playlists tree | partial | No folder-drop, no M3U import, no drag-between, no create-from-selection | 6 |
 | Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeftIcon } from "lucide-react";
 import { usePlaylistDetail, usePlaylists } from "../hooks/usePlaylists";
 import { findDuplicates } from "../lib/playlist-dedupe";
+import { TrackTimeline } from "./TrackTimeline";
 import type { Playlist, Track } from "../types";
 
 function formatDuration(secs: number | null): string {
@@ -287,13 +288,23 @@ export function PlaylistPanel({
             <p className="mt-2 text-sm text-ink-muted">No tracks in this playlist.</p>
           </div>
         ) : (
-          <PlaylistTrackList
-            tracks={detail.tracks}
-            playlistId={detail.playlist.id}
-            selectedTrackId={selectedTrackId ?? null}
-            onSelectTrack={onSelectTrack}
-            onTrackContextMenu={onTrackContextMenu}
-          />
+          <>
+            <TrackTimeline
+              tracks={detail.tracks}
+              label={detail.playlist.name}
+              onSelectTrack={(id: string) => {
+                const found = detail.tracks.find((t) => t.id === id);
+                if (found) onSelectTrack?.(found);
+              }}
+            />
+            <PlaylistTrackList
+              tracks={detail.tracks}
+              playlistId={detail.playlist.id}
+              selectedTrackId={selectedTrackId ?? null}
+              onSelectTrack={onSelectTrack}
+              onTrackContextMenu={onTrackContextMenu}
+            />
+          </>
         )}
       </div>
     </div>
@@ -405,7 +416,7 @@ function PlaylistTrackList({
 }) {
   const dupes = findDuplicates(tracks);
   return (
-    <div>
+    <div data-testid="playlist-track-list">
       <div className="border-b border-edge bg-base px-4 py-2.5">
         <p className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-muted">
           <span>

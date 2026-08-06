@@ -132,7 +132,10 @@ async function pickTool(name: string) {
 describe("PlaylistToolsView", () => {
   it("lists playlists but not folders in the picker", async () => {
     renderView();
-    const picker = await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
+    const picker = screen.getByTestId("playlist-picker");
     expect(picker).toHaveTextContent("Warmup");
     expect(picker).toHaveTextContent("Peak");
     // Folders are not things you merge or rename with a prefix.
@@ -141,7 +144,9 @@ describe("PlaylistToolsView", () => {
 
   it("merge needs two playlists and reports the duplicates it dropped", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     expect(screen.getByRole("button", { name: "Preview merge" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup" }));
@@ -156,7 +161,9 @@ describe("PlaylistToolsView", () => {
 
   it("merge will not stage without a name", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Peak" }));
     await userEvent.click(screen.getByRole("button", { name: "Preview merge" }));
@@ -179,7 +186,9 @@ describe("PlaylistToolsView", () => {
     // A preview computed from a different selection is a wrong answer that
     // still looks like an answer.
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Peak" }));
     await userEvent.click(screen.getByRole("button", { name: "Preview merge" }));
@@ -232,7 +241,9 @@ describe("PlaylistToolsView", () => {
 
   it("cross reference reports the match count against what it weighed", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Cross Reference");
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("button", { name: "Run cross reference" }));
@@ -243,7 +254,9 @@ describe("PlaylistToolsView", () => {
 
   it("prefix numbering is hidden until asked for and follows tick order", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Prefix");
     expect(screen.queryByTestId("numbering")).not.toBeInTheDocument();
 
@@ -266,7 +279,9 @@ describe("PlaylistToolsView", () => {
   it("prefix says so when every name is already right", async () => {
     vi.mocked(previewPlaylistPrefix).mockResolvedValue([]);
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Prefix");
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("button", { name: "Preview names" }));
@@ -280,7 +295,9 @@ describe("PlaylistToolsView", () => {
 
   it("rewrite order sorts by the chosen field before asking the backend", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Rewrite Order");
     await userEvent.click(screen.getByRole("radio", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("button", { name: "Preview order" }));
@@ -297,7 +314,9 @@ describe("PlaylistToolsView", () => {
 
   it("rewrite order sorts tracks with no value last in either direction", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Rewrite Order");
     await userEvent.click(screen.getByRole("radio", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("checkbox", { name: "Descending" }));
@@ -323,7 +342,9 @@ describe("PlaylistToolsView", () => {
       unchanged: false,
     });
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Rewrite Order");
     await userEvent.click(screen.getByRole("radio", { name: "Warmup" }));
     await userEvent.click(screen.getByRole("button", { name: "Preview order" }));
@@ -365,7 +386,9 @@ describe("PlaylistToolsView", () => {
 
   it("occurrence hides the playlist picker — it asks about tracks", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Occurrence");
     expect(screen.queryByTestId("playlist-picker")).not.toBeInTheDocument();
   });
@@ -382,7 +405,9 @@ describe("PlaylistToolsView", () => {
   });
   it("favourites: starring shows the hotkey position it took", async () => {
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Favourites");
 
     const toggles = await screen.findByTestId("favourite-toggles");
@@ -412,7 +437,9 @@ describe("PlaylistToolsView", () => {
       })),
     );
     renderView();
-    await screen.findByTestId("playlist-picker");
+    // Wait for a row only the loaded list can render — the <ul> itself is
+    // there before the data arrives, so waiting on it is a race.
+    await screen.findByRole("checkbox", { name: "Warmup" });
     await pickTool("Favourites");
 
     expect(await screen.findByTestId("favourites-full")).toHaveTextContent(

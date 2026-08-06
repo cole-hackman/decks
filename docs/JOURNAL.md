@@ -2262,6 +2262,39 @@ to update. Validate first, write last.
 
 **Next in Epic 6:** Track Timeline and the sidepanel.
 
+## 2026-08-06 — Epic 6 (part 8): track timeline
+
+**Scale to the data, not to the domain.** A BPM axis of 60–200 is "correct" and useless: a warm-up
+that moves 118→124 renders as six identical bars. Scaling within the set is what makes the chart
+show anything. The general form: a visualisation's range should come from what is in it.
+
+**Absence is not a value.** Three separate places wanted this: a missing tempo is `unknown` not
+`same`, an unreadable key is `null` not "does not mix", and a track with no metric gets a labelled
+stub rather than a zero-height bar. Every one of them would otherwise render as a confident claim
+the data does not support.
+
+**Round to what a human can perceive.** 128.00 → 128.04 is not a tempo change, and colouring it red
+teaches people to ignore the colour. Comparisons that drive a visual signal need a threshold set by
+perception, not by float equality.
+
+**Colour is never the only channel.** The bars carry their value and direction in the hover label,
+because a colour-only chart is unreadable to a chunk of users and unreadable to everyone in a dark
+booth.
+
+**I relearned an old lesson at the cost of a red check.** Three tests waited on
+`findByTestId("playlist-picker")` — the container `<ul>`, which renders before the data arrives.
+Locally the promise resolved first and they passed; CI is slower and they did not. The journal
+already says *wait on something only the thing you are asserting about renders*, from
+`FieldMappingsSection`. A container with a `data-testid` is exactly the shape that looks like a
+valid wait and is not: **if the element exists in the loading state, it is not a wait.**
+
+**A new component can break an old test by being correct.** Adding the timeline gave every track a
+second button whose label starts with the title, so `getByRole("button", {name: /Dark Matter/})`
+became ambiguous. Scoping the query to the row list was the fix — the ambiguity was real, and the
+old test had simply been relying on there being only one match.
+
+**Next in Epic 6:** the sidepanel.
+
 ## 2026-08-06 — Epic 6 (part 5): key leading-zero option
 
 **Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a

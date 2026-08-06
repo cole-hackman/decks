@@ -62,7 +62,23 @@ good idea for reading set flow at a glance.
 *Large playlists* — hidden by default beyond a size threshold, since it's a set-building tool, not
 a collection tool. Also appears for history sets.
 
-*decks status* — **missing.**
+*decks status* — **done**, minus the fields we do not model. A chart above the playlist tracks —
+and above a history set, per the spec — showing **BPM, Energy, Rating or Key**, with bars coloured
+by **key** or by **BPM change** (green rose, red fell, grey held).
+
+- **Heights scale within the set**, not against an absolute range: a warm-up running 118–124 shows
+  its shape rather than six flat bars near the bottom of a 60–200 axis.
+- **A missing tempo is `unknown`, not `same`.** "Unchanged" is a claim about two numbers; painting
+  an absence grey would read as information the chart does not have.
+- **A hover label carries the value and the direction**, so colour is never the only way to read
+  the chart.
+- **Hidden by default past 200 tracks**, per the spec's reasoning: a set-building tool, not a
+  collection tool. Still available on request.
+- It also counts **key changes that leave the wheel**, which is the fastest way to spot the one
+  transition that will not work.
+
+**Not offered:** Danceability, Popularity and Happiness — `Track` does not carry them (Epic 4).
+Absent beats a flat empty chart.
 
 *Epic* — **6**.
 

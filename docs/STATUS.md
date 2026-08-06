@@ -1,5 +1,39 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 8): track timeline
+
+A chart above the playlist tracks — and above a history set, per the spec — showing how a set
+flows: **BPM, Energy, Rating or Key**, with bars coloured by key or by **BPM change**. The
+BPM-change mode is the one the spec is right about: green rose, red fell, grey held, and you read
+the arc of a set in a second.
+
+Decisions, each tested:
+
+- **Heights scale within the set**, not against an absolute range. A warm-up running 118–124 should
+  show its shape, not six flat bars near the bottom of a 60–200 axis. An all-identical set gets
+  full-height bars rather than a divide-by-zero.
+- **A missing tempo is `unknown`, not `same`.** "Unchanged" is a claim about two numbers; painting
+  an absence grey would read as information the chart does not have.
+- **Differences a DJ would not hear are `same`.** Rounded to a tenth, so 128.00 → 128.04 is not a
+  red bar. A colour change for 0.04 BPM is noise dressed as signal.
+- **The hover label carries the value and the direction**, so colour is never the only way to read
+  the chart — and a track with no value says *which* value is missing rather than leaving a gap.
+- **Key compatibility is `null`, not `false`, when a key is unreadable.** "These do not mix" and
+  "we cannot tell" are different claims.
+- **Hidden by default past 200 tracks**, per the spec: it is a set-building tool, not a collection
+  tool. Still available on request.
+
+**Not offered:** Danceability, Popularity, Happiness — `Track` does not carry them (Epic 4).
+
+Also fixes a **CI-only test failure** on `7029a8d`: three `PlaylistToolsView` tests waited on
+`findByTestId("playlist-picker")`, but that `<ul>` renders *before* `listPlaylists` resolves. Local
+runs won the race; CI did not. They now wait on a playlist row, which only the loaded list can
+produce. This is the same lesson already in the journal from `FieldMappingsSection` — wait on
+something only the thing you are asserting about renders — and it cost a red check to relearn.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 589, typecheck, lint, `pnpm e2e` 43 — all green.
+
 ## 2026-08-06 — Epic 6 (part 7): play history
 
 The gig log. **History** in the sidebar imports every session Rekordbox has logged, from

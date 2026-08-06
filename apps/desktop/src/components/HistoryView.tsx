@@ -11,6 +11,7 @@ import {
 } from "../ipc";
 import { useToast } from "./Toast";
 import { useDialog } from "../hooks/useDialog";
+import { TrackTimeline } from "./TrackTimeline";
 import type {
   HistoryMatchReport,
   HistorySet,
@@ -294,7 +295,21 @@ export function HistoryView({ libraryPath }: Props) {
               </button>
             </div>
 
-            <p className="mb-2 text-[11px] text-muted">
+            {/* The spec: the timeline "also appears for history sets" — and a
+                gig log is exactly where reading the shape of a set matters. */}
+            <TrackTimeline
+              tracks={tracks.map((t) => ({
+                id: t.id,
+                title: t.title,
+                artist: t.artist,
+                musical_key: t.musical_key,
+                bpm: t.bpm,
+                rating: null,
+                energy: null,
+              }))}
+            />
+
+            <p className="mb-2 mt-2 text-[11px] text-muted">
               {/* The snapshot rule, said out loud — it explains why a row here
                   can differ from the library. */}
               This is what the tracks looked like when you played them. Editing
