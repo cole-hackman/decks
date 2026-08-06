@@ -20,12 +20,12 @@ regardless of how much of Lexicon they represent.
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
-| Health | 0 | 3 | 2 | 0 |
+| Health | 1 | 3 | 1 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **29** | **40** | **21** | **16** |
+| **Total** | **30** | **40** | **20** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -137,7 +137,7 @@ of library *editing*, *automation*, or *set preparation*.
 |---|---|---|---|
 | Find Duplicates | partial | 3 strategies + keep-one archive already. Missing duration bounds, interruptible scan, preselection, bulk Prefer, review step, **playlist re-pointing**, manual merge | 5 |
 | Find Lost Tracks / Relocate | partial | Fuzzy filename+size. Missing prefix rewriting, all-tracks mode, extension change, merge-with-existing, pre-change backup | 5 |
-| Find Broken Tracks | **missing** | We check existence, never decodability | 5 |
+| Find Broken Tracks | **done** | Real decode check, two depths, per-playlist report. Deleting from disk deliberately not offered | 5 |
 | Find Tags & Album Art | **missing** | `crates/enrichment` is a 10-line stub | 4 |
 
 ## Recipes & editing — `10-recipes.md`

@@ -1894,5 +1894,33 @@ nothing about the screen says so.
 anywhere, so this would not be "finish the editor", it would be "add album art and then put it in
 the editor". Recorded in the spec as a named omission rather than a silent gap.
 
+**The first version of the decode check passed a truncated file, and that was the interesting
+part.** Decoding every packet catches corruption in MP3 or FLAC, where a broken frame is a broken
+frame. Raw PCM has no framing at all — a half-downloaded WAV decodes perfectly and simply ends
+early, and there is nothing in the stream to object to. The signal had to come from outside the
+stream: compare frames decoded against the frame count the *header declares*. A 1% tolerance covers
+encoder padding, and the check now works for formats that would not have complained either way.
+Worth keeping: "decode it and see" is not a complete definition of "does this file work".
+
+**Two depths, named in the UI rather than chosen for the user.** A header check is fast and misses
+late corruption; a full decode catches truncation and costs an analysis per track. Either default
+is wrong for somebody, and hiding which one ran would make a clean result meaningless. The panel
+says what the current depth will and will not catch, in a sentence, before the scan runs.
+
+**Named outcomes beat a boolean.** `Missing`, `Unreadable`, `Undecodable`, `Truncated`,
+`Damaged { bad_packets }` — because relocating a missing file, re-downloading a truncated one and
+replacing a glitchy one are three different jobs, and "broken: yes" tells the user to go and find
+out which.
+
+**The deletion the spec offers is the one thing not built.** Removing audio from disk has no undo,
+and a program whose first rule is that the library is read-only should not be the thing that
+deletes a DJ's files. Removing a *track* is still available and still goes through review and the
+write guard. Recorded as a divergence with the reason attached, not left as an unimplemented row.
+
+**A hand-built WAV made the whole thing testable.** `fixtures/audio/` is gitignored by design, so a
+decode check that only ran against real audio could not be tested at all. Forty-four bytes of RIFF
+header plus PCM gives a genuine pass, a genuine no-audio case, and — truncated — a genuine failure.
+Cheaper than a fixture and it cannot go stale.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

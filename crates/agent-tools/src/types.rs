@@ -67,6 +67,15 @@ pub enum ToolRequest {
         library_path: String,
         id: String,
     },
+    /// Scan for files that do not decode — the check the existing
+    /// `health_broken_link_scan` does not do. `full` decodes every file and
+    /// costs about what analysing it costs; `header` is fast and misses
+    /// corruption late in a file.
+    HealthPlayableScan {
+        library_path: String,
+        #[serde(default)]
+        depth: Option<String>,
+    },
     /// Sync runs recorded for a library, newest first, with how much of each
     /// can be put back.
     UndoList {

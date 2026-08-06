@@ -254,6 +254,26 @@ pub fn tool_definitions() -> Vec<Value> {
             ),
         ),
         tool_definition(
+            "health_playable_scan",
+            "Scan for audio files that do not decode — truncated downloads, wrong-format files, \
+             unsupported codecs. Unlike health_broken_link_scan this is not just an existence \
+             check. depth: 'header' (default, fast) or 'full' (decodes every file, catches \
+             truncation, slow). Reports only; deletes nothing.",
+            object_schema(
+                &[
+                    (
+                        "library_path",
+                        string_schema("Path to the Rekordbox master.db file."),
+                    ),
+                    (
+                        "depth",
+                        string_schema("'header' (default) or 'full'."),
+                    ),
+                ],
+                &["library_path"],
+            ),
+        ),
+        tool_definition(
             "undo_list",
             "List Sync runs recorded for a library, newest first, with how many changes of each \
              can be reversed and how many cannot.",
@@ -441,6 +461,10 @@ pub fn tool_request_from_name_and_arguments(name: &str, arguments: Value) -> Res
                 limit: optional_usize(arguments, "limit")?,
             })
         }
+        "health_playable_scan" | "health.playable_scan" => Ok(ToolRequest::HealthPlayableScan {
+            library_path: required_string(arguments, "library_path")?,
+            depth: optional_string(arguments, "depth")?,
+        }),
         "undo_list" | "undo.list" => Ok(ToolRequest::UndoList {
             library_path: required_string(arguments, "library_path")?,
         }),
@@ -795,6 +819,23 @@ mod tests {
             .as_str()
             .expect("message")
             .contains("Unknown tool"));
+    }
+
+    #[test]
+    fn the_playable_scan_defaults_to_the_cheap_depth() {
+        // An agent asking for "broken tracks" must not silently spend an hour
+        // decoding a library, so depth is optional and defaults to header.
+        assert_eq!(
+            crate::mcp::tool_request_from_name_and_arguments(
+                "health_playable_scan",
+                serde_json::json!({ "library_path": "/tmp/master.db" }),
+            )
+            .expect("parsed"),
+            crate::ToolRequest::HealthPlayableScan {
+                library_path: "/tmp/master.db".into(),
+                depth: None,
+            }
+        );
     }
 
     #[test]

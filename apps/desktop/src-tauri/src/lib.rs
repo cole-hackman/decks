@@ -1,5 +1,6 @@
 mod audio;
 mod automation;
+mod broken;
 mod claude_agent;
 mod csv_import;
 mod cue_generator;
@@ -2753,6 +2754,9 @@ pub fn run() {
             multi_edit::multi_edit_fields,
             multi_edit::multi_edit_form,
             multi_edit::multi_edit_apply,
+            broken::scan_broken_tracks,
+            broken::broken_tracks_report,
+            broken::save_broken_tracks_report,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

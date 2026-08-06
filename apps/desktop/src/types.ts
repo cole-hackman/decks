@@ -810,3 +810,34 @@ export interface MultiEdit {
   field: string;
   value: string | null;
 }
+
+// ── Find Broken Tracks (Epic 5) ──────────────────────────────────────────────
+// Mirrors `audio_analysis::playable`. See docs/lexicon/07-health.md.
+
+/** `header` is fast and misses late corruption; `full` decodes everything. */
+export type CheckDepth = "header" | "full";
+
+export type PlaybackStatus =
+  | { kind: "ok" }
+  | { kind: "missing" }
+  | { kind: "unreadable"; detail: string }
+  | { kind: "undecodable"; detail: string }
+  | { kind: "truncated"; detail: string }
+  | { kind: "damaged"; detail: { bad_packets: number } };
+
+export interface BrokenTrack {
+  track_id: string;
+  title: string;
+  artist: string | null;
+  path: string;
+  status: PlaybackStatus;
+  /** Playlists holding this track — what makes sourcing a replacement possible. */
+  playlists: string[];
+}
+
+export interface BrokenScan {
+  broken: BrokenTrack[];
+  checked: number;
+  /** Tracks with no file path at all: nothing to check, and not a failure. */
+  no_path: number;
+}

@@ -101,8 +101,41 @@ exported without deleting anything.
 *Aftermath* — the DJ app still holds links to the deleted files; the manual tells users to let the
 app prune them or to wipe and re-import.
 
-*decks status* — **missing.** `decks` has a broken-link scan that checks existence, but nothing
-verifies the file actually decodes.
+*decks status* — **done, with two deliberate divergences.** `audio_analysis::playable` decodes the
+file rather than stat-ing it, reachable from **Audit → Find Broken Tracks** and exposed as
+`health_playable_scan` through `crates/agent-tools`.
+
+**Two depths, because the honest ones cost different amounts** and the UI names the trade rather
+than picking silently:
+
+- **Header** probes the container and builds a decoder. Fast; catches wrong-format files
+  (the `.mp3` that is really an HTML error page), unsupported codecs, and empty files. It does
+  **not** catch a file that is fine until the last ten seconds.
+- **Full** decodes every packet and discards the audio. This catches truncation — the common real
+  case — and costs roughly what analysing the track costs.
+
+Outcomes are named rather than boolean: `Missing`, `Unreadable`, `Undecodable`, `Truncated`,
+`Damaged { bad_packets }`. Deleting a file that is absent is a different fix from replacing one
+that is corrupt, and a track that plays with glitches is a third thing again.
+
+**Truncation needed a second signal.** Raw PCM has no framing to fail on, so a half-downloaded WAV
+decodes cleanly and simply ends early. The check therefore compares frames decoded against the
+frame count the header declares, with a 1% tolerance for encoder padding — which also makes
+truncation detectable in formats where the stream itself would not complain.
+
+Divergences:
+
+- **Nothing is deleted.** The spec optionally removes broken files from the library, from playlists
+  and from disk. `decks` reports; removing a track is `stage_track_delete`, reviewed and applied by
+  Sync under the write guard. Deleting audio from disk is not offered at all — it is the one
+  operation with no undo, and this program's entire posture is that the user reviews first.
+- **The report is saved where the user chooses**, not to `Documents/Lexicon`. Writing into a
+  directory nobody asked for is the sort of thing that makes a tool feel like it is taking
+  liberties. Each entry still names **which playlists held the track**, which is the whole reason
+  the report exists.
+
+Paths resolve through local path mappings first, so a library restored on a second machine is not
+reported as four thousand missing files.
 
 *Epic* — **5**.
 

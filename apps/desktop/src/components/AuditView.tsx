@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useStagedChanges } from "../hooks/useStagedChanges";
+import { BrokenTracksPanel } from "./BrokenTracksPanel";
 
 interface Props {
   libraryPath: string;
@@ -158,6 +159,10 @@ export function AuditView({
               </button>
             </article>
           ))}
+        </div>
+
+        <div className="mt-8">
+          <BrokenTracksPanel libraryPath={libraryPath} />
         </div>
 
         <p className="mt-8 text-[11px] uppercase tracking-wider text-ink-faint">

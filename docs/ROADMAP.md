@@ -182,7 +182,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 - [ ] Duplicates: duration bounds, interruptible scan, preselection, bulk Prefer, review step,
       **playlist re-pointing to the keeper**, manual merge
 - [ ] Relocate: prefix rewriting, all-tracks mode, extension change, merge-with-existing, backup
-- [ ] Find Broken Tracks (decode check, not existence check)
+- [x] Find Broken Tracks — real decode check at two depths, with a per-playlist report. Deleting
+      audio from disk is deliberately not offered; removing a track stays a staged change
 - [ ] Archive: context-sensitive playlist rule, selection helper, delete-from-disk
 - [ ] Genre/Artist Cleanup: locking, pinned letters, alt-click filter, extra artist fields
 - [x] Common-text blocklist settings UI — Settings → Remove Common Text, with the manual's
