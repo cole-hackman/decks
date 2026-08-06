@@ -2881,7 +2881,10 @@ mod tests {
 
     #[test]
     fn an_untagged_new_track_falls_back_to_its_filename() {
-        let accepted = vec![create_change("c1", json!({ "path": "/incoming/mystery.mp3" }))];
+        let accepted = vec![create_change(
+            "c1",
+            json!({ "path": "/incoming/mystery.mp3" }),
+        )];
         let xml = generate_export_xml(&[], &[], &HashMap::new(), &accepted, None).unwrap();
         let parsed = decks_core::rekordbox_xml::parse(&xml).unwrap();
         assert_eq!(parsed.tracks.len(), 1);
