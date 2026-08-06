@@ -118,7 +118,25 @@ is that CDJs and Denon hardware can only sort by a few columns and know nothing 
 Danceability. Sort by Energy in Lexicon, rewrite the order, and the playlist arrives on the gear in
 that order. For a Rekordbox-first tool this is high-value and cheap.
 
-*decks status* — **missing**, all five.
+*decks status* — **done**, all five. **Playlist Tools** in the sidebar; every tool previews before
+it does anything, and everything it does is a staged change that goes through review and Sync.
+
+- **Merge** creates a new playlist and leaves the sources alone; the preview reports how many
+  duplicate rows were dropped, not just the final count.
+- **Sort** needed a new `ChangeKind::PlaylistReorder`, which writes `djmdPlaylist.Seq`. The parent
+  folder is part of the applier's `WHERE`, so a reorder cannot reparent a playlist by accident.
+- **Cross Reference** warns before the `in none` mode, per the spec, and an empty selection returns
+  nothing rather than the vacuous "in all zero playlists" answer.
+- **Prefix** numbers in the order playlists were ticked, and `replace existing number` stops
+  prefixes from stacking on a second run. A number that is part of the name (`7empest`) is not
+  stripped — the signal is the separator.
+- **Rewrite Order** stages a `PlaylistReorderTrack`. Tracks the sorted view left out are appended
+  rather than dropped: a filter being active must not remove tracks from the playlist.
+
+**Divergence on Rewrite Order.** Lexicon persists "the current visible sort" of the browser;
+`decks` sorts inside the tool, on a field you pick. The browser's column sort is transient UI state
+that is not plumbed to this view, and a button whose result depends on which column you last
+clicked elsewhere is worse than one that states its input.
 
 *Epic* — **6**.
 

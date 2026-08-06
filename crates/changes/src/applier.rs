@@ -140,6 +140,7 @@ fn apply_single(
         ChangeKind::PlaylistAddTrack => playlists::apply_add_track(tx, change),
         ChangeKind::PlaylistRemoveTrack => playlists::apply_remove_track(tx, change),
         ChangeKind::PlaylistReorderTrack => playlists::apply_reorder(tx, change),
+        ChangeKind::PlaylistReorder => playlists::apply_reorder_playlists(tx, change),
     }
 }
 

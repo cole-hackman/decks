@@ -2100,6 +2100,50 @@ that is a prefix of another one, from now on, without waiting for the failure.
 **Next in Epic 6:** the playlist tools (Merge, Sort, Cross Reference, Prefix, Rewrite Order) are
 the most self-contained remaining slice; Track Timeline and the sidepanel are the largest.
 
+## 2026-08-06 — Epic 6 (part 2): playlist tools
+
+**A vacuous truth is still a wrong answer.** "Tracks in all of the zero playlists you selected" is,
+formally, the entire library. Every set-intersection implementation gets this for free and every
+one of them is wrong to ship it: the user who selected nothing wants nothing back. Worth checking
+the empty case of any fold that starts from an identity element.
+
+**Negating a comparator negates more than the direction.** The descending sort flipped the null
+handling along with everything else, so un-analysed tracks led the set. The fix is to put the
+direction *inside* the comparison, after the null branches. Any comparator with a "these sort last
+regardless" rule cannot be reversed from outside.
+
+**Tick order is data.** Prefix numbers playlists in the order they were ticked and Merge
+concatenates in it, so the selection had to be an ordered list rather than a `Set` — the obvious
+data structure would have silently substituted database order for the user's intent. The UI shows
+the index next to each ticked row, so the ordering is visible rather than implied.
+
+**The separator is what makes a number a prefix.** `01 - House` has one; `7empest` and `2 Bad Mice`
+do not. Stripping leading digits unconditionally mangles real titles, and not stripping them at all
+makes a second Prefix run produce `02 - 01 - House`. One character of context decides.
+
+**A tool that only reorders should only be able to reorder.** The playlist reorder puts the parent
+folder in its `WHERE` clause, so a malformed change fails instead of reparenting a playlist as a
+side effect. Cheap to add at write time, impossible to detect afterwards.
+
+**State the input rather than inheriting it invisibly.** Lexicon's Rewrite Order uses "the current
+visible sort", which is fine in an app where the browser and the tool are the same surface. Here it
+would mean a button whose result depends on which column you last clicked in a different view.
+Picking the field in the tool is less magic and more honest, and it is written down as a
+divergence rather than left to be discovered.
+
+**Playwright and Testing Library disagree about accessible names.** Playwright's `getByRole` name
+matches as a case-insensitive substring — the "Cross Reference" tab swallowed the "Cross reference"
+button. Testing Library's matches in full and has no `exact` option at all, so copying the
+Playwright idiom across fails typecheck. Two libraries, two defaults, one habit that does not
+transfer.
+
+**Nothing to do should produce nothing.** An order that already matches and a rename set that is
+already right both return empty rather than staging no-ops. A review list full of changes that
+change nothing trains people to approve without reading.
+
+**Next in Epic 6:** Track Timeline, Playlist Occurrence for arbitrary N, favourite playlists with
+hotkeys, the sidepanel, History snapshots, and share/export.
+
 ---
 
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer

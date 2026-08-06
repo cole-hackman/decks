@@ -1,5 +1,49 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 2): playlist tools
+
+All five, in a **Playlist Tools** view: Merge, Sort, Cross Reference, Prefix, Rewrite Order. Every
+one previews first, and everything they do is a staged change that goes through review and Sync.
+
+**Rewrite Order is the one that earns the epic.** It has no visible effect inside `decks`, exactly
+as it has none inside Lexicon — its entire purpose is that a CDJ can only sort by a handful of
+columns and knows nothing about Energy. Sort by Energy here, rewrite the order, and the playlist
+arrives on the gear that way.
+
+Decisions, each tested:
+
+- **Merge creates; it does not consume.** The sources are left alone. A tool that quietly deleted
+  four playlists to make a fifth would be a different and much worse tool. The preview says
+  "3 tracks from 5 rows — 2 duplicates dropped", because the final count alone hides the work.
+- **Sort needed a new change kind.** `ChangeKind::PlaylistReorder` writes `djmdPlaylist.Seq`. The
+  parent folder is part of the applier's `WHERE`, so naming a playlist that lives elsewhere fails
+  loudly rather than silently reparenting it — a reorder should only ever reorder.
+- **Cross Reference over an empty selection returns nothing, not everything.** "In all zero
+  playlists" is vacuously the whole library: technically right, and a terrible thing to hand
+  someone who has selected nothing. The `in none` mode warns before it runs, per the spec.
+- **Prefix numbers in tick order**, which is why the selection is a list and not a `Set`. `Replace
+  an existing number` stops prefixes stacking on a second run, and a number that is *part* of the
+  name — `7empest`, `2 Bad Mice` — is not stripped. The signal is the separator: digits running
+  straight into a letter stay.
+- **Rewrite Order appends rather than drops.** If a filter was active, the sorted view holds fewer
+  rows than the playlist; storing only those would silently remove the rest. They go to the end,
+  and the UI says how many.
+- **A no-op stages nothing.** An order that already matches, or a rename set that is already
+  right, produces zero changes rather than rows in the review list that change nothing.
+
+**Divergence, stated rather than hidden:** Lexicon persists "the current visible sort" of the
+browser. `decks` sorts inside the tool, on a field you pick. The browser's column sort is transient
+UI state not plumbed to this view, and a button whose result depends on which column you last
+clicked somewhere else is worse than one that states its input.
+
+One real bug caught by its own test: the Rewrite Order sort negated the whole comparator for
+descending, which flipped the null handling too — an un-analysed track led the set purely because
+`null` compares low. Direction now lives inside the comparator, so tracks with no value sort last
+in **either** direction.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 516, typecheck, lint, `pnpm e2e` 35 — all green.
+
 ## 2026-08-06 — Epic 6 (part 1): Mixable Tracks
 
 `scoring::score_transition` has existed since long before the parity initiative with **no UI

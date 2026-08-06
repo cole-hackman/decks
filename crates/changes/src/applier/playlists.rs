@@ -206,6 +206,54 @@ pub(super) fn apply_reorder(tx: &Transaction, change: &StagedChange) -> anyhow::
     Ok(())
 }
 
+/// `PlaylistReorder`:
+/// - `target_id` = parent folder ID, or absent for the root level
+/// - `new_value` = `{order: [playlist_id, …]}`
+///
+/// Writes `djmdPlaylist.Seq`, which is what orders the tree. Unlike the track
+/// reorder this does **not** two-phase the update: `Seq` has no uniqueness
+/// constraint, so there is no collision to step around.
+pub(super) fn apply_reorder_playlists(
+    tx: &Transaction,
+    change: &StagedChange,
+) -> anyhow::Result<()> {
+    let new = change
+        .new_value
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing new_value"))?;
+    let order = new
+        .as_object()
+        .and_then(|o| o.get("order"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("order array required"))?;
+
+    for (idx, pid) in order.iter().enumerate() {
+        let playlist_id = pid
+            .as_str()
+            .ok_or_else(|| anyhow!("order entries must be strings"))?;
+        // The parent is part of the WHERE clause, so a reorder cannot move a
+        // playlist between folders by accident — that would be a different
+        // change, and this one only claims to reorder.
+        let rows = match change.target_id.as_deref() {
+            Some(parent) => tx.execute(
+                "UPDATE djmdPlaylist SET Seq = ? WHERE ID = ? AND ParentID = ?",
+                params![(idx as i64) + 1, playlist_id, parent],
+            )?,
+            None => tx.execute(
+                "UPDATE djmdPlaylist SET Seq = ? WHERE ID = ? AND ParentID IS NULL",
+                params![(idx as i64) + 1, playlist_id],
+            )?,
+        };
+        if rows == 0 {
+            bail!(
+                "Reorder references playlist {} which is not in the target folder",
+                playlist_id
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,6 +437,89 @@ mod tests {
                 ChangeKind::PlaylistReorderTrack,
                 "p1",
                 json!({"order": ["t1", "ghost"]}),
+            ),
+        );
+        assert!(res.is_err());
+    }
+
+    fn seqs(tx: &Transaction) -> Vec<(String, i64)> {
+        tx.prepare("SELECT ID, Seq FROM djmdPlaylist ORDER BY Seq")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    #[test]
+    fn reordering_playlists_rewrites_seq_within_the_folder() {
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        tx.execute_batch(
+            "INSERT INTO djmdPlaylist (ID, Seq, Name, ParentID) VALUES
+                ('a', 1, 'Alpha', 'root'),
+                ('b', 2, 'Beta',  'root'),
+                ('c', 3, 'Gamma', 'root');",
+        )
+        .unwrap();
+
+        apply_reorder_playlists(
+            &tx,
+            &ch(
+                ChangeKind::PlaylistReorder,
+                "root",
+                json!({"order": ["c", "a", "b"]}),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            seqs(&tx),
+            vec![("c".into(), 1), ("a".into(), 2), ("b".into(), 3)]
+        );
+    }
+
+    #[test]
+    fn a_root_level_reorder_targets_the_null_parent() {
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        tx.execute_batch(
+            "INSERT INTO djmdPlaylist (ID, Seq, Name, ParentID) VALUES
+                ('a', 1, 'Alpha', NULL),
+                ('b', 2, 'Beta',  NULL);",
+        )
+        .unwrap();
+
+        let mut change = ch(
+            ChangeKind::PlaylistReorder,
+            "unused",
+            json!({"order": ["b", "a"]}),
+        );
+        change.target_id = None;
+
+        apply_reorder_playlists(&tx, &change).unwrap();
+        assert_eq!(seqs(&tx), vec![("b".into(), 1), ("a".into(), 2)]);
+    }
+
+    #[test]
+    fn a_reorder_cannot_move_a_playlist_between_folders() {
+        // The parent is in the WHERE clause, so naming a playlist that lives
+        // somewhere else fails loudly rather than silently reparenting it.
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        tx.execute_batch(
+            "INSERT INTO djmdPlaylist (ID, Seq, Name, ParentID) VALUES
+                ('a', 1, 'Alpha', 'root'),
+                ('elsewhere', 1, 'Other', 'other');",
+        )
+        .unwrap();
+
+        let res = apply_reorder_playlists(
+            &tx,
+            &ch(
+                ChangeKind::PlaylistReorder,
+                "root",
+                json!({"order": ["a", "elsewhere"]}),
             ),
         );
         assert!(res.is_err());

@@ -209,7 +209,10 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       compatible-key set surfaced in the panel
 - [ ] Track Timeline (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
       BPM-change bar colouring)
-- [ ] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order**
+- [x] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order** — all five, in a
+      Playlist Tools view. Sort needed a new `ChangeKind::PlaylistReorder` (writes
+      `djmdPlaylist.Seq`). Rewrite Order sorts on a field picked in the tool rather than following
+      the browser's transient column sort — a documented divergence
 - [ ] Playlist Occurrence for arbitrary N
 - [ ] Favorite Playlists with hotkeys
 - [ ] Sidepanel (second track browser)

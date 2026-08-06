@@ -9,6 +9,7 @@ export type WorkspaceView =
   | "archive"
   | "playlists"
   | "smartlists"
+  | "playlist-tools"
   | "tags"
   | "genre-cleanup"
   | "artist-cleanup"
@@ -128,6 +129,16 @@ const NAV_ITEMS: NavItem[] = [
         <path d="M11 1.5L12 4l2.5 1L12 6l-1 2.5L10 6 7.5 5 10 4l1-2.5z" />
         <path d="M5 7.5L5.6 9l1.5.6L5.6 10.2 5 11.7l-.6-1.5L2.9 9.6 4.4 9 5 7.5z" />
         <path d="M9 12.5l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4.4-1z" />
+      </svg>
+    ),
+  },
+  {
+    id: "playlist-tools",
+    label: "Playlist Tools",
+    icon: (
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+        <path d="M2 4h8M2 8h8M2 12h5" />
+        <path d="M12.5 9.5v5M11 11l1.5-1.5L14 11" />
       </svg>
     ),
   },

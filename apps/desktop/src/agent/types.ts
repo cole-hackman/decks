@@ -22,7 +22,8 @@ export type ChangeKind =
   | "PlaylistDelete"
   | "PlaylistAddTrack"
   | "PlaylistRemoveTrack"
-  | "PlaylistReorderTrack";
+  | "PlaylistReorderTrack"
+  | "PlaylistReorder";
 
 export interface StagedChange {
   id: string;

@@ -1007,3 +1007,54 @@ export interface MixableTemplate {
   options: MixableOptions;
   created_at: number;
 }
+
+// ── Playlist Tools (Epic 6) ──────────────────────────────────────────────────
+
+export type PlaylistSortMode = "name_asc" | "name_desc" | "track_count_desc";
+export type CrossReferenceMode = "in_all" | "in_none";
+
+export interface MergePreview {
+  track_ids: string[];
+  /** Rows across the sources before duplicates were dropped. */
+  source_rows: number;
+}
+
+export interface SortPreview {
+  /** `[playlist_id, name]` in the new order. */
+  order: [string, string][];
+  unchanged: boolean;
+}
+
+export interface CrossReferencePreview {
+  track_ids: string[];
+  considered: number;
+}
+
+export interface Numbering {
+  start: number;
+  /** Zero-pad width. 2 gives 01, 02, … */
+  pad: number;
+  /** Strip a number already at the front, so prefixes do not stack. */
+  replace_existing: boolean;
+}
+
+export interface PrefixSpec {
+  text: string;
+  numbering: Numbering | null;
+}
+
+export interface PlaylistRenamePlan {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export interface RewriteOrderPlan {
+  playlist_id: string;
+  order: string[];
+  /** Requested ids that are not in the playlist. */
+  unknown: string[];
+  /** Playlist members the visible order left out; appended, never dropped. */
+  appended: string[];
+  unchanged: boolean;
+}

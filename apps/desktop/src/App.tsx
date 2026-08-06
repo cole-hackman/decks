@@ -3,6 +3,7 @@ import { FirstRunWizard } from "./components/FirstRunWizard";
 import { TrackTable } from "./components/TrackTable";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
 import { MixableTracksPanel } from "./components/MixableTracksPanel";
+import { PlaylistToolsView } from "./components/PlaylistToolsView";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { PlaylistPanel } from "./components/PlaylistPanel";
@@ -606,6 +607,9 @@ export default function App() {
                 setInspector("details");
               }}
             />
+          )}
+          {currentView === "playlist-tools" && (
+            <PlaylistToolsView libraryPath={libraryPath ?? ""} />
           )}
           {currentView === "duplicates" && (
             <DuplicatesView

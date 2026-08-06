@@ -7,6 +7,14 @@ import type {
   MixableOptions,
   MixableResult,
   MixableTemplate,
+  MergePreview,
+  SortPreview,
+  CrossReferencePreview,
+  CrossReferenceMode,
+  PlaylistSortMode,
+  PrefixSpec,
+  PlaylistRenamePlan,
+  RewriteOrderPlan,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1528,4 +1536,92 @@ export async function saveMixableTemplate(
 
 export async function deleteMixableTemplate(id: string): Promise<boolean> {
   return invoke<boolean>("delete_mixable_template", { id });
+}
+
+// ── Playlist Tools (Epic 6) ──────────────────────────────────────────────────
+
+export async function previewPlaylistMerge(
+  path: string,
+  playlistIds: string[],
+): Promise<MergePreview> {
+  return invoke<MergePreview>("preview_playlist_merge", { path, playlistIds });
+}
+
+export async function applyPlaylistMerge(
+  libraryPath: string,
+  name: string,
+  parentId: string | null,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_playlist_merge", {
+    libraryPath,
+    name,
+    parentId,
+    trackIds,
+  });
+}
+
+export async function previewPlaylistSort(
+  path: string,
+  parentId: string | null,
+  mode: PlaylistSortMode,
+): Promise<SortPreview> {
+  return invoke<SortPreview>("preview_playlist_sort", { path, parentId, mode });
+}
+
+export async function applyPlaylistSort(
+  libraryPath: string,
+  parentId: string | null,
+  order: string[],
+): Promise<string> {
+  return invoke<string>("apply_playlist_sort", { libraryPath, parentId, order });
+}
+
+export async function previewCrossReference(
+  path: string,
+  playlistIds: string[],
+  mode: CrossReferenceMode,
+): Promise<CrossReferencePreview> {
+  return invoke<CrossReferencePreview>("preview_cross_reference", {
+    path,
+    playlistIds,
+    mode,
+  });
+}
+
+export async function previewPlaylistPrefix(
+  path: string,
+  playlistIds: string[],
+  spec: PrefixSpec,
+): Promise<PlaylistRenamePlan[]> {
+  return invoke<PlaylistRenamePlan[]>("preview_playlist_prefix", {
+    path,
+    playlistIds,
+    spec,
+  });
+}
+
+export async function applyPlaylistPrefix(
+  libraryPath: string,
+  renames: PlaylistRenamePlan[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_playlist_prefix", { libraryPath, renames });
+}
+
+export async function previewRewriteOrder(
+  path: string,
+  playlistId: string,
+  visibleOrder: string[],
+): Promise<RewriteOrderPlan> {
+  return invoke<RewriteOrderPlan>("preview_rewrite_order", {
+    path,
+    request: { playlist_id: playlistId, visible_order: visibleOrder },
+  });
+}
+
+export async function applyRewriteOrder(
+  libraryPath: string,
+  plan: RewriteOrderPlan,
+): Promise<string | null> {
+  return invoke<string | null>("apply_rewrite_order", { libraryPath, plan });
 }

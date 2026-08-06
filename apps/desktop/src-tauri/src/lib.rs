@@ -11,6 +11,7 @@ mod duplicates;
 mod mixable;
 mod multi_edit;
 mod organizer;
+mod playlist_tools;
 mod recipes;
 mod smartlists;
 mod undo;
@@ -2764,6 +2765,15 @@ pub fn run() {
             set_library_path,
             library_search,
             suggest_next_tracks,
+            playlist_tools::preview_playlist_merge,
+            playlist_tools::apply_playlist_merge,
+            playlist_tools::preview_playlist_sort,
+            playlist_tools::apply_playlist_sort,
+            playlist_tools::preview_cross_reference,
+            playlist_tools::preview_playlist_prefix,
+            playlist_tools::apply_playlist_prefix,
+            playlist_tools::preview_rewrite_order,
+            playlist_tools::apply_rewrite_order,
             mixable::find_mixable_tracks,
             mixable::get_key_mixing_mode,
             mixable::mixable_default_options,
