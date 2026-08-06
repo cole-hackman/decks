@@ -121,7 +121,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Watch folder | **done** | Debounced scan rather than a native watcher; settle rule; dismissals | **4** |
-| Incoming staging | partial | Watch queue with import/ignore; no auto-advance, no hotkey, no delete-from-disk | 4 |
+| Incoming staging | partial | Watch queue, Selected done with auto-advance + D hotkey; no delete-from-disk | 4 |
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |

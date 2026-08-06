@@ -8,6 +8,7 @@ import {
   archiveTracks,
   clearIncoming,
   listIncomingTracks,
+  markIncomingReviewed,
 } from "../ipc";
 import type { Track } from "../types";
 
@@ -62,6 +63,60 @@ export function IncomingView({
     await refresh();
   };
 
+  /**
+   * `Selected done` — the detail that makes triage fast.
+   *
+   * Marks the selection reviewed and then **immediately selects the next track
+   * in the list**, so a whole inbox can be cleared with one repeated keystroke
+   * rather than a click-then-reach-for-the-mouse cycle per track. The next
+   * track is chosen from the list as it was *before* removal, so it is the one
+   * that visually follows what the user was just looking at.
+   */
+  const handleSelectedDone = useCallback(async () => {
+    if (selectedTrackIds.size === 0) return;
+    const done = [...selectedTrackIds];
+    const lastIndex = Math.max(
+      ...done.map((id) => tracks.findIndex((t) => t.id === id)),
+    );
+    const next = tracks.slice(lastIndex + 1).find((t) => !selectedTrackIds.has(t.id));
+
+    try {
+      await markIncomingReviewed(libraryPath, done);
+    } catch (e) {
+      toast({ variant: "error", message: "Could not mark reviewed", detail: String(e) });
+      return;
+    }
+
+    if (next) {
+      onSelectionChange(new Set([next.id]));
+      onSelect(next);
+    } else {
+      onSelectionChange(new Set());
+    }
+    await refresh();
+  }, [selectedTrackIds, tracks, libraryPath, onSelectionChange, onSelect, refresh, toast]);
+
+  // Bound here rather than in the action registry because it only means
+  // anything while this view is open and something is selected.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "d" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      void handleSelectedDone();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleSelectedDone]);
+
   const handleArchiveSelected = async () => {
     if (selectedTrackIds.size === 0) return;
     await archiveTracks(libraryPath, [...selectedTrackIds]);
@@ -82,6 +137,14 @@ export function IncomingView({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => void handleSelectedDone()}
+            disabled={selectedTrackIds.size === 0}
+            title="Mark reviewed and jump to the next track (D)"
+            className="rounded bg-elevated px-3 py-1 text-sm text-ink hover:bg-edge disabled:opacity-50"
+          >
+            Selected done ({selectedTrackIds.size})
+          </button>
           <button
             onClick={handleArchiveSelected}
             disabled={selectedTrackIds.size === 0}

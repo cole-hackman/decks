@@ -138,7 +138,7 @@ hand-placed cues; never present a low-confidence anchor as certain.
 Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.md),
 [`07-health.md`](lexicon/07-health.md#find-tags--album-art).
 
-- [x] Watch folder → arrivals queue (scan-based). Auto-advance + hotkey still outstanding
+- [x] Watch folder → arrivals queue (scan-based), plus `Selected done` auto-advance on the D hotkey
 - [x] Rename pattern language: `%field%`, literals, `{}` optional segments
 - [x] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
       current year/month/decade)

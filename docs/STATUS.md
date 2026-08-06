@@ -33,8 +33,20 @@ a mapping onto a field audio files do not have produces a warning rather than si
 `FieldMappingsSection` in Settings configures the ID3 profile. Per-DJ-app profiles and applying
 mappings during sync are outstanding; the schema is ready for both.
 
+**Incoming `Selected done`** ships alongside (cache migration **v12**). The manual is right that
+auto-advance is the detail that makes triage fast: marking the selection reviewed immediately
+selects the next track, so an inbox clears with one repeated `D` instead of a click-and-reach cycle
+per track. Two details that had to be got right — the next track is chosen from the list as it stood
+*before* removal, so it is the one that visually followed what the user was looking at; and
+advancing is skipped entirely when marking failed, because advancing past a track that is still in
+the inbox would lose it.
+
+The existing `incoming_watermark` could not express this: it answers "what arrived since I last
+cleared", which is all-or-nothing. Per-track review state is a separate table, filtered out
+alongside archived tracks.
+
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 345, typecheck, lint, `pnpm e2e` 17 — all green.
+clean, `pnpm test` 351, typecheck, lint, `pnpm e2e` 17 — all green.
 
 ## 2026-08-06 — Epic 4 (part 1): Move & Rename
 

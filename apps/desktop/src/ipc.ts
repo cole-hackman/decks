@@ -1144,3 +1144,10 @@ export async function createFieldMapping(
 export async function deleteFieldMapping(id: string): Promise<boolean> {
   return invoke<boolean>("delete_field_mapping", { id });
 }
+
+export async function markIncomingReviewed(
+  libraryPath: string,
+  trackIds: string[],
+): Promise<number> {
+  return invoke<number>("mark_incoming_reviewed", { libraryPath, trackIds });
+}

@@ -1252,6 +1252,43 @@ impl CacheDb {
     }
 }
 
+/// Per-track incoming review state (Epic 4).
+///
+/// The `incoming_watermark` answers "what arrived since I last cleared", which
+/// cannot express "I have dealt with these three". Marking one track done must
+/// not hide the rest.
+impl CacheDb {
+    pub fn list_incoming_reviewed(&self, library_path: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT track_id FROM incoming_reviewed WHERE library_path = ?1")?;
+        let mut rows = stmt.query(rusqlite::params![library_path])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(r.get(0)?);
+        }
+        Ok(out)
+    }
+
+    /// Idempotent — marking a track done twice is not an error.
+    pub fn mark_incoming_reviewed(
+        &self,
+        library_path: &str,
+        track_ids: &[String],
+    ) -> Result<usize> {
+        let mut n = 0;
+        for id in track_ids {
+            n += self.conn.execute(
+                "INSERT INTO incoming_reviewed (library_path, track_id, reviewed_at)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(library_path, track_id) DO UPDATE SET reviewed_at = excluded.reviewed_at",
+                rusqlite::params![library_path, id, now_secs()],
+            )?;
+        }
+        Ok(n)
+    }
+}
+
 /// The default mapping profile — ID3 tag writing.
 ///
 /// Mappings are configured per destination, and `decks` has exactly one
@@ -1540,6 +1577,19 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn marking_tracks_reviewed_is_idempotent_and_scoped_to_the_library() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let ids = vec!["t1".to_string(), "t2".to_string()];
+        db.mark_incoming_reviewed("/db", &ids).unwrap();
+        db.mark_incoming_reviewed("/db", &ids).unwrap();
+
+        let mut got = db.list_incoming_reviewed("/db").unwrap();
+        got.sort();
+        assert_eq!(got, ids);
+        assert!(db.list_incoming_reviewed("/other").unwrap().is_empty());
+    }
 
     #[test]
     fn field_mappings_round_trip_in_configured_order() {

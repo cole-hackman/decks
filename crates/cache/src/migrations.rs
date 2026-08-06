@@ -254,6 +254,24 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         DROP TABLE IF EXISTS field_mappings;
         ",
     ),
+    (
+        12,
+        "
+        -- Per-track incoming review state (Epic 4).
+        --
+        -- The existing `incoming_watermark` is all-or-nothing: it answers 'what
+        -- arrived since I last cleared', which cannot express 'I have dealt
+        -- with these three'. Marking one track done must not hide the rest, so
+        -- reviewed tracks are recorded individually and filtered out alongside
+        -- archived ones.
+        CREATE TABLE incoming_reviewed (
+          library_path TEXT NOT NULL,
+          track_id     TEXT NOT NULL,
+          reviewed_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+          PRIMARY KEY (library_path, track_id)
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -369,6 +387,21 @@ mod tests {
         .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn incoming_reviewed_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO incoming_reviewed (library_path, track_id) VALUES ('/db', 't1')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM incoming_reviewed", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }

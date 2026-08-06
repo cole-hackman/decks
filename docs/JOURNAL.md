@@ -1646,6 +1646,17 @@ taking the whole settings panel down. Wrapping in `try/await` inside an async II
 throw and the rejection. The SettingsPanel tests caught it because they mock `../ipc` wholesale —
 which is exactly the "host returns something unexpected" case the mocked-IPC specs are good for.
 
+**`Selected done` was three lines of UI and one migration**, and the migration was the interesting
+part: the incoming watermark is a single timestamp, which can say "everything before now is dealt
+with" but not "these three are". Reaching for the existing mechanism would have meant marking one
+track done hides the rest — a bug that looks like data loss. Per-track state, filtered next to
+archived.
+
+The two details worth the tests: pick the next track from the list as it stood *before* removal (so
+it is the one that visually followed what the user was looking at), and do not advance at all if
+marking failed. The second matters more than it sounds — advancing past a track that is still in the
+inbox is how a track silently gets skipped.
+
 **Next:** enrichment (Find Tags & album art) is the remaining large Epic 4 item, and it needs
 network providers plus a local cache. Energy/Danceability and the Beatshift Fixer are analysis work,
 closer in character to Epic 3 part 2 than to file management. Epics 5–7 untouched.

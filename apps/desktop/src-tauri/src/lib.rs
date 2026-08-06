@@ -2306,18 +2306,44 @@ async fn list_incoming_tracks(
             .map_err(|e| e.to_string())?;
         let tracks = db.tracks_added_since(&iso).map_err(|e| e.to_string())?;
 
-        // Filter out archived tracks too.
-        let archived: std::collections::HashSet<String> = cache
+        // Filter out archived tracks, and ones already marked done — the
+        // watermark is all-or-nothing, so per-track review state is separate.
+        let mut archived: std::collections::HashSet<String> = cache
             .list_archived(&library_path)
             .map_err(|e| e.to_string())?
             .into_iter()
             .collect();
+        archived.extend(
+            cache
+                .list_incoming_reviewed(&library_path)
+                .map_err(|e| e.to_string())?,
+        );
         let mut filtered: Vec<_> = tracks
             .into_iter()
             .filter(|t| !archived.contains(&t.id))
             .collect();
         hydrate_energy(&mut filtered, &cache);
         Ok(filtered)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Mark specific incoming tracks as dealt with.
+///
+/// Distinct from `clear_incoming`, which moves the watermark and hides
+/// everything: this is the `Selected done` flow, where the user triages one
+/// track at a time and the rest must stay visible.
+#[tauri::command]
+async fn mark_incoming_reviewed(
+    app: tauri::AppHandle,
+    library_path: String,
+    track_ids: Vec<String>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cache_db(&app)?
+            .mark_incoming_reviewed(&library_path, &track_ids)
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2766,6 +2792,7 @@ pub fn run() {
             common_text_blocklist_remove,
             list_incoming_tracks,
             clear_incoming,
+            mark_incoming_reviewed,
             list_archived_tracks,
             list_archived_track_ids,
             archive_tracks,
