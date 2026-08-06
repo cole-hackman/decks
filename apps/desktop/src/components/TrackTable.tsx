@@ -28,6 +28,8 @@ import {
 } from "../lib/grid-nav";
 import { colorForKey, toCamelot } from "../lib/camelot";
 import { EnergyBar } from "./EnergyBar";
+import { RowWaveform } from "./RowWaveform";
+import { useRowWaveforms } from "../hooks/useRowWaveforms";
 import type { Track } from "../types";
 
 const ROW_H = 28;
@@ -73,6 +75,11 @@ function buildColumns(
   tagsByTrack: Map<string, Set<string>>,
   tagLabelById: Record<string, string>,
   showTagsColumn: boolean,
+  /** Reads the compact ANLZ preview for one row, if it has arrived yet.
+   *  A getter rather than the map itself so the column definitions stay stable
+   *  as waveforms stream in — rebuilding every column on each batch would
+   *  reset column widths mid-scroll. */
+  waveformFor: (trackId: string) => number[] | undefined,
   /** Camelot codes that mix out of the reference track, under the global Key
    *  Mixing Mode. Empty when there is no reference or its key is unreadable —
    *  in which case no row is marked, rather than every row being marked. */
@@ -160,6 +167,16 @@ function buildColumns(
         const ss = String(s % 60).padStart(2, "0");
         return `${m}:${ss}`;
       },
+    },
+    {
+      id: "waveform",
+      header: "Wave",
+      size: 130,
+      enableSorting: false,
+      enableColumnFilter: false,
+      cell: (info) => (
+        <RowWaveform bars={waveformFor(info.row.original.id)} width={120} />
+      ),
     },
     {
       accessorKey: "genre",
@@ -371,15 +388,31 @@ export function TrackTable({
     [compatibleWith],
   );
 
+  /**
+   * The latest waveform batch, read through a ref.
+   *
+   * The rows a batch is fetched for come from the virtualizer, which needs the
+   * table, which needs the columns — so the columns cannot depend on the
+   * waveform state directly. A ref breaks the cycle, and the `setWaveforms`
+   * that lands each batch re-renders this component, so the cells pick the new
+   * data up on that render.
+   */
+  const waveformsRef = useRef<Record<string, number[]>>({});
+  const waveformFor = useCallback(
+    (trackId: string) => waveformsRef.current[trackId],
+    [],
+  );
+
   const columns = useMemo(
     () =>
       buildColumns(
         filterCtx.tagsByTrack,
         tagLabelById ?? {},
         showTagsColumn,
+        waveformFor,
         compatibleKeys,
       ),
-    [filterCtx.tagsByTrack, tagLabelById, showTagsColumn, compatibleKeys],
+    [filterCtx.tagsByTrack, tagLabelById, showTagsColumn, waveformFor, compatibleKeys],
   );
 
   const table = useReactTable({
@@ -644,6 +677,12 @@ export function TrackTable({
   );
 
   const virtualItems = virtualizer.getVirtualItems();
+
+  // Only the rows actually on screen are ever asked for, in one batched call.
+  const visibleIds = virtualItems
+    .map((item) => rows[item.index]?.original.id)
+    .filter((id): id is string => id != null);
+  waveformsRef.current = useRowWaveforms(libraryPath, visibleIds);
   const hasMultipleSelection = selectedTrackIds.size > 1;
 
   if (isLoading) {

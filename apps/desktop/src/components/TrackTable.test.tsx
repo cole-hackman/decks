@@ -37,8 +37,14 @@ vi.mock("../ipc", () => ({
   searchHasOperators: vi.fn(),
   searchTracks: vi.fn(),
   multiEditApply: vi.fn(),
+  getRowWaveforms: vi.fn(),
 }));
-import { searchHasOperators, searchTracks, multiEditApply } from "../ipc";
+import {
+  searchHasOperators,
+  searchTracks,
+  multiEditApply,
+  getRowWaveforms,
+} from "../ipc";
 
 import { TrackTable } from "./TrackTable";
 import { EMPTY_FILTERS, type Filters, type FilterContext } from "../lib/filters";
@@ -110,6 +116,7 @@ beforeEach(() => {
   vi.mocked(searchHasOperators).mockResolvedValue(false);
   vi.mocked(searchTracks).mockResolvedValue([]);
   vi.mocked(multiEditApply).mockResolvedValue([]);
+  vi.mocked(getRowWaveforms).mockResolvedValue({});
 });
 
 describe("TrackTable", () => {
@@ -493,5 +500,93 @@ describe("TrackTable — spreadsheet keyboard navigation", () => {
     expect(await screen.findByTestId("cell-edit-error")).toHaveTextContent(
       "cache locked",
     );
+  });
+
+  // ── Inline row waveforms ───────────────────────────────────────────────────
+
+  it("asks for the visible rows in one batch, not one call each", async () => {
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    await waitFor(() => expect(getRowWaveforms).toHaveBeenCalledTimes(1));
+    expect(getRowWaveforms).toHaveBeenCalledWith(
+      "/tmp/master.db",
+      ["1", "2"],
+      40,
+    );
+  });
+
+  it("draws a waveform once its batch lands", async () => {
+    vi.mocked(getRowWaveforms).mockResolvedValue({ "1": [0, 128, 255, 64] });
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    // One row has data; the other has none and draws nothing at all.
+    await waitFor(() =>
+      expect(screen.getAllByTestId("row-waveform")).toHaveLength(1),
+    );
+  });
+
+  it("does not re-ask for a track that came back without a waveform", async () => {
+    // Otherwise every scroll past an unanalysed track re-reads the disk to be
+    // told the same thing.
+    const { rerender } = render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    await waitFor(() => expect(getRowWaveforms).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set(["1"])}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(getRowWaveforms).toHaveBeenCalledTimes(1));
+  });
+
+  it("survives a failed waveform batch", async () => {
+    vi.mocked(getRowWaveforms).mockRejectedValue(new Error("disk gone"));
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    // The table still renders; the rows simply show no waveform.
+    expect(await screen.findByText("Dark Matter")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("row-waveform")).toHaveLength(0);
   });
 });

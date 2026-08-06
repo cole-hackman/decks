@@ -41,8 +41,28 @@ sort by tag *count* per track.
 
 *decks status* — **partial.** Virtualized table with resizable columns, inline per-column search,
 multi-select, right-click actions, Camelot-tinted keys, an Energy column, inline tag chips, the
-full operator and tag query languages, key-notation-aware search, the compatible-key indicator and
-**spreadsheet keyboard navigation** all exist. Missing: inline per-row waveform previews.
+full operator and tag query languages, key-notation-aware search, the compatible-key indicator,
+**spreadsheet keyboard navigation** and **inline per-row waveform previews** all exist.
+
+**Inline waveform previews** are a `Wave` column drawing the track's ANLZ preview at forty bars.
+Four decisions keep it viable over a four-thousand-track library:
+
+- **Downsampled in Rust, not shipped whole.** `anlz::downsample_preview` squashes the ~400-point
+  preview to forty bytes before it crosses the IPC boundary. Sending the full preview to draw forty
+  bars would move two orders of magnitude more data than the picture contains.
+- **Peak per bucket, not mean.** Averaging flattens exactly what the preview is for: a quiet intro
+  with one stab in it should show the stab.
+- **Batched per visible page.** The table knows all forty visible rows at once; one round-trip per
+  row would cost far more than the read each of them needs. Results are cached for the session, and
+  a track asked for once is never asked again — *including* when the answer was "no waveform",
+  which otherwise makes every scroll past an unanalysed track re-read the disk.
+- **Absence is not silence.** A track with no ANLZ is missing from the response rather than present
+  with zeroes, and renders as nothing rather than as a flat line. A flat line is a claim about the
+  audio.
+
+Drawn as one `<path>` rather than forty `<rect>`s, and monochrome: `WaveformPanel` renders
+Pioneer's colour bands, but at 14px tall in a table colour reads as noise and the shape is the
+whole point.
 
 **Spreadsheet keyboard navigation** is a cell cursor — a focused (row, column) pair, drawn as an
 inset ring so it reads *on top of* the row selection rather than competing with it. Arrows walk it,

@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
 | Interop & sync | 5 | 5 | 1 | 1 | 11 |
-| Library & browser | 13 | 3 | 2 | 0 | 0 |
+| Library & browser | 14 | 3 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **52** | **26** | **16** | **2** | **16** |
+| **Total** | **53** | **26** | **15** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -74,7 +74,7 @@ They were previously miscounted as `partial` and `missing`.
 | Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
 | Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
 | Spreadsheet keyboard navigation | **done** | Cell cursor, arrows/jumps/Home/End/page keys, shift-extend from an anchor, Tab within the row, inline edit that stages rather than writes. Clamps, never wraps | 6 |
-| Inline per-row waveform preview | **missing** | | 2 |
+| Inline per-row waveform preview | **done** | `Wave` column from the ANLZ preview, downsampled to 40 bars in Rust, batched per visible page and cached. Absence renders as nothing, not a flat line | 6 |
 | Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |
 | Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |
 | Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |

@@ -2530,3 +2530,22 @@ first), CSV import, the duplicates work.
 - Verified: `cargo test --workspace` (57 targets), `cargo clippy --workspace --all-targets
   -D warnings`, `pnpm test` (742), `pnpm typecheck`, `pnpm lint`, **59 Playwright e2e**.
 - **Next:** inline per-row waveform previews. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (inline row waveforms)
+
+### Plan
+- Close `Inline per-row waveform preview`, the last unblocked `missing` row outside streaming.
+
+### End of session
+- **Shipped:** `anlz::downsample_preview` (6 tests), a batched `get_row_waveforms` command,
+  `useRowWaveforms`, `RowWaveform`, and a `Wave` column (4 new `TrackTable` tests).
+- **Caught the cue-preset crash while running this branch's e2e.** Twelve specs failed; bisecting
+  showed the break was in the *previous* branch, already pushed as #30. Fixed and pushed there,
+  then rebased this work on top. The full suite is green again at 59.
+- **Ordering wrinkle:** the visible rows come from the virtualizer, which needs the table, which
+  needs the columns — so the columns cannot depend on waveform state. A ref breaks the cycle
+  without rebuilding columns (and resetting widths) on every batch.
+- Verified: `cargo test --workspace` (57 targets), `cargo clippy --workspace --all-targets
+  -D warnings`, `pnpm test` (746), `pnpm typecheck`, `pnpm lint`, 59 Playwright e2e.
+- **Next:** album art is the only `missing` row left in Library & browser, and the product does not
+  model it at all. Epic 7 needs a scoping decision.

@@ -1,5 +1,32 @@
 # Status
 
+## 2026-08-06 — Inline per-row waveform previews
+
+A `Wave` column in the browser, drawing each track's ANLZ preview at forty bars. Per
+`docs/lexicon/02-library.md §Browser`. This was the last unblocked `missing` row outside streaming.
+
+Four decisions make it viable over a four-thousand-track library:
+
+- **Downsampled in Rust.** `anlz::downsample_preview` squashes ~400 points to forty bytes before
+  the data crosses IPC. Shipping the full preview to draw forty bars moves two orders of magnitude
+  more than the picture contains.
+- **Peak per bucket, not mean.** Averaging flattens what the preview is for — a quiet intro with
+  one stab should show the stab.
+- **Batched per visible page, cached for the session.** A track asked for once is never asked
+  again, *including* when the answer was "no waveform"; without that, every scroll past an
+  unanalysed track re-reads the disk to be told the same thing.
+- **Absence is not silence.** No ANLZ means the track is missing from the response and renders as
+  nothing. Zeroes would draw a flat line, which is a claim about the audio.
+
+One structural wrinkle worth recording: the rows a batch is fetched for come from the virtualizer,
+which needs the table, which needs the columns — so the columns cannot depend on the waveform state
+directly. A ref breaks the cycle, and the `setWaveforms` that lands each batch re-renders the
+component anyway, so the cells pick it up. Passing the map into `buildColumns` instead would rebuild
+every column on each batch and reset column widths mid-scroll.
+
+**Next:** `Library & browser` now has one `missing` row left (album art, which the product does not
+model at all). Epic 7 (streaming) still needs a scoping decision from the user.
+
 ## 2026-08-06 — Cue presets
 
 The spec's "Cue templates" — saved name+colour pairs stamped onto individual cues. Per
