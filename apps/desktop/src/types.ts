@@ -873,3 +873,38 @@ export interface RestoreReport {
   /** `[table, column]` the backup had and this build does not. */
   dropped_columns: [string, string][];
 }
+
+// ── Duplicate resolution (Epic 5) ────────────────────────────────────────────
+// See docs/lexicon/07-health.md §Find Duplicates.
+
+export interface DuplicateCandidate {
+  track_id: string;
+  bit_rate: number | null;
+  duration_secs: number | null;
+  has_cues: boolean;
+  rating: number | null;
+  play_count: number | null;
+  in_playlists: number;
+}
+
+/** `best` is the default heuristic: cues, then bitrate, then playlists, then plays. */
+export type PreferRule =
+  | "best"
+  | "highest_bitrate"
+  | "has_cues"
+  | "most_playlists"
+  | "longest";
+
+export interface ResolutionPlan {
+  keeper_id: string;
+  loser_ids: string[];
+  /** `[playlist_id, playlist_name, loser_id]` — memberships to re-point. */
+  repoint: [string, string, string][];
+  /** Playlists already holding the keeper, so the loser is removed not swapped. */
+  already_present: string[];
+}
+
+export interface ResolveResult {
+  archived: string[];
+  staged: string[];
+}

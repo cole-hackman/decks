@@ -7,6 +7,7 @@ mod claude_agent;
 mod csv_import;
 mod cue_generator;
 mod cues;
+mod duplicates;
 mod multi_edit;
 mod organizer;
 mod recipes;
@@ -2829,6 +2830,9 @@ pub fn run() {
             toggle_cleanup_lock,
             list_pinned_letters,
             toggle_pinned_letter,
+            duplicates::plan_duplicate_resolution,
+            duplicates::resolve_duplicates,
+            duplicates::preselect_keepers,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

@@ -20,12 +20,12 @@ regardless of how much of Lexicon they represent.
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
-| Health | 1 | 3 | 1 | 0 |
+| Health | 2 | 2 | 1 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **33** | **38** | **19** | **16** |
+| **Total** | **34** | **37** | **19** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -135,7 +135,7 @@ of library *editing*, *automation*, or *set preparation*.
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
-| Find Duplicates | partial | 3 strategies + keep-one archive already. Missing duration bounds, interruptible scan, preselection, bulk Prefer, review step, **playlist re-pointing**, manual merge | 5 |
+| Find Duplicates | **done** | 3 strategies, duration bounds, preselection, bulk Prefer, review step, playlist re-pointing. Interruptible scan and manual merge outstanding | 5 |
 | Find Lost Tracks / Relocate | partial | Fuzzy filename+size. Missing prefix rewriting, all-tracks mode, extension change, merge-with-existing, pre-change backup | 5 |
 | Find Broken Tracks | **done** | Real decode check, two depths, per-playlist report. Deleting from disk deliberately not offered | 5 |
 | Find Tags & Album Art | **missing** | `crates/enrichment` is a 10-line stub | 4 |

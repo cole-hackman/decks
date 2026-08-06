@@ -36,15 +36,34 @@ cleans them up.
 *Manual merge* — for tracks too dissimilar to be auto-detected: select → right-click → Send to →
 Duplicate merge.
 
-*decks status* — **partial, and genuinely close.** `library_duplicate_groups` already runs three
-strategies (exact title/artist, fuzzy title, audio fingerprint) with `kind` and `confidence` on
-each group, backed by a chromagram hash with bucketed Hamming grouping
-(`FINGERPRINT_HAMMING_MAX_BITS = 10`), and `DuplicatesView` offers a per-group keep-one picker that
-archives the rest. Missing: duration bounds, interruptible scans, preselection heuristics, a bulk
-`Prefer` rule, an explicit review step, **playlist re-pointing to the keeper**, and manual merge.
+*decks status* — **done, except interruptible scans and manual merge.** Three strategies (exact
+title/artist, fuzzy title, audio fingerprint) with `kind` and `confidence` per group, backed by a
+chromagram hash with bucketed Hamming grouping.
 
-Playlist re-pointing is the significant gap — archiving a duplicate without rewriting playlist
-membership leaves holes.
+**Playlist re-pointing** was the significant gap and is closed. Resolving a group stages a
+`PlaylistAddTrack` for the keeper and a `PlaylistRemoveTrack` for each loser, in every playlist that
+held one. Archiving a losing copy without that leaves a hole in every set it was in, and the user
+finds out on stage. The keeper is added **before** the loser is removed, so applying the batch never
+leaves the set briefly short.
+
+A playlist that already holds the keeper gets the loser removed rather than the keeper added twice.
+
+**Duration bounds** are the spec's: only tracks between 15 seconds and 15 minutes are
+fingerprint-matched. A track with **no recorded duration is included** — an unknown length is not
+evidence of a long one, and excluding it would silently drop everything unanalysed.
+
+**Preselection and `Prefer`** are pure functions in `duplicates::preselect`, so the heuristic is
+inspectable and testable rather than buried in a click handler. The default rule puts **cue presence
+above bitrate**: losing someone's cue work is the expensive mistake, losing 64kbps is not. Ties fall
+through bitrate → playlist membership → play count, and a genuine tie resolves the same way every
+run, or a bulk `Prefer` over 200 groups would give a different answer each time it was previewed.
+
+**The review step** names the playlists that will be re-pointed before anything happens, and says
+so plainly when none will be. **Losers are archived, never deleted** — the spec's guarantee, and
+the confirmation says it.
+
+Still missing: **interruptible scans** (the scan runs to completion; the manual's advice to work in
+passes is not yet possible) and **manual merge**.
 
 *Epic* — **5**.
 

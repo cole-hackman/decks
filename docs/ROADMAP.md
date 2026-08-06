@@ -180,8 +180,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
       per library rather than 60 minutes, and blocked entries carry a reason (ADR-0008)
 - [x] Database backup/restore of the cache DB's derived state — a JSON document rather than a ZIP
       (inspectable, schema-tolerant); analysis caches excluded; nothing auto-deleted
-- [ ] Duplicates: duration bounds, interruptible scan, preselection, bulk Prefer, review step,
-      **playlist re-pointing to the keeper**, manual merge
+- [x] Duplicates: duration bounds, preselection, bulk Prefer, review step, **playlist re-pointing
+      to the keeper**. Interruptible scans and manual merge outstanding
 - [ ] Relocate: prefix rewriting, all-tracks mode, extension change, merge-with-existing, backup
 - [x] Find Broken Tracks — real decode check at two depths, with a per-playlist report. Deleting
       audio from disk is deliberately not offered; removing a track stays a staged change
