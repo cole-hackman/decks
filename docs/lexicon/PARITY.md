@@ -125,7 +125,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
-| Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9; no context-menu entry | 4 |
+| Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9, Send to entry; no picker popup | 4 |
 | Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |

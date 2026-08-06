@@ -142,8 +142,12 @@ field has focus so typing a path does not fire a move on every digit. Moving reu
 Rename planner, so collisions and `TrackRelocate` staging behave identically, and the success
 message repeats the full-sync warning.
 
-Not done: opening the picker itself from a hotkey, and the right-click → Send to entry point —
-this lives in the Files view rather than the track context menu for now.
+The right-click → **Send to → Move files…** entry exists: it opens the Files view scoped to the
+right-clicked track, or to the current multi-selection when the right-clicked track is part of it,
+so "send these twelve" works as well as "send this one".
+
+Not done: opening a dedicated picker popup from a hotkey — the entry navigates to the Files view
+rather than showing a modal.
 
 *Epic* — **4**.
 

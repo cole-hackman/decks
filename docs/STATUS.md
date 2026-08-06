@@ -60,8 +60,13 @@ The existing `incoming_watermark` could not express this: it answers "what arriv
 cleared", which is all-or-nothing. Per-track review state is a separate table, filtered out
 alongside archived tracks.
 
+**Send to → Move files…** is now on the track context menu, scoped to the current multi-selection
+when the right-clicked track is part of it, so "send these twelve" works as well as "send this one".
+It carries a `Moves on disk` hint — it is the only context-menu entry that touches the filesystem,
+and that should not be a surprise.
+
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 351, typecheck, lint, `pnpm e2e` 17 — all green.
+clean, `pnpm test` 354, typecheck, lint, `pnpm e2e` 17 — all green.
 
 ## 2026-08-06 — Epic 4 (part 1): Move & Rename
 
