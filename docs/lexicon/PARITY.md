@@ -14,9 +14,9 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
-| Interop & sync | 2 | 6 | 4 | 11 |
-| Library & browser | 0 | 7 | 9 | 0 |
-| Smartlists | 0 | 0 | 2 | 0 |
+| Interop & sync | 4 | 6 | 2 | 11 |
+| Library & browser | 0 | 9 | 7 | 0 |
+| Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 0 | 4 | 9 | 0 |
 | Files | 0 | 3 | 7 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **4** | **31** | **51** | **16** |
+| **Total** | **10** | **34** | **42** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -44,9 +44,9 @@ of library *editing*, *automation*, or *set preparation*.
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
 | Key conversion | partial | Camelot + Open Key done; no leading-zero option | 6 |
 | Colors → nearest | **missing** | Option plumbed through `SyncOptions` and **ignored** | 6 |
-| All smartlists → playlists | **missing** | Option plumbed and **ignored** | 1 |
-| Field Mappings | **missing** | No mapping concept at all | 4 |
-| Excluded From Sync | **missing** | Name-prefix + tag convention; cheap | 1 |
+| All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
+| Field Mappings | **missing** | A vestigial `field_mappings` table exists from migration v5 but nothing reads it, and its `(library_path, source_field)` PK cannot express multi-source combining or per-app mappings — Epic 4 should replace it | 4 |
+| Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
 | Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues | 4 |
 | Serato / Traktor / VirtualDJ / Engine / djay / Apple Music / M3U / USB / DIRECT2CDJ | deferred | 11 items | — |
 
@@ -55,9 +55,9 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Virtualized track table | partial | Resizable, sortable, inline column search, multi-select | — |
-| Search operators (`None`, `>`, `<`, ranges, `!`) | **missing** | Shared vocabulary with smartlist rules | 1 |
-| Tag query language (`~`, `!`, comma) | **missing** | | 1 |
-| Key-notation-aware search | **missing** | `4M` should match `Am` | 1 |
+| Search operators (`None`, `>`, `<`, ranges, `!`) | **partial** | Implemented in the smartlist rule engine; the track-browser search box does not yet share the vocabulary | 1 |
+| Tag query language (`~`, `!`, comma) in the search box | **missing** | The rule engine expresses the same logic via `has_all`/`has_any`/`has_none`; the browser search syntax is separate | 5 |
+| Key-notation-aware search | **partial** | `canonical_key` handles Camelot / Open Key / musical spellings in smartlist rules; not yet wired into the browser search box | 1 |
 | Spreadsheet keyboard navigation | **missing** | | 2 |
 | Inline per-row waveform preview | **missing** | | 2 |
 | Compatible-key indicator | **missing** | | 2 |
@@ -66,7 +66,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Favorite Playlists + hotkeys | **missing** | | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **missing** | 5 tools; Rewrite Order is high value for CDJ export | 6 |
 | Playlist Occurrence | partial | Only the N=0 case | 6 |
-| Custom Tags | partial | Strong already; missing category colours, drag-reorder, OR/AND selection, MyTag import, per-tag hotkeys | 1, 5 |
+| Custom Tags | partial | Strong already; missing category colours, drag-reorder, OR/AND selection on the Tags page, MyTag import, per-tag hotkeys | 5 |
 | Manual multi-track editor | **missing** | `<multiple values>` semantics | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
 | Archive | partial | Missing context-sensitive playlist rule, selection helper, delete-from-disk | 5 |
@@ -76,8 +76,9 @@ of library *editing*, *automation*, or *set preparation*.
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
-| Smartlist rules engine | **missing** | Ad-hoc `localStorage` filters only | **1** |
-| Smartlist Generator | **missing** | | **1** |
+| Smartlist rules engine | **done** | `crates/smartlists`: two-level rule model, in-memory evaluator, 30s recompute throttle, cache v7 | 1 |
+| Smartlist Generator | **done** | By field / tag category / decade / BPM range / play count; idempotent via the `Lexicon` folder | 1 |
+| Smartlists in the playlist tree | **partial** | Ships as a dedicated view. Rekordbox playlists come from `master.db` and smartlists from the cache DB, so merging the two trees is a larger refactor — deferred | 6 |
 
 ## Analysis — `04-analysis.md`
 

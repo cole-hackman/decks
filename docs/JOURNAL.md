@@ -1398,3 +1398,38 @@ is currently accepted and ignored.
 **Blockers:** None for Epic 1. Two open questions for the owner are logged in
 `docs/lexicon/GAPS.md` — the Camelot/Open Key posture, and how Energy should be defined now that
 Spotify's audio-features endpoint is unavailable to new applications.
+
+
+## 2026-08-05 — Session: Epic 1, smartlists engine
+
+**Plan:** Build the rules engine, since three later epics consume it — `Is file missing` becomes a
+rule rather than a bespoke view, smartlists materialise on sync, and the tag OR/AND semantics are
+shared with the Custom Tags page.
+
+**What changed versus the plan.** Two design calls made while reading the code rather than before:
+
+1. **In-memory evaluation, not the SQL hybrid.** ADR-0013 proposed compiling to SQL where the field
+   lives in `master.db`. In practice the app already loads the whole track list to render the table
+   and already builds the derived sets for the filter drawer, and most interesting rule fields
+   (energy, tags, archived, cues, missing files) live in the cache or on disk — so a SQL path would
+   be abandoned mid-query for most rule sets and leave two evaluators to keep in agreement. Amended
+   the ADR with an implementation note rather than letting the code silently diverge.
+2. **JSON rule storage, not normalised tables.** Follows from (1): nothing queries an individual
+   rule, so three tables and their ordering columns would buy nothing.
+
+**Environment win:** installed `libgtk-3-dev`, `libwebkit2gtk-4.1-dev` and `libasound2-dev`, so
+`decks-desktop` compiles in this container for the first time. Playwright needed pointing at the
+preinstalled Chromium 1194 via a local-only config (the pinned Playwright wants build 1217's
+headless shell); that config is deliberately **not** committed so CI keeps using
+`playwright.config.ts` unchanged.
+
+**Shipped:** `crates/smartlists` (65 tests), cache v7 + 8 store tests, 9 Tauri commands, 2 MCP
+tools + 3 service tests, `SmartlistsView` + 16 vitest cases, 3 Playwright specs.
+
+**Next:** Epic 2 — the action registry first, then cue/loop/beatgrid editing. The registry is the
+substrate the Action Center, Find Popup, hotkey rebinding and (much later) the plugin host all sit
+on, so it wants to exist before the features that register into it.
+
+**Open questions still unanswered** (in `docs/lexicon/GAPS.md`): the Camelot vs Open Key posture,
+and how Energy should be defined now that Spotify's audio-features endpoint is unavailable. Neither
+blocked Epic 1 — key rules canonicalise through whichever notation the library uses.

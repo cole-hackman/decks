@@ -16,7 +16,7 @@
 ├─────────────────────────────────────────────────────────┤
 │  Rust core  (crates/*)                                  │
 │  rekordbox-db · rekordbox-xml · audio-analysis          │
-│  audio-tags · stratum-dsp · relocate                    │
+│  audio-tags · stratum-dsp · relocate · smartlists        │
 │  agent-tools (shared MCP/CLI/Tauri tool service)        │
 │  changes · cache · classify · scoring · enrichment      │
 │  embeddings · ranker · plugins                          │
@@ -51,6 +51,11 @@ audio-analysis ─▶ stratum-dsp, audio-tags
 apps/cli     ──▶ decks-core, agent-tools
 src-tauri    ──▶ decks-core, agent-tools, changes, cache
 ```
+
+`smartlists` owns the rule model and evaluator for dynamic playlists. It depends on
+`rekordbox-db` (for `Track`) and `changes` (for key-notation conversion and the staged-change
+types it emits when materialising a smartlist into a Rekordbox playlist). Evaluation is pure and
+in-memory over an already-loaded track list — see ADR-0013.
 
 `agent-tools` is the provider-neutral tool service shared by the local
 MCP server, the diagnostic CLI, and the Tauri chat panel — it owns the

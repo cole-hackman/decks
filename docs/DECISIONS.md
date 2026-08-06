@@ -254,7 +254,7 @@ Reference-only, never linked or copied:
 ## ADR-0013 — Smartlist Rule Model
 
 **Date:** 2026-08-05
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-05 — see "Implementation note" below)
 
 **Context:** Epic 1 introduces smartlists. The obvious implementation is a general boolean expression tree. Lexicon's actual model is narrower, and the narrowness is deliberate.
 
@@ -287,3 +287,5 @@ Degradation on sync: when a target cannot express a rule, materialise the smartl
 **Trade-offs accepted:**
 - Expressions like `(A AND B) OR (C AND D)` are inexpressible. Lexicon has the same limitation. If it ever bites, the escape hatch is a saved smartlist referenced as a rule by another smartlist, which composes without a general tree.
 - Materialising on sync means the DJ app's copy goes stale until the next sync. This is inherent to any app lacking the rule, and is what Lexicon does.
+
+**Implementation note (Epic 1, 2026-08-05):** point 1 above proposed compiling rules to SQL where the field lives in `master.db` and falling back to in-memory filtering otherwise. As implemented, **evaluation is entirely in memory**. Two reasons emerged while building it: the app already loads the full track list to render the virtualized table and already builds the derived sets (`tracksWithCues`, `tracksInAnyPlaylist`, `tracksWithMissingFiles`, `tagsByTrack`) for the filter drawer, so the inputs are in hand either way; and a majority of the interesting rule fields — energy, custom tags, archived state, missing-file state — live in the local cache or on the filesystem rather than in `master.db`, so a SQL path would have to be abandoned mid-query for most non-trivial rule sets. A hybrid would mean two evaluators to keep in agreement for no measured gain. The SQL path stays available if profiling on a large library ever justifies it; the evaluator's signature (`&[Track] + EvalContext`) does not preclude it.

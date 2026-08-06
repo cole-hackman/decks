@@ -8,6 +8,7 @@ export type WorkspaceView =
   | "incoming"
   | "archive"
   | "playlists"
+  | "smartlists"
   | "tags"
   | "genre-cleanup"
   | "artist-cleanup"
@@ -73,6 +74,17 @@ const NAV_ITEMS: NavItem[] = [
     icon: (
       <svg viewBox="0 0 16 16" fill="currentColor" className="h-4 w-4">
         <path d="M1 2.5A.5.5 0 011.5 2h9a.5.5 0 010 1h-9a.5.5 0 01-.5-.5zm0 3A.5.5 0 011.5 5h9a.5.5 0 010 1h-9a.5.5 0 01-.5-.5zm0 3A.5.5 0 011.5 8h6a.5.5 0 010 1h-6a.5.5 0 01-.5-.5zM14 12a2 2 0 11-1.732-1.984V4.5a.5.5 0 011 0v7.5z" />
+      </svg>
+    ),
+  },
+  {
+    id: "smartlists",
+    label: "Smartlists",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-4 w-4">
+        <path d="M4 6h16M4 12h10M4 18h6" strokeLinecap="round" />
+        <circle cx="18" cy="16" r="3" />
+        <path d="M20.5 18.5 22 20" strokeLinecap="round" />
       </svg>
     ),
   },
