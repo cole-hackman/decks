@@ -254,6 +254,42 @@ pub fn tool_definitions() -> Vec<Value> {
             ),
         ),
         tool_definition(
+            "undo_list",
+            "List Sync runs recorded for a library, newest first, with how many changes of each \
+             can be reversed and how many cannot.",
+            object_schema(
+                &[(
+                    "library_path",
+                    string_schema("Path to the Rekordbox master.db file."),
+                )],
+                &["library_path"],
+            ),
+        ),
+        tool_definition(
+            "undo_entries",
+            "Show what one Sync run did, and the reason for each change that cannot be undone.",
+            object_schema(
+                &[("run_id", string_schema("Undo run ID, from undo_list."))],
+                &["run_id"],
+            ),
+        ),
+        tool_definition(
+            "undo_run",
+            "Stage the inverse of everything a Sync run applied. The inverses land as PROPOSED \
+             changes and still go through review and Sync — this never writes to master.db. A run \
+             can only be undone once.",
+            object_schema(
+                &[
+                    (
+                        "library_path",
+                        string_schema("Path to the Rekordbox master.db file."),
+                    ),
+                    ("run_id", string_schema("Undo run ID, from undo_list.")),
+                ],
+                &["library_path", "run_id"],
+            ),
+        ),
+        tool_definition(
             "smartlist_list",
             "List saved smartlists (rules-driven dynamic playlists) for a library.",
             object_schema(
@@ -405,6 +441,16 @@ pub fn tool_request_from_name_and_arguments(name: &str, arguments: Value) -> Res
                 limit: optional_usize(arguments, "limit")?,
             })
         }
+        "undo_list" | "undo.list" => Ok(ToolRequest::UndoList {
+            library_path: required_string(arguments, "library_path")?,
+        }),
+        "undo_entries" | "undo.entries" => Ok(ToolRequest::UndoEntries {
+            run_id: required_string(arguments, "run_id")?,
+        }),
+        "undo_run" | "undo.run" => Ok(ToolRequest::UndoRun {
+            library_path: required_string(arguments, "library_path")?,
+            run_id: required_string(arguments, "run_id")?,
+        }),
         "smartlist_list" | "smartlists.list" => Ok(ToolRequest::SmartlistList {
             library_path: required_string(arguments, "library_path")?,
         }),
@@ -749,6 +795,43 @@ mod tests {
             .as_str()
             .expect("message")
             .contains("Unknown tool"));
+    }
+
+    #[test]
+    fn undo_tools_are_advertised_and_parse() {
+        let defs = crate::mcp::tool_definitions();
+        let names: Vec<&str> = defs.iter().filter_map(|t| t["name"].as_str()).collect();
+        for expected in ["undo_list", "undo_entries", "undo_run"] {
+            assert!(names.contains(&expected), "{expected} not advertised");
+        }
+
+        assert_eq!(
+            crate::mcp::tool_request_from_name_and_arguments(
+                "undo_run",
+                serde_json::json!({ "library_path": "/tmp/master.db", "run_id": "r1" }),
+            )
+            .expect("parsed"),
+            crate::ToolRequest::UndoRun {
+                library_path: "/tmp/master.db".into(),
+                run_id: "r1".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn undo_run_requires_both_arguments() {
+        // Staging inverses against the wrong library would put a pile of edits
+        // on a database that never had them.
+        assert!(crate::mcp::tool_request_from_name_and_arguments(
+            "undo_run",
+            serde_json::json!({ "run_id": "r1" }),
+        )
+        .is_err());
+        assert!(crate::mcp::tool_request_from_name_and_arguments(
+            "undo_run",
+            serde_json::json!({ "library_path": "/tmp/master.db" }),
+        )
+        .is_err());
     }
 
     #[test]

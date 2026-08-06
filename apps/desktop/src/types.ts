@@ -703,3 +703,39 @@ export interface CueRecipeTrack {
   deletions: CueDeletion[];
   skipped: string | null;
 }
+
+/**
+ * One Sync run, as the undo list shows it.
+ *
+ * `reversible` and `blocked` are counts over the run's entries — a run is
+ * rarely all-or-nothing, and the list says so up front rather than after the
+ * user has clicked Undo.
+ */
+export interface UndoRun {
+  id: string;
+  library_path: string;
+  applied_at: number;
+  /** Set once the run's inverses have been staged. */
+  undone_at: number | null;
+  reversible: number;
+  blocked: number;
+}
+
+export interface UndoEntry {
+  id: string;
+  source_change_id: string;
+  /** `null` when the entry cannot be reversed; `blocked_reason` says why. */
+  kind: string | null;
+  target_id: string | null;
+  field: string | null;
+  old_value: unknown;
+  new_value: unknown;
+  description: string;
+  blocked_reason: string | null;
+}
+
+export interface UndoResult {
+  staged: string[];
+  /** `[description, reason]` for entries that could not be reversed. */
+  blocked: [string, string][];
+}

@@ -67,6 +67,21 @@ pub enum ToolRequest {
         library_path: String,
         id: String,
     },
+    /// Sync runs recorded for a library, newest first, with how much of each
+    /// can be put back.
+    UndoList {
+        library_path: String,
+    },
+    /// What one run did, and the reason for each change that cannot be undone.
+    UndoEntries {
+        run_id: String,
+    },
+    /// Stage a run's inverses. They land as *proposed* changes and still go
+    /// through review and Sync — this never writes to `master.db`.
+    UndoRun {
+        library_path: String,
+        run_id: String,
+    },
     RelocateScan {
         library_path: String,
         #[serde(default)]

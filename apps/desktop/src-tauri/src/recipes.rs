@@ -388,6 +388,12 @@ pub struct CueChange {
 pub struct CueDeletion {
     pub cue_id: String,
     pub cue_label: String,
+    /// The whole cue, in the shape `apply_add_cue` inserts.
+    ///
+    /// Recorded so the deletion can be undone: a `TrackDeleteCue` with no
+    /// snapshot is gone for good, and `changes::undo` refuses to invert one.
+    /// The restored cue gets a new row id — same position, name and colour.
+    pub snapshot: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -479,6 +485,7 @@ fn colour_json(colour: Option<i64>) -> serde_json::Value {
 /// only hot-cue slot numbers. So a sort becomes a slot reassignment over the
 /// hot cues, and memory cues — which have no slot — are left where they are.
 fn diff_cues(
+    track_id: &str,
     before: &[::recipes::RecipeCue],
     slots: &CueSlots,
     edits: &::recipes::CueEdits,
@@ -535,16 +542,38 @@ fn diff_cues(
     let deletions = edits
         .deleted
         .iter()
-        .map(|id| CueDeletion {
-            cue_id: id.clone(),
-            cue_label: by_id
-                .get(id.as_str())
-                .map(|c| cue_label(c))
-                .unwrap_or_default(),
+        .map(|id| {
+            let orig = by_id.get(id.as_str());
+            CueDeletion {
+                cue_id: id.clone(),
+                cue_label: orig.map(|c| cue_label(c)).unwrap_or_default(),
+                snapshot: match orig {
+                    Some(c) => cue_snapshot(track_id, c, slots),
+                    None => serde_json::Value::Null,
+                },
+            }
         })
         .collect();
 
     (changes, deletions)
+}
+
+/// A deleted cue, in the shape `apply_add_cue` inserts.
+///
+/// `content_id` rides along because a delete targets the cue while an add
+/// targets the track — without it the inverse would have nothing to attach to.
+fn cue_snapshot(track_id: &str, cue: &::recipes::RecipeCue, slots: &CueSlots) -> serde_json::Value {
+    serde_json::json!({
+        "content_id": track_id,
+        "in_msec": cue.position_ms,
+        "out_msec": cue.loop_end_ms,
+        // 0 is a memory cue; 1..=8 a hot-cue slot. A hot cue whose slot we
+        // somehow lost track of goes back as slot 1 rather than silently
+        // becoming a memory cue.
+        "kind": if cue.memory { 0 } else { slots.get(cue.id.as_str()).copied().unwrap_or(1) },
+        "color": cue.color.unwrap_or(-1),
+        "commnt": cue.name,
+    })
 }
 
 /// Preview a cue recipe over a selection.
@@ -570,7 +599,7 @@ pub async fn cue_recipe_preview(
             }
             let grid = beat_grid(&library_path, &track);
             let edits = ::recipes::apply_cue_recipe(&recipe, &cues, &grid);
-            let (changes, deletions) = diff_cues(&cues, &slots, &edits, reorders);
+            let (changes, deletions) = diff_cues(id, &cues, &slots, &edits, reorders);
             if changes.is_empty() && deletions.is_empty() && edits.skipped.is_none() {
                 continue;
             }
@@ -629,7 +658,10 @@ pub async fn cue_recipe_apply(
                         kind: changes::ChangeKind::TrackDeleteCue,
                         target_id: Some(deletion.cue_id.clone()),
                         field: None,
-                        old_value: None,
+                        // The snapshot is what makes the deletion undoable —
+                        // `changes::undo` refuses to invert a delete that did
+                        // not record what it removed.
+                        old_value: Some(deletion.snapshot.clone()),
                         new_value: None,
                         reason: Some(format!("Cue recipe — delete {}", deletion.cue_label)),
                         confidence: Some(1.0),
@@ -913,7 +945,7 @@ mod tests {
             .enumerate()
             .map(|(i, c)| (c.id.clone(), i as i64 + 1))
             .collect();
-        diff_cues(before, &slots, &edits, reorders)
+        diff_cues("track-1", before, &slots, &edits, reorders)
     }
 
     #[test]

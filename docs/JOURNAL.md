@@ -1772,5 +1772,56 @@ sorts after both existing Preview buttons, so `.first()` and `.nth(1)` still res
 Surviving by accident is not the same as being correct, so both got `exact: true`. The next section
 added would have broken them.
 
+**Undo History came next, and the shape of it was the whole decision.** The obvious build is a
+button that writes the old values back. That is one click, and it puts a second write path into
+`master.db` — which is the one thing `CLAUDE.md` says cannot happen. So an undo *stages* the
+inverses instead, as ordinary proposed changes, and they go back through review and the same
+guarded Sync. Two steps rather than one. That is the correct trade for a program whose first rule
+is that the library is read-only, and it means undo needed no new safety machinery at all: it
+inherits the review panel, the `WriteGuard` and the backup for free.
+
+**Inverses are computed at apply time, not derived on demand.** Staged rows get cleared, and a run
+that could only be undone while its originals still existed would be undoable exactly when you
+least need it. Migration v13 stores the run and its inverses together.
+
+**`Some(Null)` and `None` are not the same thing, and the difference is a bug waiting to happen.**
+An `old_value` of `Some(Null)` means the field was genuinely empty, so restoring it means clearing
+the field. `None` means nothing was recorded, so the change cannot be reversed at all. Collapse the
+two and undo starts blanking fields the user never touched. It has a test named after it, because
+the correct behaviour looks like the wrong one at a glance.
+
+**Half the change kinds cannot be inverted, and saying so is the feature.** `apply_add_cue` and
+`apply_create` mint a UUID inside the transaction and nothing carries it back out — so there is no
+row to point a delete at. `PlaylistDelete` never recorded its contents, so "recreating" it would
+give you an empty playlist with the right name, which is worse than refusing. Per ADR-0008 each
+blocked entry carries a sentence the UI shows verbatim, and a run shows its reversible/blocked
+split *before* the user clicks. An undo that quietly restored eight of twelve would be the worst
+possible outcome: it looks like it worked.
+
+**One blocked case turned out to be fixable rather than fundamental.** A cue deletion is only
+irreversible because nobody wrote down what the cue was. The cue recipes now snapshot the whole row
+into `old_value` before staging the delete, and `TrackDeleteCue` inverts to a plain `TrackAddCue`.
+Worth generalising: several "cannot" answers are really "did not record", and those are cheap to
+turn around.
+
+**Retention diverges from the spec deliberately.** Lexicon drops undo after 60 minutes or on
+restart. The cache is already persistent, so honouring that would mean *adding* code to throw away
+something useful — and a DJ who notices a bad sync the next morning needs undo more than one who
+notices within the hour. Fifty runs per library, count-bounded rather than clock-bounded, because
+"the last fifty syncs" is something you can reason about and "anything since 09:14" is not.
+
+**A Playwright failure that was really a React one.** The e2e mock returned the live
+`stagedChanges` array from `list_changes`; after an undo staged into it, `refetch` handed React the
+same object reference and nothing re-rendered. The test was right and the fixture was lying. Return
+a fresh array — a mock that shares mutable state with the code under test will eventually disagree
+with how the real IPC boundary behaves, which serialises everything.
+
+**Mounting a new panel inside an existing view broke three e2e specs, and the fixture was right to
+break.** Their mocks return `null` for unknown commands, `listUndoRuns` handed that straight to
+`.map`, and the whole Changes view went down with it. The fix belongs in the component, not the
+fixtures: undo history is the least important thing on that screen and must never be able to take
+the change review with it. Both responses are now coerced with `Array.isArray`. The fixtures got
+the mock too, but that was for realism, not for the bug.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
-first). Then the larger items — Undo History, CSV import, the duplicates work.
+first), CSV import, the duplicates work.

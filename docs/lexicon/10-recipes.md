@@ -211,8 +211,35 @@ column-mapping UI (`parse_csv_for_matcher`) but only to *match* tracks, never to
 *What it does* — Undo for smart fixes, playlist deletes, track deletes and edits. Retained for
 **60 minutes or until restart**, whichever comes first. Ordered, so undo walks back through events.
 
-*decks status* — **missing.** `decks` has something adjacent but different: a staged-change
-pipeline (`Proposed → Accepted/Rejected → Exported/Applied`) that gates changes *before* they land.
-That is arguably safer, but it offers no recourse once a change is applied.
+*decks status* — **done, differently.** `decks` gates changes *before* they land — a staged-change
+pipeline (`Proposed → Accepted/Rejected → Exported/Applied`), an opt-in Sync, and a `WriteGuard`
+backup. That covers the change you never should have accepted; it does nothing for the one you did.
+
+Undo closes that. Every Sync run records the **inverse** of each change it applied
+(`crates/changes::undo`, `undo_runs` / `undo_entries` in cache migration v13). Undoing stages those
+inverses as ordinary proposed changes, so they go back through review and the same guarded Sync.
+Two steps rather than one, which is the right trade for a program whose first rule is that
+`master.db` is read-only: there is no second write path, and no change reaches the library without
+the user seeing it.
+
+Deliberate divergences:
+
+- **Retention.** Lexicon expires undo after 60 minutes or on restart. `decks` keeps the last **50
+  runs per library**: the cache is already persistent, and noticing a bad sync the next morning is
+  at least as common as noticing it within the hour. A count bound rather than a clock bound,
+  because "the last fifty syncs" is something a user can reason about and "anything since 09:14"
+  is not.
+- **Not everything can be inverted, and the UI says which.** Per ADR-0008 a blocked entry carries a
+  named reason rather than being silently omitted — an undo that quietly restored eight of twelve
+  edits would be worse than one that restored none.
+
+| Change kind | Undo |
+|---|---|
+| Metadata / cue / relocate edits, playlist rename, reorder | reversible — the inverse swaps the change's two ends |
+| Playlist add ↔ remove track | reversible — same payload, opposite verb. A re-added track lands at the end |
+| Cue deletion | reversible **when the deletion recorded the cue**. The cue recipes do; the restored cue gets a new row id |
+| Add cue, create playlist | blocked — the new row's id is generated inside the apply transaction, so there is nothing to point a delete at |
+| Delete playlist, delete track | blocked — the contents were not recorded first. Points at the backup Sync took |
+| Track create | n/a — export-only, Sync never wrote it |
 
 *Epic* — **5**.

@@ -93,6 +93,9 @@ test.beforeEach(async ({ page }) => {
             }
             return ids.length;
           }
+          // The change review view mounts the undo history alongside it.
+          case "list_undo_runs":
+            return [];
           case "list_changes":
             return stagedChanges;
           case "accept_change":

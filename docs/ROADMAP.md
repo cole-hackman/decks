@@ -175,7 +175,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
       Filesystem
 - [ ] Multi-track manual editor with `<multiple values>`
 - [ ] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, report
-- [ ] Undo History (60 min / until restart)
+- [x] Undo History — Sync runs record inverses; undo re-stages them for review. Kept for 50 runs
+      per library rather than 60 minutes, and blocked entries carry a reason (ADR-0008)
 - [ ] Database backup/restore as a ZIP of the cache DB's derived state
 - [ ] Duplicates: duration bounds, interruptible scan, preselection, bulk Prefer, review step,
       **playlist re-pointing to the keeper**, manual merge

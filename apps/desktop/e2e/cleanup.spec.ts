@@ -82,6 +82,9 @@ test.beforeEach(async ({ page }) => {
             );
             return { affected_tracks: 12, staged_change_ids: [id] };
           }
+          // The change review view mounts the undo history alongside it.
+          case "list_undo_runs":
+            return [];
           case "list_changes":
             return stagedChanges;
           case "accept_change":

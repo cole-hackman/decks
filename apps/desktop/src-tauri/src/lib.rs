@@ -6,6 +6,7 @@ mod cues;
 mod organizer;
 mod recipes;
 mod smartlists;
+mod undo;
 mod watch;
 mod write_tags;
 
@@ -1833,6 +1834,21 @@ async fn sync_execute(
             let _ = cache.mark_change_exported(id);
         }
 
+        // Record the undo run before the staged rows can be cleared. Best
+        // effort: a failure here must not make a successful write look failed,
+        // but it is logged rather than swallowed — losing undo silently is
+        // exactly the sort of thing a user would only discover when they need
+        // it.
+        let applied_ids: std::collections::HashSet<&String> = res.applied.iter().collect();
+        let applied_changes: Vec<_> = to_apply
+            .iter()
+            .filter(|c| applied_ids.contains(&c.id))
+            .cloned()
+            .collect();
+        if let Err(e) = cache.record_undo_run(&library_path, &applied_changes) {
+            tracing::warn!(error = %e, "failed to record undo history for this sync");
+        }
+
         Ok(res)
     })
     .await
@@ -2725,6 +2741,9 @@ pub fn run() {
             recipes::other_recipe_apply,
             recipes::cue_recipe_preview,
             recipes::cue_recipe_apply,
+            undo::list_undo_runs,
+            undo::undo_run_entries,
+            undo::undo_run,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

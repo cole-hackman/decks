@@ -77,6 +77,9 @@ test.beforeEach(async ({ page }) => {
             return playlists;
           case "get_playlist":
             return { playlist: playlists[0], tracks };
+          // The change review view mounts the undo history alongside it.
+          case "list_undo_runs":
+            return [];
           case "list_changes":
             return stagedChanges;
           case "list_conversations":
