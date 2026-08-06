@@ -82,7 +82,7 @@ They were previously miscounted as `partial` and `missing`.
 | Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
 | Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
-| Custom Tags | partial | OR-within/AND-across selection and MyTag import (preview-then-apply, name-matched, idempotent) now done. Still missing category colours, drag-reorder, hashtag import, per-tag hotkeys, Field-Mapper export | 5 |
+| Custom Tags | partial | OR-within/AND-across selection, MyTag import and hashtag import (into a reserved `Imported Tags` category) now done. Still missing category colours, drag-reorder, per-tag hotkeys, Field-Mapper export | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
 | Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |

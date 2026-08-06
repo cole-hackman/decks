@@ -2566,3 +2566,20 @@ first), CSV import, the duplicates work.
 - Verified: `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`,
   `pnpm test` (752), `pnpm typecheck`, `pnpm lint`, **59 Playwright e2e**.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (Imported Tags category)
+
+### Plan
+- Close the remaining Custom Tags gaps, starting with hashtag import.
+
+### End of session
+- **Found the feature already existed.** `parse_hashtags` and the tag-recipe path have covered
+  hashtag import since Epic 5; my own parity notes said "missing". Corrected in `02-library.md`
+  rather than quietly re-scoped.
+- **The real gap was the destination.** New tags went to whichever category came first. Now a
+  reserved `Imported Tags` category, created on demand and matched case-insensitively.
+- **A bug fell out of it:** importing into a library with no categories used to fail outright, so
+  the first import on a fresh library was impossible. Four tests cover the new behaviour.
+- Verified: `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`,
+  `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
+- **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.

@@ -736,6 +736,28 @@ pub async fn tag_recipe_preview(
     .map_err(|e| e.to_string())?
 }
 
+/// Where the spec puts tags an import invented.
+pub(crate) const IMPORTED_TAGS_CATEGORY: &str = "Imported Tags";
+
+/// Find or create the `Imported Tags` category.
+///
+/// Matched case-insensitively so a user who renamed it to "imported tags" — or
+/// made one themselves before importing — gets theirs rather than a second one.
+fn ensure_imported_category(cache: &cache::CacheDb) -> Result<String, String> {
+    let existing = cache
+        .list_tag_categories()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|c| c.name.trim().eq_ignore_ascii_case(IMPORTED_TAGS_CATEGORY));
+    if let Some(category) = existing {
+        return Ok(category.id);
+    }
+    cache
+        .create_tag_category(IMPORTED_TAGS_CATEGORY)
+        .map(|c| c.id)
+        .map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Default, Serialize)]
 pub struct TagApplyResult {
     pub tracks_changed: usize,
@@ -748,9 +770,18 @@ pub struct TagApplyResult {
 /// Apply reviewed tag proposals.
 ///
 /// Takes the proposals back rather than re-running the recipe, so what happens
-/// is what the user reviewed. A tag name with no existing tag is created in the
-/// first category — importing `#Techno` from a comment is useless if it fails
+/// is what the user reviewed. A tag name with no existing tag is created rather
+/// than skipped — importing `#Techno` from a comment is useless if it fails
 /// because nobody made a Techno tag first.
+///
+/// **New tags land in a reserved `Imported Tags` category**, per
+/// `docs/lexicon/02-library.md §Custom Tags`: "unknown tags land in an
+/// `Imported Tags` category for the user to sort". They used to go into
+/// whichever category happened to be first, which is arbitrary — it quietly
+/// fills a real category like Genre with unsorted imports, and there is no way
+/// to tell afterwards which tags the user put there and which the importer did.
+/// The category is created on demand, so a library that never imports never
+/// gets one.
 #[tauri::command]
 pub async fn tag_recipe_apply(
     app: tauri::AppHandle,
@@ -770,12 +801,9 @@ pub async fn tag_recipe_apply(
             .map(|t| (t.name.to_lowercase(), t.id))
             .collect();
 
-        let default_category = cache
-            .list_tag_categories()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .next()
-            .map(|c| c.id);
+        // Resolved lazily: creating an `Imported Tags` category for a run that
+        // turns out to need no new tags would leave an empty category behind.
+        let mut imported_category: Option<String> = None;
 
         for p in proposals {
             let mut touched = false;
@@ -785,10 +813,13 @@ pub async fn tag_recipe_apply(
                 let id = match by_name.get(&key) {
                     Some(id) => id.clone(),
                     None => {
-                        let Some(category) = default_category.clone() else {
-                            // No categories at all — creating a tag would have
-                            // nowhere to live. Report rather than guess.
-                            return Err("create a tag category before importing tags".to_string());
+                        let category = match &imported_category {
+                            Some(id) => id.clone(),
+                            None => {
+                                let id = ensure_imported_category(&cache)?;
+                                imported_category = Some(id.clone());
+                                id
+                            }
                         };
                         let created = cache
                             .create_tag(&category, name)
@@ -1065,5 +1096,51 @@ mod tests {
             value: "abc".into()
         })
         .contains("not a number"));
+    }
+
+    // ── Imported Tags category ───────────────────────────────────────────────
+
+    #[test]
+    fn imported_tags_go_to_their_own_category_not_the_first_one() {
+        // The old behaviour dropped invented tags into whichever category came
+        // first, quietly filling a real category like Genre with unsorted
+        // imports — and leaving no way to tell afterwards which tags the user
+        // put there and which the importer did.
+        let cache = cache::CacheDb::open_in_memory().unwrap();
+        cache.create_tag_category("Genre").unwrap();
+
+        let id = ensure_imported_category(&cache).unwrap();
+        let category = cache
+            .list_tag_categories()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.id == id)
+            .unwrap();
+        assert_eq!(category.name, IMPORTED_TAGS_CATEGORY);
+    }
+
+    #[test]
+    fn an_existing_imported_tags_category_is_reused() {
+        let cache = cache::CacheDb::open_in_memory().unwrap();
+        let made = cache.create_tag_category(IMPORTED_TAGS_CATEGORY).unwrap();
+        assert_eq!(ensure_imported_category(&cache).unwrap(), made.id);
+        assert_eq!(cache.list_tag_categories().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_renamed_imported_category_still_matches() {
+        // Case-insensitive, so someone who typed it themselves in lower case
+        // does not end up with two.
+        let cache = cache::CacheDb::open_in_memory().unwrap();
+        let made = cache.create_tag_category("imported tags").unwrap();
+        assert_eq!(ensure_imported_category(&cache).unwrap(), made.id);
+    }
+
+    #[test]
+    fn importing_into_an_empty_tag_tree_no_longer_fails() {
+        // It used to error with "create a tag category before importing tags",
+        // which made the first import of a fresh library impossible.
+        let cache = cache::CacheDb::open_in_memory().unwrap();
+        assert!(ensure_imported_category(&cache).is_ok());
     }
 }

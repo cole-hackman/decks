@@ -1,5 +1,29 @@
 # Status
 
+## 2026-08-06 — Hashtag imports land in `Imported Tags`
+
+Chasing the last Custom Tags gaps turned up a docs error of my own: `02-library.md` listed hashtag
+import as missing. It was not — `recipes::parse_hashtags` plus the tag-recipe preview/apply path
+has covered it since Epic 5.
+
+What *was* missing is the spec's destination. Per `docs/lexicon/02-library.md §Custom Tags`,
+"unknown tags land in an `Imported Tags` category for the user to sort". Invented tags went into
+whichever category happened to be first, which is arbitrary: it quietly fills a real category like
+Genre with unsorted imports, and afterwards there is no way to tell which tags the user put there
+and which the importer did.
+
+They now go to a reserved `Imported Tags` category — created **on demand**, so a library that never
+imports never grows an empty one, and matched case-insensitively so someone who made one themselves
+gets theirs rather than a second.
+
+That also fixes a smaller bug in the same path: importing into a library with **no** categories
+failed outright with "create a tag category before importing tags", which made the first import on a
+fresh library impossible.
+
+**Next:** what remains in Custom Tags is cosmetic or blocked — category colours, drag-reorder
+(needs a `reorder_tags` command), per-tag number hotkeys, Field-Mapper export. Epic 7 (streaming)
+still needs a scoping decision from the user.
+
 ## 2026-08-06 — MyTag import
 
 Rekordbox's own tag system, imported into Custom Tags. Per
