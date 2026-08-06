@@ -1270,7 +1270,13 @@ async fn list_tracks_in_any_playlist(path: String) -> Result<Vec<String>, String
 }
 
 #[tauri::command]
-async fn list_tracks_with_missing_files(path: String) -> Result<Vec<String>, String> {
+async fn list_tracks_with_missing_files(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Vec<String>, String> {
+    // A track that a Local Path Mapping resolves is not missing — reporting it
+    // would send the user relocating files that are already there.
+    let mappings = organizer::path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&path))
             .map_err(|e| e.to_string())?;
@@ -1280,7 +1286,7 @@ async fn list_tracks_with_missing_files(path: String) -> Result<Vec<String>, Str
             .filter(|t| {
                 t.folder_path
                     .as_deref()
-                    .map(|p| !Path::new(p).exists())
+                    .map(|p| !mappings.resolve(p).exists())
                     .unwrap_or(false)
             })
             .map(|t| t.id)
@@ -2592,6 +2598,10 @@ pub fn run() {
             organizer::scan_unused_files,
             organizer::delete_unused_files,
             write_tags::write_tags_bulk,
+            organizer::list_path_mappings,
+            organizer::create_path_mapping,
+            organizer::delete_path_mapping,
+            organizer::preview_path_mapping,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,

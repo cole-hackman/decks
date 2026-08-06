@@ -38,6 +38,7 @@ import type {
   DeleteReport,
   TagFieldSelection,
   WriteTagsResult,
+  PathMappingRow,
 } from "./types";
 import type {
   ChatMessage,
@@ -1035,4 +1036,26 @@ export async function writeTagsBulk(
     trackIds,
     selection,
   });
+}
+
+export async function listPathMappings(): Promise<PathMappingRow[]> {
+  return invoke<PathMappingRow[]>("list_path_mappings");
+}
+
+export async function createPathMapping(
+  from: string,
+  to: string,
+): Promise<string> {
+  return invoke<string>("create_path_mapping", { from, to });
+}
+
+export async function deletePathMapping(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_path_mapping", { id });
+}
+
+/** Returns `[resolvedPath, existsOnDisk]`. */
+export async function previewPathMapping(
+  storedPath: string,
+): Promise<[string, boolean]> {
+  return invoke<[string, boolean]>("preview_path_mapping", { storedPath });
 }

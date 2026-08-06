@@ -115,6 +115,7 @@ fn is_empty(fields: &TagWriteFields) -> bool {
 /// of the staged-change pipeline because the files are not the database.
 #[tauri::command]
 pub async fn write_tags_bulk(
+    app: tauri::AppHandle,
     library_path: String,
     track_ids: Vec<String>,
     selection: TagFieldSelection,
@@ -122,6 +123,8 @@ pub async fn write_tags_bulk(
     if !selection.any() {
         return Err("select at least one field to write".into());
     }
+    // Write to where the file actually is on this machine.
+    let mappings = crate::organizer::path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
             .map_err(|e| e.to_string())?;
@@ -149,7 +152,8 @@ pub async fn write_tags_bulk(
                 result.skipped.push(id);
                 continue;
             }
-            match audio_tags::write_tag_fields(Path::new(&path), &fields) {
+            let path = mappings.resolve(&path);
+            match audio_tags::write_tag_fields(&path, &fields) {
                 Ok(()) => result.written.push(id),
                 Err(e) => result.failed.push((id, e.to_string())),
             }

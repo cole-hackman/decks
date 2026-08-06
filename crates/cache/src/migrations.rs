@@ -168,6 +168,27 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_smartlists_library ON smartlists(library_path, seq, name);
         ",
     ),
+    (
+        8,
+        "
+        -- Local Path Mappings (Epic 4). Per-computer prefix rewrites, so a
+        -- database restored on a second machine finds its music without a bulk
+        -- relocate.
+        --
+        -- Deliberately NOT keyed by library_path: the mapping describes where
+        -- this *computer* keeps its music, and it must apply the moment a
+        -- library is opened, before anything has been recorded against that
+        -- library's path. Never staged, exported or synced.
+        CREATE TABLE path_mappings (
+          id           TEXT PRIMARY KEY,
+          from_prefix  TEXT NOT NULL,
+          to_prefix    TEXT NOT NULL,
+          seq          INTEGER NOT NULL DEFAULT 0,
+          created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX idx_path_mappings_seq ON path_mappings(seq);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -283,6 +304,22 @@ mod tests {
         .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn path_mappings_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO path_mappings (id, from_prefix, to_prefix)
+             VALUES ('m1', 'D:\\Music', '/Users/me/Music')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM path_mappings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }

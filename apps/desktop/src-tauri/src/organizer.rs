@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use file_organizer::{
-    plan_batch, ExtensionFilter, KnownPaths, OrganizeSpec, Pattern, PlanRequest, RunDate,
-    SubfolderSpec, TrackFacts, UnusedScan,
+    plan_batch, ExtensionFilter, KnownPaths, OrganizeSpec, PathMappings, Pattern, PlanRequest,
+    RunDate, SubfolderSpec, TrackFacts, UnusedScan,
 };
 use serde::{Deserialize, Serialize};
 
@@ -197,10 +197,12 @@ pub fn validate_pattern(pattern: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 pub async fn preview_organize(
+    app: tauri::AppHandle,
     library_path: String,
     track_ids: Vec<String>,
     request: OrganizeRequest,
 ) -> Result<Vec<OrganizeRow>, String> {
+    let mappings = path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let spec = build_spec(&request)?;
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
@@ -219,7 +221,9 @@ pub async fn preview_organize(
             .iter()
             .filter_map(|t| {
                 let path = t.folder_path.as_deref()?;
-                let source = PathBuf::from(path);
+                // Plan against where the file actually is on this machine, not
+                // where another computer put it.
+                let source = resolve_path(&mappings, path);
                 let size = std::fs::metadata(&source).ok().map(|m| m.len());
                 Some((t, source, field_map(t, size)))
             })
@@ -345,18 +349,23 @@ pub async fn apply_organize(
 /// against an empty library.
 #[tauri::command]
 pub async fn scan_unused_files(
+    app: tauri::AppHandle,
     library_path: String,
     roots: Vec<String>,
     filter: ExtensionFilter,
 ) -> Result<UnusedScan, String> {
+    let mappings = path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
             .map_err(|e| e.to_string())?;
+        // Known paths must be resolved too, or every mapped track would look
+        // unused and land on the delete list.
         let known = KnownPaths::new(
             db.tracks()
                 .map_err(|e| e.to_string())?
                 .into_iter()
-                .filter_map(|t| t.folder_path),
+                .filter_map(|t| t.folder_path)
+                .map(|p| resolve_path(&mappings, &p)),
         );
         let roots: Vec<PathBuf> = roots.into_iter().map(PathBuf::from).collect();
         file_organizer::unused::scan(&roots, &known, &filter)
@@ -386,6 +395,7 @@ pub async fn delete_unused_files(
     library_path: String,
     paths: Vec<String>,
 ) -> Result<DeleteReport, String> {
+    let mappings = path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
             .map_err(|e| e.to_string())?;
@@ -393,7 +403,8 @@ pub async fn delete_unused_files(
             db.tracks()
                 .map_err(|e| e.to_string())?
                 .into_iter()
-                .filter_map(|t| t.folder_path),
+                .filter_map(|t| t.folder_path)
+                .map(|p| resolve_path(&mappings, &p)),
         );
 
         let mut report = DeleteReport::default();
@@ -438,6 +449,77 @@ fn write_delete_report(app: &tauri::AppHandle, deleted: &[String]) -> std::io::R
     let path = dir.join(format!("deleted-{stamp}.txt"));
     std::fs::write(&path, deleted.join("\n"))?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+// ── Local Path Mappings ──────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct PathMappingRow {
+    pub id: String,
+    pub from: String,
+    pub to: String,
+}
+
+/// The mappings this computer applies, in order.
+#[tauri::command]
+pub fn list_path_mappings(app: tauri::AppHandle) -> Result<Vec<PathMappingRow>, String> {
+    Ok(cache_db(&app)?
+        .list_path_mappings_with_ids()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, m)| PathMappingRow {
+            id,
+            from: m.from,
+            to: m.to,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn create_path_mapping(
+    app: tauri::AppHandle,
+    from: String,
+    to: String,
+) -> Result<String, String> {
+    cache_db(&app)?
+        .create_path_mapping(&from, &to)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_path_mapping(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    cache_db(&app)?
+        .delete_path_mapping(&id)
+        .map_err(|e| e.to_string())
+}
+
+/// Show what a stored path resolves to on this machine, and whether the file is
+/// actually there — so a mapping can be checked before it is relied on.
+#[tauri::command]
+pub fn preview_path_mapping(
+    app: tauri::AppHandle,
+    stored_path: String,
+) -> Result<(String, bool), String> {
+    let mappings = path_mappings(&app);
+    let resolved = mappings.resolve(&stored_path);
+    let exists = resolved.exists();
+    Ok((resolved.to_string_lossy().into_owned(), exists))
+}
+
+/// Load this computer's mappings, falling back to none.
+///
+/// A cache that cannot be opened must not take out every path-resolving command
+/// — without mappings the stored paths are used verbatim, which is exactly the
+/// behaviour before this feature existed.
+pub fn path_mappings(app: &tauri::AppHandle) -> PathMappings {
+    cache_db(app)
+        .and_then(|db| db.list_path_mappings().map_err(|e| e.to_string()))
+        .unwrap_or_default()
+}
+
+/// Resolve a track's stored path for this machine.
+pub fn resolve_path(mappings: &PathMappings, stored: &str) -> PathBuf {
+    mappings.resolve(stored)
 }
 
 #[cfg(test)]

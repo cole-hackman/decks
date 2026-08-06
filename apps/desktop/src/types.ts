@@ -458,3 +458,9 @@ export interface WriteTagsResult {
   failed: [string, string][];
   skipped: string[];
 }
+
+export interface PathMappingRow {
+  id: string;
+  from: string;
+  to: string;
+}

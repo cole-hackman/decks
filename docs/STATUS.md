@@ -75,13 +75,29 @@ The sidebar entry is now **Files** rather than Move & Rename, with Move & Rename
 Find Unused Files as sections — they are one domain (things that write to disk rather than to
 Rekordbox's database) and `docs/lexicon/06-files.md` treats them as one.
 
+**Local Path Mappings** (cache migration **v8**) close the slice. Per-computer prefix rewrites so a
+library restored on a second machine finds its music without a bulk relocate. Longest matching
+prefix wins; matching is on whole path components, so `/Music` cannot swallow `/MusicVideos`;
+separators are interchangeable because these databases cross platforms; and matching is
+case-insensitive while the remainder keeps its original case — the comparison has to be lenient,
+the filesystem may not be.
+
+Read-side only. The library keeps saying `D:\Music\…`, which is exactly what lets one database
+work on two machines at once. The table is deliberately **not** keyed by `library_path`: a mapping
+describes where this *computer* keeps its music and has to apply the moment any library is opened.
+Recorded as **ADR-0014**, since it breaks the pattern every other post-v5 table follows.
+
+Applied at every point that turns a stored path into a real one: the missing-file scan (a mapped
+track is not missing), Move & Rename's sources, Write Tags, and — the one that matters most — the
+unused-file sweep's known-path set, since without it every mapped track would look unused and land
+on the delete list.
+
 **What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move with favourite
 folders, field mappings, auto-write-on-change, enrichment (Find Tags & album art),
-Energy/Danceability, Beatshift Fixer, local path mappings, and the Automatic Actions settings
-group.
+Energy/Danceability, Beatshift Fixer, and the Automatic Actions settings group.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 306, typecheck, lint, `pnpm e2e` 15 — all green. One CI-only clippy lint
+clean, `pnpm test` 313, typecheck, lint, `pnpm e2e` 15 — all green. One CI-only clippy lint
 (`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
 `cargo clippy` passing locally does not guarantee CI.
 

@@ -177,8 +177,21 @@ deletion. Nothing is pre-selected, and deletion is behind an explicit second cli
 restored on a second machine finds its music without a bulk relocate. The documented two-computer
 workflow is cloud database backup plus path mappings.
 
-*decks status* — **missing.** `crates/relocate` solves the adjacent problem (fuzzy filename + size
-matching for broken paths) but there is no prefix-mapping layer.
+*decks status* — **done.** `crates/file-organizer::mappings` plus cache migration v8 and a
+`PathMappingsSection` in Settings. Longest matching prefix wins, matching is on whole path
+components (so `/Music` cannot swallow `/MusicVideos`), separators are interchangeable because the
+databases cross platforms, and matching is case-insensitive while the remainder keeps its original
+case — the comparison has to be lenient, the filesystem may not be.
+
+Read-side only: the library keeps saying `D:\Music\…`, which is what lets one database work on two
+machines at once. Mappings live in the local cache and are **not** keyed by library path — they
+describe where this *computer* keeps its music, and must apply the moment any library is opened.
+Never staged, exported or synced.
+
+Applied wherever a stored path is turned into a real one: the missing-file scan (a mapped track is
+not missing), Move & Rename's source paths, Write Tags, and the unused-file sweep's known-path set
+— that last one matters, since without it every mapped track would look unused and land on the
+delete list. `crates/relocate` still solves the adjacent problem of genuinely broken paths.
 
 *Epic* — **4**.
 

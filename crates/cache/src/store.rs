@@ -1,6 +1,7 @@
 use crate::migrations;
 use anyhow::{Context, Result};
 use changes::{ChangeKind, ChangeStatus};
+use file_organizer::{PathMapping, PathMappings};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use smartlists::{Clause, Combinator, Smartlist};
@@ -1176,6 +1177,80 @@ fn combinator_from_str(s: &str) -> Combinator {
     }
 }
 
+/// Local Path Mappings (Epic 4).
+///
+/// Deliberately not keyed by `library_path`: a mapping says where *this
+/// computer* keeps its music, and it has to apply the moment any library is
+/// opened. It is local state only — never staged, exported or synced.
+impl CacheDb {
+    pub fn list_path_mappings(&self) -> Result<PathMappings> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT from_prefix, to_prefix FROM path_mappings ORDER BY seq, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut mappings = Vec::new();
+        while let Some(r) = rows.next()? {
+            mappings.push(PathMapping {
+                from: r.get(0)?,
+                to: r.get(1)?,
+            });
+        }
+        Ok(PathMappings::new(mappings))
+    }
+
+    /// Add a mapping. Both prefixes must be non-empty — an empty `from` would
+    /// match every path in the library and rewrite all of it.
+    pub fn create_path_mapping(&self, from: &str, to: &str) -> Result<String> {
+        let from = from.trim();
+        let to = to.trim();
+        if from.is_empty() || to.is_empty() {
+            anyhow::bail!("both prefixes are required");
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let seq: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(seq), -1) + 1 FROM path_mappings",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO path_mappings (id, from_prefix, to_prefix, seq, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, from, to, seq, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn delete_path_mapping(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM path_mappings WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// The mappings with their ids, for the settings list.
+    pub fn list_path_mappings_with_ids(&self) -> Result<Vec<(String, PathMapping)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, from_prefix, to_prefix FROM path_mappings ORDER BY seq, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push((
+                r.get(0)?,
+                PathMapping {
+                    from: r.get(1)?,
+                    to: r.get(2)?,
+                },
+            ));
+        }
+        Ok(out)
+    }
+}
+
 fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     let clauses_json: String = r.get(4)?;
     let clauses: Vec<Clause> = serde_json::from_str(&clauses_json).unwrap_or_default();
@@ -1195,6 +1270,46 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn path_mappings_round_trip_and_delete() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.list_path_mappings().unwrap().is_empty());
+
+        let id = db
+            .create_path_mapping("D:\\Music", "/Users/me/Music")
+            .unwrap();
+        let mappings = db.list_path_mappings().unwrap();
+        assert_eq!(mappings.mappings.len(), 1);
+        assert_eq!(
+            mappings.resolve("D:\\Music\\a.mp3"),
+            std::path::PathBuf::from("/Users/me/Music/a.mp3")
+        );
+
+        assert!(db.delete_path_mapping(&id).unwrap());
+        assert!(!db.delete_path_mapping(&id).unwrap());
+        assert!(db.list_path_mappings().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_mapping_with_an_empty_prefix_is_refused() {
+        // An empty `from` would match every path and rewrite the whole library.
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.create_path_mapping("  ", "/Users/me/Music").is_err());
+        assert!(db.create_path_mapping("/Music", "").is_err());
+    }
+
+    #[test]
+    fn mappings_come_back_in_insertion_order_with_their_ids() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let first = db.create_path_mapping("/Music", "/a").unwrap();
+        let second = db.create_path_mapping("/Music/Live", "/b").unwrap();
+        let rows = db.list_path_mappings_with_ids().unwrap();
+        assert_eq!(
+            rows.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>(),
+            vec![first, second]
+        );
+    }
 
     #[test]
     fn open_in_memory_succeeds() {

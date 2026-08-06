@@ -1546,5 +1546,16 @@ real tags in people's files with nothing. Not writing it makes the feature safe 
 local `cargo clippy --workspace --all-targets -- -D warnings` is necessary but not sufficient —
 `unnecessary_sort_by` only fired on CI. Expect one round-trip per PR on new lints.
 
+**Local Path Mappings** looked like the smallest thing in the epic and turned out to be the one with
+the most reach. Storing and resolving a prefix is twenty lines; deciding *where* resolution applies
+is the actual feature. The unused-file sweep is the case that makes it non-optional — resolve the
+scan but not the known-path set, and every mapped track in the library shows up as unused and
+therefore deletable. So the mappings go through `KnownPaths` too, and there is a test for it.
+
+Also deliberate: the `path_mappings` table is not keyed by `library_path`, unlike every other table
+added since v5. A mapping is a fact about the *computer*, not about a library, and it has to apply
+the moment a library is opened — before anything has been recorded against that library's path.
+Noted in the migration itself so the inconsistency reads as a decision rather than an oversight.
+
 **Next:** the rest of Epic 4. Watch folder and the incoming auto-advance flow are the natural
 follow-on, since they are what makes auto-move-on-done meaningful.
