@@ -21,6 +21,14 @@ pub enum ChangeStatus {
 pub enum ChangeKind {
     TrackMetadataEdit,
     TrackDelete,
+    /// A file that is not in the library yet and should be.
+    ///
+    /// **Export-only.** Inserting a row into `djmdContent` needs columns
+    /// `decks` does not model and cannot verify against a real schema, and a
+    /// half-populated row is worse than no row. The sanctioned route for adding
+    /// tracks is Rekordbox's own XML import, so this kind is emitted into the
+    /// export and the applier refuses it with that explanation.
+    TrackCreate,
     /// The file moved on disk; `master.db` needs to be told where it went.
     /// Distinct from `TrackMetadataEdit` because it touches several columns at
     /// once and because the filesystem move has already happened by the time

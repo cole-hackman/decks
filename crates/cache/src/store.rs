@@ -1251,6 +1251,94 @@ impl CacheDb {
     }
 }
 
+/// A folder under observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatchFolder {
+    pub id: String,
+    pub path: String,
+}
+
+/// Watch folders and the arrivals the user has finished with (Epic 4).
+///
+/// Computer-scoped for the same reason as path mappings and quick-move
+/// destinations: "the folder my downloads land in" is a fact about this disk.
+impl CacheDb {
+    pub fn list_watch_folders(&self) -> Result<Vec<WatchFolder>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, path FROM watch_folders ORDER BY created_at, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(WatchFolder {
+                id: r.get(0)?,
+                path: r.get(1)?,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn add_watch_folder(&self, path: &str) -> Result<String> {
+        let path = path.trim();
+        if path.is_empty() {
+            anyhow::bail!("a folder path is required");
+        }
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM watch_folders WHERE path = ?1",
+            rusqlite::params![path],
+            |r| r.get::<_, String>(0),
+        ) {
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO watch_folders (id, path, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![id, path, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn remove_watch_folder(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM watch_folders WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Paths the user has already dealt with, so a scan stops offering them.
+    pub fn dismissed_watch_paths(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT path FROM watch_dismissed")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(r.get(0)?);
+        }
+        Ok(out)
+    }
+
+    /// Mark paths as dealt with. Idempotent — dismissing twice is not an error,
+    /// and two scans racing to dismiss the same file must not fail one of them.
+    pub fn dismiss_watch_paths(&self, paths: &[String]) -> Result<usize> {
+        let mut n = 0;
+        for path in paths {
+            let key = path.replace('\\', "/").to_lowercase();
+            n += self.conn.execute(
+                "INSERT INTO watch_dismissed (path_key, path, dismissed_at)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(path_key) DO UPDATE SET dismissed_at = excluded.dismissed_at",
+                rusqlite::params![key, path, now_secs()],
+            )?;
+        }
+        Ok(n)
+    }
+
+    /// Un-dismiss everything, so a folder can be triaged again from scratch.
+    pub fn clear_dismissed_watch_paths(&self) -> Result<usize> {
+        Ok(self.conn.execute("DELETE FROM watch_dismissed", [])?)
+    }
+}
+
 /// A remembered quick-move destination.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuickMoveFolder {
@@ -1356,6 +1444,59 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn adding_the_same_watch_folder_twice_is_idempotent() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let a = db.add_watch_folder("/Music/Watch").unwrap();
+        let b = db.add_watch_folder("/Music/Watch").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(db.list_watch_folders().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn watch_folders_can_be_removed() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.add_watch_folder("/Music/Watch").unwrap();
+        assert!(db.remove_watch_folder(&id).unwrap());
+        assert!(!db.remove_watch_folder(&id).unwrap());
+        assert!(db.list_watch_folders().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_empty_watch_folder_path_is_refused() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.add_watch_folder("   ").is_err());
+    }
+
+    #[test]
+    fn dismissing_the_same_path_twice_is_not_an_error() {
+        // Two scans racing to dismiss the same file must not fail one of them.
+        let db = CacheDb::open_in_memory().unwrap();
+        let paths = vec!["/Music/Watch/a.mp3".to_string()];
+        db.dismiss_watch_paths(&paths).unwrap();
+        db.dismiss_watch_paths(&paths).unwrap();
+        assert_eq!(db.dismissed_watch_paths().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dismissal_is_keyed_case_and_separator_insensitively() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.dismiss_watch_paths(&["/Music/Watch/A.mp3".to_string()])
+            .unwrap();
+        db.dismiss_watch_paths(&["\\music\\watch\\a.mp3".to_string()])
+            .unwrap();
+        assert_eq!(db.dismissed_watch_paths().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dismissals_can_be_cleared_to_triage_a_folder_again() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.dismiss_watch_paths(&["/a.mp3".to_string(), "/b.mp3".to_string()])
+            .unwrap();
+        assert_eq!(db.clear_dismissed_watch_paths().unwrap(), 2);
+        assert!(db.dismissed_watch_paths().unwrap().is_empty());
+    }
 
     #[test]
     fn recording_the_same_quick_move_folder_twice_does_not_duplicate_it() {

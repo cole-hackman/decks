@@ -471,3 +471,27 @@ export interface QuickMoveFolder {
   favourite: boolean;
   last_used_at: number;
 }
+
+export interface WatchFolderRow {
+  id: string;
+  path: string;
+}
+
+export interface Arrival {
+  path: string;
+  size_bytes: number;
+  /** Seconds since last modification, as of the scan. */
+  age_secs: number;
+}
+
+export interface WatchScan {
+  arrivals: Arrival[];
+  /** Files still being written — reported so the UI can say so. */
+  pending: Arrival[];
+  errors: string[];
+}
+
+export interface ImportResult {
+  staged: string[];
+  failed: [string, string][];
+}

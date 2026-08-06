@@ -1580,7 +1580,27 @@ machine was slow enough. Waiting on a child instead is both correct and what the
 already claimed it was doing. Worth remembering: `findBy*` on the thing that appears first does not
 wait for the thing that appears second.
 
-**Next:** the rest of Epic 4. The watch folder is what remains of the automation story, and it needs
-a decision first: importing a *new* file into the library is a `master.db` write, so it has to go
-through a new `ChangeKind::TrackCreate` and the XML-export path rather than the watcher writing
-anything directly. Worth designing before building.
+**The watch folder decision, resolved.** Importing a new file is a `master.db` write, and the
+non-negotiable says no. Two honest options: model the `djmdContent` INSERT and hope the schema
+matches, or route new tracks through Rekordbox's own XML import. The second wins easily — the
+export already exists, the import is Pioneer's own supported path, and a half-populated row in a
+performing library is a genuinely bad outcome. So `TrackCreate` is export-only and the applier
+*refuses* it, with a message that names the file and says where to go instead. A refusal that
+teaches is worth more than one that just fails.
+
+**Scanning beat watching.** The manual says "continuous observation", which reads like a filesystem
+watcher. But a watcher misses everything that happened while the app was closed, needs a
+platform-specific dependency, and cannot be tested without an event loop. A 15-second scan of one
+folder is cheap and makes the arrival set a pure function of three inputs — which is why
+`scan_watch_folders` has tests for the skip list, the settle rule and clock skew, none of which
+would be reachable through a watcher. If push ever matters, it slots in behind the same function.
+
+**The settle rule was not in the spec and had to be.** A large FLAC over a network share exists on
+disk long before it is complete. Reading its tags mid-copy gives a truncated title and, worse, a
+wrong duration that then propagates into Rekordbox. Ten seconds of no modification, and the files
+still moving are reported separately rather than silently omitted — "3 files still copying" is
+information; a short list is a mystery.
+
+**Next:** what is left of Epic 4 is the Automatic Actions settings group (which is what would make
+auto-move-on-done actually fire), field mappings, and the enrichment revival. Epic 5 onward is
+untouched.

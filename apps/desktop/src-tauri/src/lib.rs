@@ -4,6 +4,7 @@ mod cue_generator;
 mod cues;
 mod organizer;
 mod smartlists;
+mod watch;
 mod write_tags;
 
 use std::collections::HashMap;
@@ -941,6 +942,23 @@ pub fn generate_export_xml(
         })
         .collect::<Vec<_>>();
 
+    // New tracks the library does not have yet. Emitted here because
+    // Rekordbox's XML import is the only sanctioned way to add a track — the
+    // applier refuses `TrackCreate` for exactly this reason.
+    //
+    // IDs continue past the highest existing one so a new track can never
+    // collide with a real one and silently replace it in the import.
+    let mut next_xml_id = xml_tracks.iter().map(|t| t.track_id).max().unwrap_or(0) + 1;
+    for change in accepted
+        .iter()
+        .filter(|c| c.kind == changes::ChangeKind::TrackCreate)
+    {
+        if let Some(track) = new_track_to_xml_track(change, next_xml_id) {
+            xml_tracks.push(track);
+            next_xml_id += 1;
+        }
+    }
+
     for change in accepted {
         apply_xml_overlay(&mut xml_tracks, &track_id_map, change)?;
     }
@@ -1090,6 +1108,59 @@ pub fn generate_export_xml(
     let xml = decks_core::rekordbox_xml::to_xml(&collection).map_err(|e| e.to_string())?;
     decks_core::rekordbox_xml::parse(&xml).map_err(|e| e.to_string())?;
     Ok(xml)
+}
+
+/// Build an XML `<TRACK>` for a `TrackCreate` change.
+///
+/// Returns `None` when the payload has no path — without one, Rekordbox has
+/// nothing to import and a nameless entry in the collection is worse than a
+/// missing one.
+fn new_track_to_xml_track(
+    change: &cache::StagedChangeRecord,
+    xml_id: u32,
+) -> Option<decks_core::rekordbox_xml::Track> {
+    let v = change.new_value.as_ref()?;
+    let path = v.get("path").and_then(|x| x.as_str())?;
+    let text = |key: &str| {
+        v.get(key)
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+    };
+    let num = |key: &str| {
+        v.get(key)
+            .and_then(|x| x.as_u64())
+            .and_then(|n| u32::try_from(n).ok())
+    };
+
+    Some(decks_core::rekordbox_xml::Track {
+        track_id: xml_id,
+        // Fall back to the filename: an untagged file still deserves a usable
+        // name in the collection rather than an empty one.
+        name: text("title").unwrap_or_else(|| {
+            std::path::Path::new(path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string())
+        }),
+        location: decks_core::rekordbox_xml::uri::path_to_location(path),
+        artist: text("artist"),
+        album: text("album"),
+        genre: text("genre"),
+        comments: text("comment"),
+        tonality: text("musical_key"),
+        average_bpm: v.get("bpm").and_then(|x| x.as_f64()),
+        year: num("year"),
+        // Duration arrives from the tag reader as a float; Rekordbox wants
+        // whole seconds.
+        total_time: v
+            .get("duration_secs")
+            .and_then(|x| x.as_f64())
+            .filter(|d| *d >= 0.0)
+            .map(|d| d.round() as u32),
+        ..Default::default()
+    })
 }
 
 fn db_track_to_xml_track(
@@ -2606,6 +2677,13 @@ pub fn run() {
             organizer::record_quick_move_folder,
             organizer::toggle_quick_move_favourite,
             organizer::delete_quick_move_folder,
+            watch::list_watch_folders,
+            watch::add_watch_folder,
+            watch::remove_watch_folder,
+            watch::scan_arrivals,
+            watch::stage_arrival_imports,
+            watch::dismiss_arrivals,
+            watch::clear_dismissed_arrivals,
             cues::get_beat_grid,
             cues::quantize_position,
             cues::beat_jump_position,
@@ -2714,6 +2792,109 @@ mod tests {
     use changes::{ChangeKind, ChangeStatus};
     use decks_core::rekordbox_db::{Playlist, PlaylistEntry, PlaylistKind, Track};
     use serde_json::json;
+
+    fn create_change(id: &str, value: serde_json::Value) -> cache::StagedChangeRecord {
+        cache::StagedChangeRecord {
+            id: id.into(),
+            library_path: None,
+            kind: ChangeKind::TrackCreate,
+            target_id: None,
+            field: None,
+            old_value: None,
+            new_value: Some(value),
+            reason: None,
+            confidence: None,
+            status: ChangeStatus::Accepted,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn existing_track(id: &str) -> Track {
+        Track {
+            id: id.into(),
+            title: "Existing".into(),
+            artist: None,
+            album: None,
+            genre: None,
+            musical_key: None,
+            bpm: None,
+            duration_secs: None,
+            rating: None,
+            comment: None,
+            folder_path: Some("/music/existing.mp3".into()),
+            analysis_data_path: None,
+            file_type: None,
+            sample_rate: None,
+            bit_rate: None,
+            release_year: None,
+            dj_play_count: None,
+            energy: None,
+        }
+    }
+
+    #[test]
+    fn export_emits_new_tracks_so_rekordbox_can_import_them() {
+        let tracks = vec![existing_track("7")];
+        let accepted = vec![create_change(
+            "c1",
+            json!({
+                "path": "/incoming/new.mp3",
+                "title": "Get Lucky",
+                "artist": "Daft Punk",
+                "bpm": 116.0,
+                "duration_secs": 369.4,
+                "year": 2013,
+            }),
+        )];
+
+        let xml = generate_export_xml(&tracks, &[], &HashMap::new(), &accepted, None).unwrap();
+        let parsed = decks_core::rekordbox_xml::parse(&xml).unwrap();
+
+        let new_track = parsed
+            .tracks
+            .iter()
+            .find(|t| t.name == "Get Lucky")
+            .expect("new track should be in the collection");
+        assert_eq!(new_track.artist.as_deref(), Some("Daft Punk"));
+        assert_eq!(new_track.average_bpm, Some(116.0));
+        assert_eq!(new_track.total_time, Some(369));
+        assert_eq!(new_track.year, Some(2013));
+        assert!(new_track.location.contains("new.mp3"));
+    }
+
+    #[test]
+    fn a_new_tracks_xml_id_cannot_collide_with_an_existing_one() {
+        // Existing track's ID parses to 7; a naive 1-based counter would hand
+        // the new track an ID that silently replaces a real one on import.
+        let tracks = vec![existing_track("7")];
+        let accepted = vec![create_change("c1", json!({ "path": "/incoming/new.mp3" }))];
+
+        let xml = generate_export_xml(&tracks, &[], &HashMap::new(), &accepted, None).unwrap();
+        let parsed = decks_core::rekordbox_xml::parse(&xml).unwrap();
+
+        let ids: Vec<u32> = parsed.tracks.iter().map(|t| t.track_id).collect();
+        assert_eq!(ids.len(), 2);
+        assert_ne!(ids[0], ids[1]);
+        assert!(ids.contains(&7));
+    }
+
+    #[test]
+    fn an_untagged_new_track_falls_back_to_its_filename() {
+        let accepted = vec![create_change("c1", json!({ "path": "/incoming/mystery.mp3" }))];
+        let xml = generate_export_xml(&[], &[], &HashMap::new(), &accepted, None).unwrap();
+        let parsed = decks_core::rekordbox_xml::parse(&xml).unwrap();
+        assert_eq!(parsed.tracks.len(), 1);
+        assert_eq!(parsed.tracks[0].name, "mystery");
+    }
+
+    #[test]
+    fn a_new_track_change_with_no_path_is_skipped_rather_than_emitted_nameless() {
+        let accepted = vec![create_change("c1", json!({ "title": "No path" }))];
+        let xml = generate_export_xml(&[], &[], &HashMap::new(), &accepted, None).unwrap();
+        let parsed = decks_core::rekordbox_xml::parse(&xml).unwrap();
+        assert!(parsed.tracks.is_empty());
+    }
 
     #[test]
     fn test_generate_export_xml_playlist_mutations() {

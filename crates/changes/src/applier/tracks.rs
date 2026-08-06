@@ -226,6 +226,27 @@ pub(super) fn apply_relocate(tx: &Transaction, change: &StagedChange) -> anyhow:
     Ok(())
 }
 
+/// `TrackCreate` cannot be applied to `master.db`.
+///
+/// Not an oversight and not a stub: a `djmdContent` row needs columns this
+/// repo does not model (`FileNameL`, `FileSize`, `ContentLink`, the analysis
+/// pointers), and there is no real fixture to verify an INSERT against. A
+/// half-populated row in a performing library is worse than no row. New tracks
+/// reach Rekordbox through its own XML import, which the export already emits
+/// them into — so the failure message points there rather than being generic.
+pub(super) fn refuse_create(change: &StagedChange) -> anyhow::Result<()> {
+    let what = change
+        .new_value
+        .as_ref()
+        .and_then(|v| v.get("path"))
+        .and_then(Value::as_str)
+        .unwrap_or("track");
+    bail!(
+        "{what} is a new track: sync cannot insert into master.db. \
+         Export the XML and import it in Rekordbox instead."
+    )
+}
+
 pub(super) fn json_to_sql(v: &Value) -> anyhow::Result<rusqlite::types::Value> {
     Ok(match v {
         Value::String(s) => rusqlite::types::Value::Text(s.clone()),

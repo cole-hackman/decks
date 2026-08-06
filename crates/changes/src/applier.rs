@@ -130,6 +130,7 @@ fn apply_single(
         ChangeKind::TrackMetadataEdit => tracks::apply_metadata_edit(tx, change, options, warnings),
         ChangeKind::TrackDelete => tracks::apply_delete(tx, change),
         ChangeKind::TrackRelocate => tracks::apply_relocate(tx, change),
+        ChangeKind::TrackCreate => tracks::refuse_create(change),
         ChangeKind::TrackAddCue => cues::apply_add_cue(tx, change, options),
         ChangeKind::CueMetadataEdit => cues::apply_metadata_edit(tx, change),
         ChangeKind::TrackDeleteCue => cues::apply_delete_cue(tx, change),
@@ -174,6 +175,36 @@ mod tests {
             created_at: 0,
             updated_at: 0,
         }
+    }
+
+    #[test]
+    fn a_new_track_is_refused_with_a_pointer_to_the_xml_route() {
+        // master.db inserts need columns decks does not model, so TrackCreate
+        // is export-only. The refusal has to be actionable, not generic.
+        let mut conn = Connection::open_in_memory().unwrap();
+        let tx = conn.transaction().unwrap();
+        let change = StagedChange {
+            id: "c1".into(),
+            library_path: None,
+            kind: ChangeKind::TrackCreate,
+            target_id: None,
+            field: None,
+            old_value: None,
+            new_value: Some(serde_json::json!({ "path": "/incoming/new.mp3" })),
+            reason: None,
+            confidence: None,
+            status: ChangeStatus::Accepted,
+            created_at: 0,
+            updated_at: 0,
+        };
+        let result = apply(&tx, &[change]).unwrap();
+        assert!(result.applied.is_empty());
+        assert_eq!(result.failed.len(), 1);
+        assert!(
+            result.failed[0].1.contains("XML") && result.failed[0].1.contains("new.mp3"),
+            "refusal should name the file and point at the XML route: {}",
+            result.failed[0].1
+        );
     }
 
     #[test]

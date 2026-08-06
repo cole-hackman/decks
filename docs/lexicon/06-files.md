@@ -10,8 +10,24 @@ managing the filesystem.
 *What it does* — A folder under continuous observation. Any music file dropped in is imported
 automatically. Default location `Music/Lexicon/Watch Folder`.
 
-*decks status* — **missing.** `decks` has an Incoming view, but ingest is a manual filesystem pick
-with fuzzy matching, not a watcher.
+*decks status* — **done**, with one deliberate substitution. `WatchFolderPanel` (Files view) plus
+cache migration v10. Arrivals are found by a **debounced scan** every 15 seconds rather than a
+native filesystem watcher: the arrival set is a pure function of (files on disk, library,
+dismissed), so it is testable without an event loop, it cannot miss something that happened while
+the app was closed, and it needs no platform-specific dependency. A push-based watcher would sit
+behind the same function and change nothing the user sees.
+
+Two rules the manual does not state. Files whose modification time is less than **10 seconds** old
+are held back and reported separately — a large FLAC copied over a network share exists on disk
+long before it is complete, and importing mid-copy reads truncated tags and a wrong duration. And
+dismissals are recorded, so a file the user chose not to import is not offered again on every scan;
+`Un-ignore everything` clears them.
+
+Importing stages a `TrackCreate` change. It is **export-only**: inserting a row into `djmdContent`
+needs columns `decks` does not model and cannot verify against a real schema, and a half-populated
+row in a performing library is worse than no row. New tracks reach Rekordbox through its own XML
+import, which the export emits them into, and the applier's refusal message says exactly that
+rather than failing generically.
 
 *Epic* — **4**.
 
@@ -30,8 +46,9 @@ button is bindable to a hotkey. That turns triage into a single repeated keystro
 labelled as such.
 
 *decks status* — **partial.** `IncomingView` exists with `Mark all reviewed` and `Archive selected`
-header actions, backed by a `last_incoming_cleared_at` watermark. Missing: auto-advance, hotkey
-binding, delete-from-disk, and the whole point of the page — that it is fed by a watcher.
+header actions, backed by a `last_incoming_cleared_at` watermark, and the Files view now has a
+watch-folder queue with per-file and bulk import/ignore. Missing: auto-advance on `Selected done`,
+its hotkey binding, and delete-from-disk.
 
 *Epic* — **4**.
 
@@ -47,10 +64,10 @@ field. `Genre` then `BPM` yields `…/Music/House/128/track.mp3`. **If a field i
 still moves to the target folder, just without that subfolder level** — no orphaning.
 
 *decks status* — **partial.** `crates/file-organizer::subfolder` implements the three levels, the
-empty-level rule and all five special patterns; `OrganizeFilesView` (sidebar → Move & Rename) runs
-it over the selection with a full preview, and each move stages a `TrackRelocate` change. What is
-missing is the *auto* half — this runs on demand, not when an incoming track is marked done, because
-there is no watch folder yet.
+empty-level rule and all five special patterns; `OrganizeFilesView` (sidebar → Files) runs it over
+the selection with a full preview, and each move stages a `TrackRelocate` change. What is missing is
+the *auto* half — the watch folder now exists, but marking an arrival done does not yet trigger a
+move; that needs the Automatic Actions settings group.
 
 *Epic* — **4**.
 

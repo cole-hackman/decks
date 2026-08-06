@@ -99,12 +99,32 @@ typing a path fires a move on every digit. The move itself reuses the Move & Ren
 collisions and `TrackRelocate` staging behave identically, and the success message repeats the
 full-sync warning the manual is emphatic about.
 
-**What is NOT done in Epic 4:** watch folder, incoming auto-advance, quick move's context-menu
-entry point, field mappings, auto-write-on-change, enrichment (Find Tags & album art),
-Energy/Danceability, Beatshift Fixer, and the Automatic Actions settings group.
+**Watch folders** (cache migration **v10**) complete the automation story, with one deliberate
+substitution: arrivals are found by a **debounced scan** every 15 seconds rather than a native
+filesystem watcher. That makes the arrival set a pure function of (files on disk, library,
+dismissed) — testable without an event loop, unable to miss something that happened while the app
+was closed, and free of a platform-specific dependency. A push-based watcher would sit behind the
+same function and change nothing the user sees.
+
+Two rules the manual does not state, both earned rather than assumed. A file whose modification
+time is under **10 seconds** old is held back and reported separately: a large FLAC copied over a
+network share exists on disk long before it is complete, and importing mid-copy reads truncated
+tags and a wrong duration. And dismissals are recorded, so a file the user chose not to import is
+not offered again on every scan.
+
+**New `ChangeKind::TrackCreate`, and it is export-only.** Inserting a row into `djmdContent` needs
+columns `decks` does not model and cannot verify against a real fixture, and a half-populated row
+in a performing library is worse than no row. So the applier **refuses** it — with a message naming
+the file and pointing at the XML route — and the exporter emits the new tracks into the collection,
+continuing IDs past the highest existing one so an import can never silently replace a real track.
+
+**What is NOT done in Epic 4:** incoming auto-advance and its hotkey, delete-from-disk, quick
+move's context-menu entry point, field mappings, auto-write-on-change, enrichment (Find Tags &
+album art), Energy/Danceability, Beatshift Fixer, and the Automatic Actions settings group — which
+is what would make auto-move-on-done fire.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 324, typecheck, lint, `pnpm e2e` 16 — all green. One CI-only clippy lint
+clean, `pnpm test` 334, typecheck, lint, `pnpm e2e` 17 — all green. One CI-only clippy lint
 (`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
 `cargo clippy` passing locally does not guarantee CI.
 

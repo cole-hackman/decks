@@ -24,6 +24,13 @@ vi.mock("../ipc", () => ({
   writeTagsBulk: vi.fn(),
   scanUnusedFiles: vi.fn(),
   deleteUnusedFiles: vi.fn(),
+  listWatchFolders: vi.fn(async () => []),
+  addWatchFolder: vi.fn(),
+  removeWatchFolder: vi.fn(),
+  scanArrivals: vi.fn(async () => ({ arrivals: [], pending: [], errors: [] })),
+  stageArrivalImports: vi.fn(),
+  dismissArrivals: vi.fn(),
+  clearDismissedArrivals: vi.fn(),
 }));
 
 function track(id: string, title: string): Track {

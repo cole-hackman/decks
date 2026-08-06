@@ -207,6 +207,28 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_quick_move_recent ON quick_move_folders(favourite DESC, last_used_at DESC);
         ",
     ),
+    (
+        10,
+        "
+        -- Watch folders (Epic 4) and the files the user has finished with.
+        --
+        -- `watch_dismissed` is what stops a file the user chose not to import
+        -- from being offered again on every scan. Keyed on a normalised path
+        -- (lower-cased, forward slashes) for the same reason the unused-file
+        -- sweep normalises: the filesystem and the library do not reliably
+        -- agree on case.
+        CREATE TABLE watch_folders (
+          id         TEXT PRIMARY KEY,
+          path       TEXT NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE TABLE watch_dismissed (
+          path_key     TEXT PRIMARY KEY,
+          path         TEXT NOT NULL,
+          dismissed_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -324,6 +346,25 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn watch_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO watch_folders (id, path) VALUES ('w1', '/Music/Watch');
+             INSERT INTO watch_dismissed (path_key, path)
+                VALUES ('/music/watch/a.mp3', '/Music/Watch/a.mp3');",
+        )
+        .unwrap();
+        let folders: i64 = conn
+            .query_row("SELECT COUNT(*) FROM watch_folders", [], |r| r.get(0))
+            .unwrap();
+        let dismissed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM watch_dismissed", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!((folders, dismissed), (1, 1));
     }
 
     #[test]

@@ -90,6 +90,11 @@ test.beforeEach(async ({ page }) => {
       }
 
       const staged: Array<Record<string, unknown>> = [];
+      let watchFolders = [{ id: "w1", path: "/watch" }];
+      let ignored: string[] = [];
+      const arrivals = [
+        { path: "/watch/fresh download.mp3", size_bytes: 8000000, age_secs: 60 },
+      ];
       let quickMoveFolders = [
         {
           id: "q1",
@@ -137,6 +142,36 @@ test.beforeEach(async ({ page }) => {
               }
               return [...p.matchAll(/%([^%]+)%/g)].map((m) => m[1]);
             }
+            case "list_watch_folders":
+              return watchFolders;
+            case "add_watch_folder":
+              watchFolders = [
+                ...watchFolders,
+                { id: "w2", path: String(args.path) },
+              ];
+              return "w2";
+            case "remove_watch_folder":
+              watchFolders = watchFolders.filter((f) => f.id !== args.id);
+              return true;
+            case "scan_arrivals":
+              return {
+                arrivals: arrivals.filter((a) => !ignored.includes(a.path)),
+                pending: [
+                  { path: "/watch/copying.mp3", size_bytes: 1000, age_secs: 1 },
+                ],
+                errors: [],
+              };
+            case "stage_arrival_imports": {
+              const paths = args.paths as string[];
+              ignored = [...ignored, ...paths];
+              return { staged: paths.map((_, i) => `c${i}`), failed: [] };
+            }
+            case "dismiss_arrivals":
+              ignored = [...ignored, ...(args.paths as string[])];
+              return 1;
+            case "clear_dismissed_arrivals":
+              ignored = [];
+              return 1;
             case "list_quick_move_folders":
               return quickMoveFolders;
             case "record_quick_move_folder":
@@ -254,7 +289,7 @@ test("find unused files: scan, then confirm before deleting", async ({ page }) =
   await openOrganize(page);
 
   await page.getByLabel("Folder to scan").fill("/music");
-  await page.getByRole("button", { name: "Scan" }).click();
+  await page.getByRole("button", { name: "Scan", exact: true }).click();
 
   const scan = page.getByTestId("unused-scan");
   await expect(scan).toBeVisible();
@@ -307,4 +342,26 @@ test("quick move: hotkey 1 sends the selection to the first favourite", async ({
   // it is, so it is not part of the move.
   await expect(page.getByText(/Moved 1 file\(s\) to \/music\/Techno/)).toBeVisible();
   await expect(page.getByText(/full sync clears the old locations/)).toBeVisible();
+});
+
+test("watch folder: an arrival can be imported, and says how it reaches Rekordbox", async ({
+  page,
+}) => {
+  await openOrganize(page);
+
+  const panel = page.getByTestId("watch-arrivals");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("fresh download.mp3")).toBeVisible();
+  // Files still being copied are held back, and the panel says so.
+  await expect(page.getByTestId("watch-pending")).toContainText(
+    "still being written",
+  );
+
+  await page.getByRole("button", { name: "Import all" }).click();
+  await expect(
+    page.getByText(/Export the XML and import it in Rekordbox/),
+  ).toBeVisible();
+
+  // Imported files stop being offered.
+  await expect(page.getByText("0 new file(s)")).toBeVisible();
 });

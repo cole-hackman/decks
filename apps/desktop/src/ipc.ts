@@ -40,6 +40,9 @@ import type {
   WriteTagsResult,
   PathMappingRow,
   QuickMoveFolder,
+  WatchFolderRow,
+  WatchScan,
+  ImportResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1075,4 +1078,35 @@ export async function toggleQuickMoveFavourite(id: string): Promise<boolean> {
 
 export async function deleteQuickMoveFolder(id: string): Promise<boolean> {
   return invoke<boolean>("delete_quick_move_folder", { id });
+}
+
+export async function listWatchFolders(): Promise<WatchFolderRow[]> {
+  return invoke<WatchFolderRow[]>("list_watch_folders");
+}
+
+export async function addWatchFolder(path: string): Promise<string> {
+  return invoke<string>("add_watch_folder", { path });
+}
+
+export async function removeWatchFolder(id: string): Promise<boolean> {
+  return invoke<boolean>("remove_watch_folder", { id });
+}
+
+export async function scanArrivals(libraryPath: string): Promise<WatchScan> {
+  return invoke<WatchScan>("scan_arrivals", { libraryPath });
+}
+
+export async function stageArrivalImports(
+  libraryPath: string,
+  paths: string[],
+): Promise<ImportResult> {
+  return invoke<ImportResult>("stage_arrival_imports", { libraryPath, paths });
+}
+
+export async function dismissArrivals(paths: string[]): Promise<number> {
+  return invoke<number>("dismiss_arrivals", { paths });
+}
+
+export async function clearDismissedArrivals(): Promise<number> {
+  return invoke<number>("clear_dismissed_arrivals");
 }

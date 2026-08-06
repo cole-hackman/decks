@@ -7,6 +7,7 @@ import {
 } from "../ipc";
 import { useToast } from "./Toast";
 import { QuickMovePanel } from "./QuickMovePanel";
+import { WatchFolderPanel } from "./WatchFolderPanel";
 import { UnusedFilesPanel } from "./UnusedFilesPanel";
 import { WriteTagsPanel } from "./WriteTagsPanel";
 import type {
@@ -309,6 +310,7 @@ export function OrganizeFilesView({ libraryPath, tracks, selectedTrackIds }: Pro
       )}
 
       <div className="mt-4">
+        <WatchFolderPanel libraryPath={libraryPath} />
         <QuickMovePanel
           libraryPath={libraryPath}
           trackIds={targetIds}
