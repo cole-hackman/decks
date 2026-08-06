@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 
+pub mod csv_import;
 pub mod csv_input;
 pub mod normalise;
 

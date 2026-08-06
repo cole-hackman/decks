@@ -8,6 +8,7 @@ import {
   type MatchResult,
 } from "../ipc";
 import { useDialog } from "../hooks/useDialog";
+import { readTextFile } from "../lib/read-file";
 import { useToast } from "./Toast";
 
 interface Props {
@@ -58,7 +59,7 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   const onTxtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const text = await f.text();
+    const text = await readTextFile(f);
     setPasted(text);
     setSource("paste");
   };
@@ -66,7 +67,7 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   const onCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const text = await f.text();
+    const text = await readTextFile(f);
     // Extract headers via the backend RFC-4180 CSV parser so quoted commas in
     // header names (e.g. `"Last, First",artist`) are handled correctly. Backend
     // re-parses authoritatively at match-time.

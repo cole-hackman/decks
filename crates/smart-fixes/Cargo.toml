@@ -7,6 +7,9 @@ description = "Lexicon-style one-click metadata cleanup proposals"
 
 [dependencies]
 serde = { workspace = true }
+# The shared text engine — case-insensitive find that is correct for
+# non-ASCII, rather than a second lower-case-and-splice implementation.
+recipes = { path = "../recipes" }
 regex = "1"
 sha2 = "0.10"
 hex = "0.4"

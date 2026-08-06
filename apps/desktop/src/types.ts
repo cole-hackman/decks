@@ -739,3 +739,55 @@ export interface UndoResult {
   /** `[description, reason]` for entries that could not be reversed. */
   blocked: [string, string][];
 }
+
+// ── Import Tags From CSV (Epic 5) ────────────────────────────────────────────
+// Mirrors `track_matcher::csv_import`. See docs/lexicon/10-recipes.md.
+
+export interface CsvImportColumns {
+  /** File-path column. Matched against the track's folder path. */
+  location: string | null;
+  artist: string | null;
+  title: string | null;
+  /** `[csv header, track field]` — the values to write. */
+  fields: [string, string][];
+}
+
+export interface CsvImportRow {
+  /** 1-based, counting the header as row 1 — what the spreadsheet shows. */
+  line: number;
+  location: string | null;
+  artist: string | null;
+  title: string | null;
+  values: Record<string, string>;
+}
+
+export type CsvRowOutcome =
+  | {
+      kind: "matched";
+      track_id: string;
+      track_title: string;
+      /** `[field, before, after]`. */
+      changes: [string, string | null, string][];
+    }
+  | { kind: "already_current"; track_id: string }
+  | { kind: "unmatched" }
+  | { kind: "ambiguous"; count: number };
+
+export interface CsvPlannedRow {
+  row: CsvImportRow;
+  outcome: CsvRowOutcome;
+}
+
+export interface CsvImportReport {
+  rows: number;
+  matched: number;
+  already_current: number;
+  unmatched: number;
+  ambiguous: number;
+  changes: number;
+}
+
+export interface CsvImportPreview {
+  rows: CsvPlannedRow[];
+  report: CsvImportReport;
+}

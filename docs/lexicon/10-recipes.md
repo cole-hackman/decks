@@ -27,10 +27,16 @@ with a preview/apply split (`smart_fix_preview` / `smart_fix_apply`) and a confi
 blocklist. This is genuine parity, and in one respect ahead: `decks` previews every proposal as a
 deselectable diff row before applying.
 
-One loose end: the blocklist has IPC wrappers (`commonTextBlocklistList/Add/Remove` in
-`apps/desktop/src/ipc.ts`) but **no UI consumes them**.
+The blocklist is now reachable from **Settings → Remove Common Text**, closing the loose end where
+the IPC existed but nothing consumed it. Both presets the manual names are offered as one-click
+buttons — `(Original Mix)` and the 24 Camelot keys — rather than seeded into the list: a blocklist
+that arrives pre-populated will eventually strip something the user wanted, and they will have no
+idea where it came from.
 
-*Epic* — **5** (surface the blocklist settings panel).
+Adding a pattern already on the list is a no-op rather than a duplicate row, compared
+case-insensitively, because the fix itself matches case-insensitively.
+
+*Epic* — **5** — done.
 
 ---
 
@@ -199,8 +205,36 @@ field/text/tag recipes came first as the spec advises.
 column or on `Artist` + `Title` together; at least one matching strategy must be present. Produces
 a report. Documented Excel caveats.
 
-*decks status* — **partial.** `crates/track-matcher/src/csv_input.rs` parses CSV with a
-column-mapping UI (`parse_csv_for_matcher`) but only to *match* tracks, never to *write* fields.
+*decks status* — **done.** `crates/track-matcher::csv_import` parses a CSV in order to *write*
+fields, alongside the existing `csv_input`, which parses one only to *find* tracks. Reachable from
+**Recipes → Import Tags From CSV**: pick a file, map the columns, preview, stage.
+
+Decisions the spec leaves open, each tested:
+
+- **A mapping with no matching strategy is refused**, not run. Neither a Location column nor
+  Artist + Title together means no row can match, and "0 rows matched" is indistinguishable from a
+  broken file.
+- **Location wins over Artist + Title** when both are configured. A path is an identity; a name is
+  a description two mixes can share.
+- **Path comparison ignores separators and case.** A CSV exported on Windows and a library indexed
+  on macOS describe the same file; refusing to match them would make the Location strategy useless
+  in exactly the case it exists for.
+- **An empty cell leaves the field alone.** Spreadsheets are full of blanks, and treating them as
+  deletions would wipe metadata on every partial import.
+- **A column the file does not have is an error**, not an empty column — a mistake the user can
+  fix, where importing blanks over good metadata is not recoverable.
+- **Two tracks matching one row is `Ambiguous`, not arbitrary.** The spreadsheet cannot say which,
+  and guessing writes the values onto the wrong track.
+- Rows that matched nothing or matched several are **shown with their reason**, not dropped. An
+  import that silently skipped a third of the file would look like it worked.
+
+**The documented Excel caveat that bites**: "CSV UTF-8" export writes a byte-order mark, and it
+lands *inside the first header name* — so a mapping naming the first column stops matching and the
+failure reads as a typo in the user's mapping. Stripped on both the header read and the parse.
+
+Fields a CSV may write are the same vocabulary the recipes offer — the intersection of what `decks`
+models and what the applier's allowlist writes — enforced by a test. Results stage as
+`TrackMetadataEdit` and go through Sync.
 
 *Epic* — **5**.
 

@@ -34,7 +34,7 @@ const RECIPE_FIELDS: &[&str] = &[
 ];
 
 /// Map a recipe field name to the `djmdContent` column the applier expects.
-fn column_for(field: &str) -> Option<&'static str> {
+pub(crate) fn column_for(field: &str) -> Option<&'static str> {
     Some(match field {
         "title" => "Title",
         "artist" => "Artist",

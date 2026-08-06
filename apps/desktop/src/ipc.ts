@@ -59,6 +59,9 @@ import type {
   UndoEntry,
   UndoResult,
   UndoRun,
+  CsvImportColumns,
+  CsvImportPreview,
+  CsvPlannedRow,
 } from "./types";
 import type {
   ChatMessage,
@@ -1253,4 +1256,31 @@ export async function undoRun(
   runId: string,
 ): Promise<UndoResult> {
   return invoke<UndoResult>("undo_run", { libraryPath, runId });
+}
+
+export async function csvImportHeaders(csv: string): Promise<string[]> {
+  return invoke<string[]>("csv_import_headers", { csv });
+}
+
+export async function csvImportFields(): Promise<string[]> {
+  return invoke<string[]>("csv_import_fields");
+}
+
+export async function csvImportPreview(
+  libraryPath: string,
+  csv: string,
+  columns: CsvImportColumns,
+): Promise<CsvImportPreview> {
+  return invoke<CsvImportPreview>("csv_import_preview", {
+    libraryPath,
+    csv,
+    columns,
+  });
+}
+
+export async function csvImportApply(
+  libraryPath: string,
+  rows: CsvPlannedRow[],
+): Promise<string[]> {
+  return invoke<string[]>("csv_import_apply", { libraryPath, rows });
 }

@@ -1,5 +1,51 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 3): CSV import and the common-text blocklist
+
+**Import Tags From CSV** lands in `crates/track-matcher::csv_import`, alongside the existing
+`csv_input`. The two are close cousins with opposite jobs: `csv_input` parses a CSV to *find*
+tracks, this one parses a CSV to *write fields onto* them, and the match is only how it decides
+which track the values belong to.
+
+Rows match on a Location column or on Artist + Title together. Decisions, each tested:
+
+- **A mapping with no matching strategy is refused** rather than run. It would match nothing, and
+  "0 rows matched" is indistinguishable from a broken file.
+- **Location wins when both are configured.** A path is an identity; a name is a description two
+  mixes can share.
+- **Path comparison ignores separators and case** — a CSV exported on Windows and a library indexed
+  on macOS describe the same file, and refusing to match them would kill the strategy in exactly
+  the case it exists for.
+- **An empty cell leaves the field alone.** Spreadsheets are full of blanks; treating them as
+  deletions would wipe metadata on every partial import.
+- **A column the file does not have is an error**, not a blank column — a mistake the user can fix,
+  where importing blanks over good metadata is not recoverable.
+- **Two tracks matching one row is `Ambiguous`, not arbitrary.** Rows that matched nothing or
+  matched several are shown with their reason, not dropped.
+
+**The Excel caveat that actually bites:** "CSV UTF-8" export writes a byte-order mark, and it lands
+*inside the first header name* — so a mapping naming the first column silently stops matching, and
+the failure reads as a typo in the user's own mapping. Stripped on both the header read and the
+parse, with a test.
+
+**The common-text blocklist has a UI** at Settings → Remove Common Text, closing a gap where the
+IPC existed and nothing consumed it. Both presets the manual names — `(Original Mix)` and the 24
+Camelot keys — are one-click buttons rather than seeded entries: a blocklist that arrives
+pre-populated will eventually strip something the user wanted, and they will not know why.
+
+**A real bug fixed on the way.** `remove_common_text` lower-cased the value, searched the copy, and
+spliced the original using the *pattern's* byte length. Lower-casing can change a string's byte
+length (`İ` → `i̇`), so that is a panic on a char boundary, not a wrong answer. It now goes through
+`recipes::text::remove_text`, which already got this right — one correct implementation instead of
+two, and `smart-fixes` gains a dependency on `recipes` to say so.
+
+**`Blob.text()` needs Safari 14+,** and the desktop shell runs on WKWebView. `readTextFile` in
+`lib/read-file.ts` falls back to `FileReader`; both the CSV import and the Track Matcher use it now.
+jsdom is missing `Blob.text()` too, which is how it surfaced.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 430, typecheck, lint, `pnpm e2e` 24 — all green.
+
 ## 2026-08-06 — Epic 5 (part 2): Undo History
 
 `decks` gates hard *before* a write — every change reviewed, Sync opt-in, `WriteGuard` taking a
