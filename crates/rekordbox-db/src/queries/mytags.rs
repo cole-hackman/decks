@@ -112,9 +112,7 @@ pub fn my_tags_by_track(conn: &Connection) -> Result<Vec<(String, String)>> {
             AND s.ContentID IS NOT NULL
           ORDER BY s.ContentID",
     )?;
-    let rows = stmt.query_map([], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-    })?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
 }
@@ -125,7 +123,8 @@ mod tests {
 
     fn seeded() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(include_str!("../sql/schema.sql")).unwrap();
+        conn.execute_batch(include_str!("../sql/schema.sql"))
+            .unwrap();
         conn.execute_batch(include_str!("../sql/seed.sql")).unwrap();
         conn
     }
@@ -138,7 +137,11 @@ mod tests {
 
         let genre = &got[0];
         assert_eq!(
-            genre.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
+            genre
+                .tags
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
             vec!["Techno", "House"]
         );
     }

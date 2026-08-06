@@ -111,9 +111,7 @@ pub async fn preview_mytag_import(
                 if existing_tags.contains(&(key(cat_name), key(tag_name))) {
                     preview.existing_tags += 1;
                 } else {
-                    preview
-                        .new_tags
-                        .push((cat_name.clone(), tag_name.clone()));
+                    preview.new_tags.push((cat_name.clone(), tag_name.clone()));
                 }
             }
         }
