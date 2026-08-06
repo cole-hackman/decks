@@ -135,8 +135,27 @@ The field vocabulary offered is deliberately the intersection of what `decks` mo
 applier's allowlist will actually write — offering a field that cannot be persisted would produce a
 preview full of changes that silently vanish at sync time.
 
-Still missing: the **cue and beatgrid recipes** (14 ops), and the tag recipes including
-`Import Tags from Text`.
+The **tag recipes** are done too, in `crates/recipes::tags`. They are modelled as a *delta* to the
+track's tag set rather than a new value, which is both what the cache's add/remove accessors want
+and what lets a preview say "adds 3, removes 1".
+
+`Import Tags from Text` is idempotent as the manual requires, and in two senses: a tag the track
+already has is not re-added, and nothing existing is ever removed — so a tag added by hand survives
+a re-run. Matching is case-insensitive, since a library holding both `#techno` and `#Techno` is
+exactly the mess the feature exists to clean up. A tag runs from the marker to the next whitespace,
+matching how the convention is actually written (`#PeakTime`, not `#Peak time`), and trailing
+punctuation is trimmed so `#Techno, #Vocals` gives two clean tags.
+
+Two rules the manual leaves open: replacing a tag with one the track *already has* is a removal
+only, or the track ends up holding it twice; and replacing with an empty tag is refused rather than
+silently becoming a delete.
+
+Tag recipes apply directly rather than staging — tags live in the local cache, so there is no sync
+step to carry them. A tag name with no existing tag is created in the first category, and the result
+says which were invented.
+
+Still missing: the **cue and beatgrid recipes** (14 ops), and the "other" recipes
+(`Mark as Incoming`, `Remove from All Playlists`, `Import Date from Filesystem`).
 
 *Epic* — **5**. Within the epic, the cue recipes depend on the cue-editing model from Epic 2, so
 field/text/tag recipes came first as the spec advises.

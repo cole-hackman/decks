@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecipesPanel } from "./RecipesPanel";
@@ -10,6 +10,9 @@ vi.mock("../ipc", () => ({
   recipeFields: vi.fn(),
   recipePreview: vi.fn(),
   recipeApply: vi.fn(),
+  // Used by the tag section mounted below.
+  tagRecipePreview: vi.fn(async () => []),
+  tagRecipeApply: vi.fn(),
 }));
 
 const PREVIEW: RecipePreview = {
@@ -41,6 +44,23 @@ beforeEach(() => {
   vi.mocked(recipeApply).mockResolvedValue(["c1", "c2"]);
 });
 
+/** The field-recipe Preview button — the tag section has one of its own. */
+function fieldPreviewButton() {
+  return screen.getAllByRole("button", { name: "Preview" })[0];
+}
+
+/**
+ * Wait for the field list to arrive.
+ *
+ * Waits on the *state* the fetch produces rather than on the fetch itself: the
+ * selects render one pass before they have any options.
+ */
+async function fieldsLoaded() {
+  await waitFor(() => {
+    expect(screen.getByLabelText("Field")).toHaveValue("title");
+  });
+}
+
 function renderPanel(trackIds = ["t1", "t2", "t3"]) {
   render(
     <WithProviders>
@@ -60,22 +80,25 @@ describe("RecipesPanel", () => {
   it("cannot preview until a recipe has been added", async () => {
     renderPanel();
     await screen.findByTestId("no-recipes");
-    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(fieldPreviewButton()).toBeDisabled();
   });
 
   it("offers only fields the backend says are writable", async () => {
     renderPanel();
-    const select = await screen.findByRole("option", { name: "genre" });
-    expect(select).toBeInTheDocument();
-    expect(screen.getByLabelText("Field")).toHaveValue("title");
+    await fieldsLoaded();
+    const select = screen.getByLabelText("Field");
+    expect(within(select).getAllByRole("option")).toHaveLength(3);
+    expect(
+      within(select).getByRole("option", { name: "genre" }),
+    ).toBeInTheDocument();
   });
 
   it("adds a step and sends it to the preview", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
 
     await waitFor(() => {
       expect(recipePreview).toHaveBeenCalledWith(
@@ -89,9 +112,9 @@ describe("RecipesPanel", () => {
   it("shows each proposed change as a before/after row", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
 
     expect(await screen.findByTestId("recipe-preview")).toBeInTheDocument();
     expect(screen.getByText("Get Lucky")).toBeInTheDocument();
@@ -101,9 +124,9 @@ describe("RecipesPanel", () => {
   it("deselecting a row excludes it from what gets staged", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
     await screen.findByTestId("recipe-preview");
 
     await user.click(screen.getByLabelText("Keep get lucky title"));
@@ -117,9 +140,9 @@ describe("RecipesPanel", () => {
   it("explains steps that did nothing rather than leaving a silent gap", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
     expect(await screen.findByTestId("recipe-skipped")).toHaveTextContent(
       /remixer is empty/,
     );
@@ -129,16 +152,16 @@ describe("RecipesPanel", () => {
     const user = userEvent.setup();
     vi.mocked(recipePreview).mockResolvedValue({ proposals: [], skipped: [] });
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
     expect(await screen.findByText(/Nothing would change/)).toBeInTheDocument();
   });
 
   it("a step can be removed from the list", async () => {
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(await screen.findByLabelText("Remove step 1"));
     expect(await screen.findByTestId("no-recipes")).toBeInTheDocument();
@@ -149,7 +172,7 @@ describe("RecipesPanel", () => {
     // silently ship junk to the backend.
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.selectOptions(screen.getByLabelText("Operation"), "shorten_text");
     expect(screen.getByLabelText("Characters per word")).toHaveValue(2);
     await user.selectOptions(screen.getByLabelText("Operation"), "adjust_number");
@@ -162,9 +185,9 @@ describe("RecipesPanel", () => {
     const user = userEvent.setup();
     vi.mocked(recipePreview).mockRejectedValue(new Error("library locked"));
     renderPanel();
-    await screen.findByRole("option", { name: "genre" });
+    await fieldsLoaded();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(fieldPreviewButton());
     expect(await screen.findByText(/library locked/)).toBeInTheDocument();
   });
 });

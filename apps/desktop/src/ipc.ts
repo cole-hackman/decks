@@ -49,6 +49,9 @@ import type {
   Recipe,
   RecipePreview,
   RecipeProposal,
+  TagRecipe,
+  TagProposal,
+  TagApplyResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1178,4 +1181,23 @@ export async function recipeApply(
   proposals: RecipeProposal[],
 ): Promise<string[]> {
   return invoke<string[]>("recipe_apply", { libraryPath, proposals });
+}
+
+export async function tagRecipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: TagRecipe,
+): Promise<TagProposal[]> {
+  return invoke<TagProposal[]>("tag_recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
+}
+
+export async function tagRecipeApply(
+  libraryPath: string,
+  proposals: TagProposal[],
+): Promise<TagApplyResult> {
+  return invoke<TagApplyResult>("tag_recipe_apply", { libraryPath, proposals });
 }

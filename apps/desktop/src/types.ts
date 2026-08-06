@@ -597,3 +597,24 @@ export interface RecipePreview {
   /** `[track_id, reason]` for tracks a recipe could not act on. */
   skipped: [string, string][];
 }
+
+export type TagRecipe =
+  | { op: "import_from_text"; field: string; separator: string }
+  | { op: "add_tags"; tags: string[] }
+  | { op: "remove_tags"; tags: string[] }
+  | { op: "replace_tag"; from: string; to: string }
+  | { op: "clear_tags" };
+
+export interface TagProposal {
+  track_id: string;
+  track_title: string;
+  added: string[];
+  removed: string[];
+}
+
+export interface TagApplyResult {
+  tracks_changed: number;
+  tags_added: number;
+  tags_removed: number;
+  tags_created: string[];
+}

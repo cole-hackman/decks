@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use ::recipes::{apply_all, FieldChange, Recipe, TrackFields};
+use ::recipes::{apply_all, apply_tag_recipe, FieldChange, Recipe, TagRecipe, TrackFields};
 use serde::{Deserialize, Serialize};
 
 use crate::cache_db;
@@ -211,6 +211,154 @@ pub async fn recipe_apply(
             staged.push(record.id);
         }
         Ok(staged)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// ── Tag recipes ──────────────────────────────────────────────────────────────
+
+/// What a tag recipe would do to one track, as the preview shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagProposal {
+    pub track_id: String,
+    pub track_title: String,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+/// Preview a tag recipe over a selection.
+///
+/// Tags live in the local cache rather than `master.db`, so unlike the field
+/// recipes these apply directly rather than staging — there is no sync step to
+/// carry them, and `set_track_tags` is already the app's write path. The
+/// preview still exists because "run this over 400 tracks" deserves a look
+/// first either way.
+#[tauri::command]
+pub async fn tag_recipe_preview(
+    app: tauri::AppHandle,
+    library_path: String,
+    track_ids: Vec<String>,
+    recipe: TagRecipe,
+) -> Result<Vec<TagProposal>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+
+        let mut out = Vec::new();
+        for id in &track_ids {
+            let Some(track) = db.track_by_id(id).map_err(|e| e.to_string())? else {
+                continue;
+            };
+            let current: Vec<String> = cache
+                .get_track_tags(&library_path, id)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|t| t.name)
+                .collect();
+
+            let change = apply_tag_recipe(&recipe, &track_to_fields(&track), &current);
+            if change.is_empty() {
+                continue;
+            }
+            out.push(TagProposal {
+                track_id: track.id.clone(),
+                track_title: track.title.clone(),
+                added: change.added,
+                removed: change.removed,
+            });
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct TagApplyResult {
+    pub tracks_changed: usize,
+    pub tags_added: usize,
+    pub tags_removed: usize,
+    /// Tag names that had to be created because no tag by that name existed.
+    pub tags_created: Vec<String>,
+}
+
+/// Apply reviewed tag proposals.
+///
+/// Takes the proposals back rather than re-running the recipe, so what happens
+/// is what the user reviewed. A tag name with no existing tag is created in the
+/// first category — importing `#Techno` from a comment is useless if it fails
+/// because nobody made a Techno tag first.
+#[tauri::command]
+pub async fn tag_recipe_apply(
+    app: tauri::AppHandle,
+    library_path: String,
+    proposals: Vec<TagProposal>,
+) -> Result<TagApplyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let mut result = TagApplyResult::default();
+
+        // Resolve names to ids once for the batch. Case-insensitive, so
+        // importing "#techno" finds an existing "Techno".
+        let mut by_name: std::collections::HashMap<String, String> = cache
+            .list_tags(None)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|t| (t.name.to_lowercase(), t.id))
+            .collect();
+
+        let default_category = cache
+            .list_tag_categories()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .next()
+            .map(|c| c.id);
+
+        for p in proposals {
+            let mut touched = false;
+
+            for name in &p.added {
+                let key = name.to_lowercase();
+                let id = match by_name.get(&key) {
+                    Some(id) => id.clone(),
+                    None => {
+                        let Some(category) = default_category.clone() else {
+                            // No categories at all — creating a tag would have
+                            // nowhere to live. Report rather than guess.
+                            return Err("create a tag category before importing tags".to_string());
+                        };
+                        let created = cache
+                            .create_tag(&category, name)
+                            .map_err(|e| e.to_string())?;
+                        by_name.insert(key, created.id.clone());
+                        result.tags_created.push(name.clone());
+                        created.id
+                    }
+                };
+                cache
+                    .add_track_tag(&library_path, &p.track_id, &id)
+                    .map_err(|e| e.to_string())?;
+                result.tags_added += 1;
+                touched = true;
+            }
+
+            for name in &p.removed {
+                if let Some(id) = by_name.get(&name.to_lowercase()) {
+                    cache
+                        .remove_track_tag(&library_path, &p.track_id, id)
+                        .map_err(|e| e.to_string())?;
+                    result.tags_removed += 1;
+                    touched = true;
+                }
+            }
+
+            if touched {
+                result.tracks_changed += 1;
+            }
+        }
+        Ok(result)
     })
     .await
     .map_err(|e| e.to_string())?

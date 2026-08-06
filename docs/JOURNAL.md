@@ -1696,6 +1696,27 @@ default, so it matched the `get lucky` before-value and the track name as well a
 after-value. `{ exact: true }` is the fix. Three strict-mode violations this session have all been
 locators that were less specific than they looked.
 
-**Next in Epic 5:** the tag recipes — `Import Tags from Text` especially, which the spec calls the
-strongest migration path for users who have been hand-rolling hashtags in comments for years. Then
-the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic.
+**The tag recipes went in the same session**, and modelling them as a *delta* rather than a new tag
+list was the decision that made everything else easy: the cache already has add/remove accessors, so
+a `TagChange { added, removed }` writes through without a second diff, and the preview can say
+"adds 3, removes 1" instead of showing two lists and making the user spot the difference.
+
+**Idempotency needed defining before it could be built.** "Safe to re-run" turns out to mean two
+things: a tag already present is not re-added, *and* nothing existing is ever removed. The second
+half is the one that matters — a user who imported from comments and then hand-added a tag must not
+lose it on the next run. Both have tests saying so.
+
+**Two rules the manual leaves open, both found by asking "what if they overlap":** replacing a tag
+with one the track already has must be a removal only, or the track holds it twice; and replacing
+with an empty tag has to be refused, or Replace quietly becomes Delete.
+
+**An e2e fixture caught a real bug.** The mock's field list omitted `comment`, and the tag section
+defaults its source to `comment` — so the select had a value matching no option and the browser
+silently showed the first one instead. The form would have lied about what it was about to do.
+Fixed in the component (fall back to the first field when the default is not on offer), not just in
+the fixture. Worth remembering that a fixture that disagrees with production is sometimes telling
+you something.
+
+**Next in Epic 5:** the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic, and the
+three "other" recipes. Then the larger Epic 5 items — Undo History, CSV import, the duplicates
+work.

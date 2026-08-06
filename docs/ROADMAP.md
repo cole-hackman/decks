@@ -167,7 +167,7 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 
 - [x] Recipes engine + the casing / field / text / number operations (18). Tag and "other" recipes outstanding
 - [ ] Cue and beatgrid recipes (14 ops) — depends on Epic 2
-- [ ] `Import Tags from Text` (hashtag → custom tags, idempotent)
+- [x] `Import Tags from Text` (hashtag → custom tags, idempotent), plus add/remove/replace/clear
 - [ ] Multi-track manual editor with `<multiple values>`
 - [ ] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, report
 - [ ] Undo History (60 min / until restart)

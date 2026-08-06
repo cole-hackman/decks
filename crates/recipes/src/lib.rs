@@ -10,6 +10,10 @@
 //! back a preview screen, an apply pass and an agent tool without three
 //! implementations.
 //!
+//! Tag recipes live in [`tags`] rather than alongside the field recipes,
+//! because tags are a *set* attached to a track rather than a string on it —
+//! the operations are expressed as a delta to that set.
+//!
 //! Cue and beatgrid recipes are deliberately **not** here. They operate on cue
 //! lists and beat grids rather than text fields, they need the quantize
 //! arithmetic from `crates/rekordbox-db`, and the spec itself says to sequence
@@ -17,11 +21,13 @@
 
 pub mod casing;
 pub mod fields;
+pub mod tags;
 pub mod text;
 
 use serde::{Deserialize, Serialize};
 
 pub use fields::{diff, FieldChange, TrackFields};
+pub use tags::{apply_tag_recipe, parse_hashtags, TagChange, TagRecipe};
 pub use text::{DelimiterPair, SpecialCharacterMode};
 
 /// One parameterized operation.

@@ -34,13 +34,30 @@ be persisted would produce a preview full of changes that silently vanish at syn
 deselectable before/after row, and stages what survives. Recipes serialise, so one built today can
 be saved and replayed on next month's downloads — the point of the feature.
 
+**The tag recipes** ship alongside, in `crates/recipes::tags`. They are modelled as a *delta* to
+the track's tag set rather than a new value — which is what the cache's add/remove accessors want,
+and what lets a preview say "adds 3, removes 1" instead of showing two lists.
+
+`Import Tags from Text` is the one the spec singles out, and it is idempotent in two senses: a tag
+the track already has is not re-added, and nothing existing is ever removed, so a hand-added tag
+survives a re-run. Matching is case-insensitive, because a library holding both `#techno` and
+`#Techno` is exactly the mess the feature exists to clean up. A tag runs from the marker to the
+next whitespace, matching how the convention is written (`#PeakTime`, not `#Peak time`).
+
+Two more rules the spec leaves open: replacing a tag with one the track already has is a removal
+*only*, or it ends up holding it twice; and replacing with an empty tag is refused rather than
+silently becoming a delete.
+
+Tag recipes apply directly rather than staging — tags live in the local cache, so there is no sync
+step to carry them. A tag name with no existing tag is created in the first category, and the result
+reports which were invented.
+
 **Not done:** the cue (11) and beatgrid (3) recipes, which operate on cue lists rather than text and
-need the quantize arithmetic from `crates/rekordbox-db`; and the tag recipes, including
-`Import Tags from Text`, which the spec flags as the strongest migration path for users who have
-been hand-rolling hashtags in the comment field.
+need the quantize arithmetic from `crates/rekordbox-db`; and the three "other" recipes
+(`Mark as Incoming`, `Remove from All Playlists`, `Import Date from Filesystem`).
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 375, typecheck, lint, `pnpm e2e` 19 — all green.
+clean, `pnpm test` 383, typecheck, lint, `pnpm e2e` 20 — all green.
 
 ## Blockers — verified, not assumed (2026-08-06)
 

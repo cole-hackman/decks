@@ -84,9 +84,29 @@ test.beforeEach(async ({ page }) => {
               return null;
 
             case "recipe_fields":
-              return ["title", "artist", "genre"];
+              return ["title", "artist", "genre", "comment"];
             case "recipe_preview":
               return preview(args);
+            case "tag_recipe_preview": {
+              const recipe = args.recipe as Record<string, unknown>;
+              if (recipe.op !== "import_from_text") return [];
+              // The fixture's comment carries two hashtags.
+              return [
+                {
+                  track_id: "1",
+                  track_title: "get lucky",
+                  added: ["Techno", "Vocals"],
+                  removed: [],
+                },
+              ];
+            }
+            case "tag_recipe_apply":
+              return {
+                tracks_changed: 1,
+                tags_added: 2,
+                tags_removed: 0,
+                tags_created: ["Techno"],
+              };
             case "recipe_apply": {
               const proposals = args.proposals as Array<Record<string, unknown>>;
               proposals.forEach((p) => staged.push(p));
@@ -107,6 +127,11 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+/** The field-recipe Preview button; the tag section has one of its own. */
+function fieldPreview(page: import("@playwright/test").Page) {
+  return page.getByRole("button", { name: "Preview" }).first();
+}
+
 async function openRecipes(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Get started" }).click();
@@ -119,10 +144,10 @@ test("build a recipe, preview it, deselect a row, then stage", async ({ page }) 
   await openRecipes(page);
 
   await expect(page.getByTestId("no-recipes")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Preview" })).toBeDisabled();
+  await expect(fieldPreview(page)).toBeDisabled();
 
   await page.getByRole("button", { name: "Add" }).click();
-  await page.getByRole("button", { name: "Preview" }).click();
+  await fieldPreview(page).click();
 
   const preview = page.getByTestId("recipe-preview");
   await expect(preview).toBeVisible();
@@ -139,9 +164,30 @@ test("build a recipe, preview it, deselect a row, then stage", async ({ page }) 
 test("deselecting every row leaves nothing to stage", async ({ page }) => {
   await openRecipes(page);
   await page.getByRole("button", { name: "Add" }).click();
-  await page.getByRole("button", { name: "Preview" }).click();
+  await fieldPreview(page).click();
   await expect(page.getByTestId("recipe-preview")).toBeVisible();
 
   await page.getByLabel("Keep get lucky title").uncheck();
   await expect(page.getByRole("button", { name: /Stage 0 change/ })).toBeDisabled();
+});
+
+test("tag recipes: import from text previews the tags it would add", async ({
+  page,
+}) => {
+  await openRecipes(page);
+
+  // Defaults come from the spec: source Comment, marker "#".
+  await expect(page.getByLabel("Import source field")).toHaveValue("comment");
+  await expect(page.getByLabel("Tag marker")).toHaveValue("#");
+
+  await page.getByRole("button", { name: "Preview" }).nth(1).click();
+
+  const preview = page.getByTestId("tag-recipe-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview.getByText("+Techno")).toBeVisible();
+  await expect(preview.getByText("+Vocals")).toBeVisible();
+
+  await page.getByRole("button", { name: /Apply to 1 track/ }).click();
+  // Importing may have to invent tags, and says which.
+  await expect(page.getByText(/created Techno/)).toBeVisible();
 });
