@@ -86,6 +86,24 @@ pub(super) fn apply_metadata_edit(
         new_value
     };
 
+    // The leading-zero option is applied *after* conversion, and independently
+    // of it: the spec's reason is that DJ apps sort keys as text, so `1A, 10A,
+    // 11A, 2A` comes out interleaved. That is just as true of a library left in
+    // its original notation as of one we converted. Anything without a wheel
+    // position is returned unchanged.
+    let padded_value;
+    let new_value: &Value = if field == "Key" && options.add_leading_zero {
+        match new_value {
+            Value::String(s) => {
+                padded_value = Value::String(key_format::with_leading_zero(s));
+                &padded_value
+            }
+            other => other,
+        }
+    } else {
+        new_value
+    };
+
     match field.as_str() {
         "Artist" | "Genre" | "Album" | "Key" | "Label" => {
             apply_fk_edit(tx, target_id, field, new_value)
@@ -462,6 +480,80 @@ mod tests {
         )
         .unwrap();
         assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("5A"));
+    }
+
+    #[test]
+    fn leading_zero_pads_a_converted_key() {
+        let mut conn = key_fixture();
+        let tx = conn.transaction().unwrap();
+        let opts = SyncOptions {
+            convert_keys: KeyFormat::Camelot,
+            add_leading_zero: true,
+            ..Default::default()
+        };
+        // G# minor is Camelot 1A; unpadded it sorts between 12A and 2A.
+        apply_metadata_edit(
+            &tx,
+            &change("Key", Value::String("G# minor".into())),
+            &opts,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("01A"));
+    }
+
+    #[test]
+    fn leading_zero_applies_without_conversion_too() {
+        // The sort problem is just as real in a library left in its original
+        // notation, so the option is independent of `convert_keys`.
+        let mut conn = key_fixture();
+        let tx = conn.transaction().unwrap();
+        let opts = SyncOptions {
+            convert_keys: KeyFormat::Original,
+            add_leading_zero: true,
+            ..Default::default()
+        };
+        apply_metadata_edit(
+            &tx,
+            &change("Key", Value::String("3A".into())),
+            &opts,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("03A"));
+    }
+
+    #[test]
+    fn leading_zero_leaves_a_key_it_cannot_read_alone() {
+        // Padding is not a licence to rewrite a value we did not understand.
+        let mut conn = key_fixture();
+        let tx = conn.transaction().unwrap();
+        let opts = SyncOptions {
+            add_leading_zero: true,
+            ..Default::default()
+        };
+        apply_metadata_edit(
+            &tx,
+            &change("Key", Value::String("C minor".into())),
+            &opts,
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("C minor"));
+    }
+
+    #[test]
+    fn leading_zero_is_off_by_default() {
+        let mut conn = key_fixture();
+        let tx = conn.transaction().unwrap();
+        apply_metadata_edit(
+            &tx,
+            &change("Key", Value::String("1A".into())),
+            &SyncOptions::default(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        assert_eq!(key_scale_for(&tx, "t1").as_deref(), Some("1A"));
     }
 
     #[test]

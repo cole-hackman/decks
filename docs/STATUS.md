@@ -1,5 +1,32 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 5): key leading-zero option
+
+Small and entirely about one thing: sorted as text, an unpadded key column reads
+`1A, 10A, 11A, 12A, 2A, …`. The wheel positions come out interleaved, which is exactly what a DJ
+scanning that column on a CDJ cannot use. `01A` fixes it.
+
+`SyncOptions.add_leading_zero`, off by default, with a Sync toggle whose label says *why* — an
+option that reads as cosmetics gets left off.
+
+Two decisions:
+
+- **Applied after conversion and independently of it.** The sort problem is just as real in a
+  library left in its original notation as in one converted to Open Key, so the option does not
+  require `convert_keys`.
+- **A value with no wheel position is returned unchanged.** `C minor` is not padded. Padding is not
+  a licence to rewrite something we did not understand — and the operation is idempotent, which
+  matters because Sync runs more than once and `001A` would be the tell that it is not.
+
+**Colors → nearest is blocked, and now says so.** `SyncOptions.change_to_nearest_color` has been
+accepted and ignored since it was added. The reason is real: `Track` has no colour field and no
+change kind writes `ColorID`, so there is nothing to map to anything. It stays unexposed rather
+than becoming a switch that does nothing — recorded in `PARITY.md` and `01-interop.md` with the
+blocker named, per ADR-0008.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 530, typecheck, lint, `pnpm e2e` 38 — all green.
+
 ## 2026-08-06 — Epic 6 (part 4): share / export
 
 `crates/share` renders five outputs — quick copy, quick copy numbered, CSV, M3U and

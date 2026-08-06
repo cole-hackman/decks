@@ -35,6 +35,7 @@ export function SyncPanel({ libraryPath }: Props) {
   const [cueDestination, setCueDestination] = useState<CueDestination>("hot");
   const [keepGrids, setKeepGrids] = useState(false);
   const [convertKeys, setConvertKeys] = useState<KeyFormat>("original");
+  const [addLeadingZero, setAddLeadingZero] = useState(false);
 
   const options = useMemo<SyncOptions>(
     () => ({
@@ -42,8 +43,9 @@ export function SyncPanel({ libraryPath }: Props) {
       cue_destination: cueDestination,
       keep_grids: keepGrids,
       convert_keys: convertKeys,
+      add_leading_zero: addLeadingZero,
     }),
-    [mode, playlistId, cueDestination, keepGrids, convertKeys],
+    [mode, playlistId, cueDestination, keepGrids, convertKeys, addLeadingZero],
   );
 
   const refresh = useCallback(async () => {
@@ -215,6 +217,17 @@ export function SyncPanel({ libraryPath }: Props) {
             <option value="camelot">Camelot</option>
             <option value="open_key">Open Key</option>
           </select>
+        </label>
+
+        <label className="col-span-2 flex items-center gap-2 text-ink">
+          <input
+            type="checkbox"
+            checked={addLeadingZero}
+            onChange={(e) => setAddLeadingZero(e.target.checked)}
+          />
+          {/* Sorted as text, an unpadded library reads 1A, 10A, 11A, 2A — the
+              only reason this option exists. */}
+          Add a leading zero to keys (01A, not 1A) so apps sort them correctly
         </label>
 
         <label className="col-span-2 flex items-center gap-2 text-ink">

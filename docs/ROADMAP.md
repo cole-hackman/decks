@@ -221,7 +221,10 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
 - [x] Share/export: CSV, M3U, HTML/PDF with column selection — `crates/share`, in Playlist Tools.
       Default CSV columns are exactly what the `dj-setlist-builder` skill reads. Header
       drag-to-reorder not done; the picker orders by tick order
-- [ ] Colors → nearest on sync; key conversion leading-zero option
+- [x] Key conversion leading-zero option — a Sync setting, applied after conversion and
+      independently of it. **Colors → nearest is blocked**: `Track` has no colour field and no
+      change kind writes `ColorID`, so there is nothing to map; the flag stays accepted and
+      unexposed rather than shipping a switch that does nothing
 
 ---
 

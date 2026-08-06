@@ -45,6 +45,14 @@ pub struct SyncOptions {
     pub keep_grids: bool,
     #[serde(default)]
     pub convert_keys: KeyFormat,
+    /// Pad single-digit wheel positions — `1A` becomes `01A`.
+    ///
+    /// Exists purely so DJ apps sort correctly: sorted as text, an unpadded
+    /// library reads `1A, 10A, 11A, 12A, 2A, …`. Independent of
+    /// `convert_keys`, because that is just as true of a library left in its
+    /// original notation.
+    #[serde(default)]
+    pub add_leading_zero: bool,
     #[serde(default)]
     pub change_to_nearest_color: bool,
     #[serde(default)]

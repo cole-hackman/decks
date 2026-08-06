@@ -14,7 +14,7 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
-| Interop & sync | 4 | 7 | 1 | 11 |
+| Interop & sync | 5 | 6 | 1 | 11 |
 | Library & browser | 5 | 6 | 5 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **39** | **35** | **17** | **16** |
+| **Total** | **40** | **34** | **17** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -42,8 +42,8 @@ of library *editing*, *automation*, or *set preparation*.
 | Full / Playlist / Modified sync | partial | Modes exist; no per-app modified watermark, no Full-Sync delete | 6 |
 | Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
-| Key conversion | partial | Camelot + Open Key done; no leading-zero option | 6 |
-| Colors → nearest | **missing** | Option plumbed through `SyncOptions` and **ignored** | 6 |
+| Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
+| Colors → nearest | **blocked** | `Track` has no colour field and no change kind writes `ColorID` — nothing to map. Not offered as a toggle rather than shipped inert | 6 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
 | Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |

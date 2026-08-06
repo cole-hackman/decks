@@ -533,6 +533,8 @@ export interface SyncOptions {
   cue_destination?: CueDestination;
   keep_grids?: boolean;
   convert_keys?: KeyFormat;
+  /** Pad single-digit wheel positions so DJ apps sort keys correctly. */
+  add_leading_zero?: boolean;
   change_to_nearest_color?: boolean;
   all_smartlists_to_playlists?: boolean;
 }

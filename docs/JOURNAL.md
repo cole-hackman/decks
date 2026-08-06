@@ -2191,6 +2191,28 @@ at the boundary where a human reads it, not where the number is stored.
 **Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
 snapshots.
 
+## 2026-08-06 — Epic 6 (part 5): key leading-zero option
+
+**Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a
+key column looks like on hardware that sorts as text, and it is unusable. A single leading zero is
+the entire fix. Worth asking of any field that lands in a column someone sorts.
+
+**Transformations that run repeatedly must be idempotent.** Sync runs more than once; `001A` on the
+second pass would be the tell. Cheap to test, and the test is the specification.
+
+**Only transform what you parsed.** Padding `C minor` would mean writing a value derived from
+something the function did not understand. The unchanged-passthrough branch is not a fallback, it
+is the correct answer.
+
+**A flag accepted and ignored is worse than a flag that is absent.** `change_to_nearest_color` has
+been in `SyncOptions` since it was added, doing nothing, because `Track` has no colour field and
+nothing writes `ColorID`. It is now recorded as *blocked with the reason* rather than left looking
+implemented — and deliberately not surfaced as a toggle. Anything plumbed-but-ignored is a
+half-finished promise; the honest states are done, or blocked with the blocker named.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
+snapshots.
+
 ---
 
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer

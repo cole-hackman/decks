@@ -1668,6 +1668,8 @@ struct SyncOptions {
     #[serde(default)]
     convert_keys: changes::applier::KeyFormat,
     #[serde(default)]
+    add_leading_zero: bool,
+    #[serde(default)]
     change_to_nearest_color: bool,
     #[serde(default)]
     all_smartlists_to_playlists: bool,
@@ -1679,6 +1681,7 @@ impl SyncOptions {
             cue_destination: self.cue_destination,
             keep_grids: self.keep_grids,
             convert_keys: self.convert_keys,
+            add_leading_zero: self.add_leading_zero,
             change_to_nearest_color: self.change_to_nearest_color,
             all_smartlists_to_playlists: self.all_smartlists_to_playlists,
         }

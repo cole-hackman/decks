@@ -54,6 +54,31 @@ pub fn to_open_key(key: &str) -> Option<String> {
     Some(format!("{}{}", num, new_suffix))
 }
 
+/// Pad a single-digit wheel position to two digits: `1A` → `01A`, `5m` → `05m`.
+///
+/// This exists **purely so DJ apps sort correctly**. Sorted as text, an
+/// unpadded library reads `1A, 10A, 11A, 12A, 2A, …` — the wheel positions come
+/// out interleaved, which is exactly what a DJ scanning the key column cannot
+/// use.
+///
+/// Anything that is not `<digits><letter>` is returned unchanged: a spelled-out
+/// key has no wheel position to pad, and padding is not a licence to rewrite a
+/// value we did not understand.
+pub fn with_leading_zero(key: &str) -> String {
+    let trimmed = key.trim();
+    let digits = trimmed.len()
+        - trimmed
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .len();
+    let suffix = &trimmed[digits..];
+    // One digit, and everything after it is the mode letter — `1A`, `5m`, `9d`.
+    if digits == 1 && suffix.len() == 1 && suffix.chars().all(|c| c.is_ascii_alphabetic()) {
+        format!("0{trimmed}")
+    } else {
+        trimmed.to_string()
+    }
+}
+
 fn split_camelot(s: &str) -> Option<(u8, char)> {
     let bytes = s.trim().as_bytes();
     if bytes.is_empty() {
@@ -233,6 +258,44 @@ mod tests {
         assert_eq!(to_camelot("Am"), Some("8A".into()));
         // ...and "D" alone is still D major.
         assert_eq!(to_camelot("D"), Some("10B".into()));
+    }
+
+    #[test]
+    fn leading_zero_pads_single_digit_wheel_positions() {
+        // Sorted as text, an unpadded library reads 1A, 10A, 11A, 2A — the
+        // whole reason the option exists.
+        assert_eq!(with_leading_zero("1A"), "01A");
+        assert_eq!(with_leading_zero("9B"), "09B");
+        assert_eq!(with_leading_zero("5m"), "05m");
+        assert_eq!(with_leading_zero("8d"), "08d");
+    }
+
+    #[test]
+    fn leading_zero_leaves_everything_else_alone() {
+        // Already two digits.
+        assert_eq!(with_leading_zero("10A"), "10A");
+        assert_eq!(with_leading_zero("12m"), "12m");
+        // No wheel position to pad — padding is not a licence to rewrite a
+        // value we did not understand.
+        assert_eq!(with_leading_zero("C minor"), "C minor");
+        assert_eq!(with_leading_zero("Am"), "Am");
+        assert_eq!(with_leading_zero(""), "");
+        assert_eq!(with_leading_zero("unknown"), "unknown");
+        // Digits with no mode letter, or more than one trailing letter.
+        assert_eq!(with_leading_zero("7"), "7");
+        assert_eq!(with_leading_zero("1Am"), "1Am");
+    }
+
+    #[test]
+    fn leading_zero_trims_but_does_not_otherwise_touch_case() {
+        assert_eq!(with_leading_zero(" 3a "), "03a");
+    }
+
+    #[test]
+    fn padding_is_idempotent() {
+        // Sync runs more than once; the second run must not give 001A.
+        let once = with_leading_zero("1A");
+        assert_eq!(with_leading_zero(&once), once);
     }
 
     #[test]
