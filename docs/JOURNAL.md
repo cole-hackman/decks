@@ -1823,5 +1823,13 @@ fixtures: undo history is the least important thing on that screen and must neve
 the change review with it. Both responses are now coerced with `Array.isArray`. The fixtures got
 the mock too, but that was for realism, not for the bug.
 
+**Third time on the same async mistake, and this variant was sneakier.**
+`FieldMappingsSection.test.tsx` awaited `findByText("Energy")` before asserting on the rule list —
+but "Energy" is *also* a static `<option>` in the source picker, so the await resolved on the first
+render and never waited for `listFieldMappings` at all. Green locally, red on a slower CI runner,
+and the failure message points at the wrong line. Sharpening the rule: **wait on something only the
+thing you are asserting about renders.** Not the trigger, and not a string that something static
+also happens to contain.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.
