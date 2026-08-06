@@ -1,6 +1,7 @@
 mod archive;
 mod audio;
 mod automation;
+mod backup;
 mod broken;
 mod claude_agent;
 mod csv_import;
@@ -2761,6 +2762,9 @@ pub fn run() {
             archive::archive_tracks_from,
             archive::select_archived,
             archive::cleanup_archived,
+            backup::create_backup,
+            backup::inspect_backup,
+            backup::restore_backup,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

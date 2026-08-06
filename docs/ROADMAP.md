@@ -178,7 +178,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 - [x] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, per-row report
 - [x] Undo History — Sync runs record inverses; undo re-stages them for review. Kept for 50 runs
       per library rather than 60 minutes, and blocked entries carry a reason (ADR-0008)
-- [ ] Database backup/restore as a ZIP of the cache DB's derived state
+- [x] Database backup/restore of the cache DB's derived state — a JSON document rather than a ZIP
+      (inspectable, schema-tolerant); analysis caches excluded; nothing auto-deleted
 - [ ] Duplicates: duration bounds, interruptible scan, preselection, bulk Prefer, review step,
       **playlist re-pointing to the keeper**, manual merge
 - [ ] Relocate: prefix rewriting, all-tracks mode, extension change, merge-with-existing, backup

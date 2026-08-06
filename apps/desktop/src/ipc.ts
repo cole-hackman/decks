@@ -69,6 +69,8 @@ import type {
   CheckDepth,
   ArchiveCriterion,
   ArchiveResult,
+  BackupSummary,
+  RestoreReport,
 } from "./types";
 import type {
   ChatMessage,
@@ -1373,4 +1375,36 @@ export async function cleanupArchived(
   trackIds: string[],
 ): Promise<string[]> {
   return invoke<string[]>("cleanup_archived", { libraryPath, trackIds });
+}
+
+/**
+ * Write a backup of the local cache's derived state.
+ *
+ * Returns `null` when the save dialog was cancelled — a decision, not a
+ * failure.
+ */
+export async function createBackup(): Promise<BackupSummary | null> {
+  const path = await save({
+    title: "Save decks backup",
+    defaultPath: "decks-backup.json",
+    filters: [{ name: "decks backup", extensions: ["json"] }],
+  });
+  if (!path) return null;
+  return invoke<BackupSummary>("create_backup", { path });
+}
+
+/** What a backup file holds. Returns `null` when the picker was cancelled. */
+export async function pickAndInspectBackup(): Promise<BackupSummary | null> {
+  const path = await open({
+    title: "Open decks backup",
+    filters: [{ name: "decks backup", extensions: ["json"] }],
+    multiple: false,
+    directory: false,
+  });
+  if (typeof path !== "string") return null;
+  return invoke<BackupSummary>("inspect_backup", { path });
+}
+
+export async function restoreBackup(path: string): Promise<RestoreReport> {
+  return invoke<RestoreReport>("restore_backup", { path });
 }

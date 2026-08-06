@@ -1608,6 +1608,23 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     })
 }
 
+// ── Backup and restore ───────────────────────────────────────────────────────
+
+impl CacheDb {
+    /// A portable snapshot of everything `decks` knows that Rekordbox does not.
+    pub fn export_backup(&self, now: i64) -> Result<crate::backup::CacheBackup> {
+        crate::backup::export(&self.conn, now)
+    }
+
+    /// Replace the derived state with a backup's. **Deletes what is there.**
+    pub fn restore_backup(
+        &mut self,
+        doc: &crate::backup::CacheBackup,
+    ) -> Result<crate::backup::RestoreReport> {
+        crate::backup::restore(&mut self.conn, doc)
+    }
+}
+
 // ── Undo history ─────────────────────────────────────────────────────────────
 
 /// One Sync run, as the undo list shows it.

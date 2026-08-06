@@ -1,5 +1,41 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 7): Database Backup
+
+`WriteGuard` protects `master.db`. Nothing protected everything `decks` knows that Rekordbox does
+not — custom tags, the archive, smartlists, staged changes, path mappings, watch folders,
+conversations. All of it lived in one local cache file with no way to move it to another machine or
+recover it after a mistake. **Settings → Database Backup** closes that.
+
+**A JSON document rather than a ZIP**, which is the main divergence. Lexicon ZIPs because it
+bundles several files; this is one document, and compressing a few hundred kilobytes of text buys
+nothing a user can feel. What it buys instead is worth more: the backup is *inspectable*, and it
+survives schema changes. Restoring a copied SQLite file into a newer schema is a gamble; restoring
+named columns is not — unknown columns are dropped and **named in the report**, and a table missing
+from the backup is left alone rather than emptied, so an old backup cannot silently wipe a feature
+it never knew about.
+
+Other decisions:
+
+- **Analysis caches are excluded.** Waveform peaks, fingerprints and audio features derive from
+  files still on disk; including them would multiply the backup's size to save CPU the user spends
+  once.
+- **Nothing is auto-deleted.** Lexicon removes its own backups after a month. A tool that deletes
+  the user's backups on a timer is doing something they did not ask for, and the retention note
+  says so plainly.
+- **A backup from a newer build is refused**, not partially applied.
+- **Restore replaces**, in a single transaction — a failure part-way leaves the cache as it was
+  rather than half-swapped, which would be the worst of both.
+- **The file is inspected first and its contents shown in the confirmation**, so the user sees what
+  they are swapping *in* rather than only what they are losing. A file that is not a backup is
+  caught on read, before anything is deleted.
+
+Table names reach a `format!` string on restore, so they are checked against a fixed allowlist
+first — with a test that feeds in `"tags; DROP TABLE tags"` and asserts the real table survives.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 467, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 6): Archive — the playlist rule and the selection helper
 
 **The context-sensitive playlist rule** is the interesting half. Archiving *from inside a playlist*

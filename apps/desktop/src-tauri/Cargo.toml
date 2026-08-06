@@ -41,3 +41,6 @@ track-matcher = { path = "../../../crates/track-matcher" }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"

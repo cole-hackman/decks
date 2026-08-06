@@ -855,3 +855,21 @@ export interface ArchiveResult {
   /** Staged `PlaylistRemoveTrack` ids — only when archiving from a playlist. */
   staged: string[];
 }
+
+// ── Database backup (Epic 5) ─────────────────────────────────────────────────
+// Mirrors `cache::backup`. See docs/lexicon/09-history-backup.md.
+
+export interface BackupSummary {
+  path: string;
+  rows: number;
+  /** `[table, rows]` — what the backup holds, rather than a byte count. */
+  tables: [string, number][];
+}
+
+export interface RestoreReport {
+  restored: [string, number][];
+  /** Tables the backup named that this build does not have. */
+  unknown_tables: string[];
+  /** `[table, column]` the backup had and this build does not. */
+  dropped_columns: [string, string][];
+}
