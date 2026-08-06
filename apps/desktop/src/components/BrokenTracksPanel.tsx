@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { brokenTracksReport, scanBrokenTracks, saveTextFile } from "../ipc";
 import { useToast } from "./Toast";
 import type { BrokenScan, CheckDepth } from "../types";
+import { DeleteFromDiskDialog } from "./DeleteFromDiskDialog";
 
 interface Props {
   libraryPath: string;
@@ -36,13 +37,21 @@ function describe(status: BrokenScan["broken"][number]["status"]): string {
  * full decode catches truncation and costs about what analysing the track
  * costs.
  *
- * Nothing here deletes anything, on disk or in the library.
+ * The scan itself changes nothing. Removing a track from the library is
+ * `stage_track_delete`, which Sync applies under the write guard; deleting the
+ * unplayable *file* is the button below, which moves it to the quarantine
+ * rather than unlinking it. Files that are simply absent are not offered —
+ * there is nothing there to delete.
  */
 export function BrokenTracksPanel({ libraryPath }: Props) {
   const { toast } = useToast();
   const [depth, setDepth] = useState<CheckDepth>("header");
   const [scan, setScan] = useState<BrokenScan | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  /** Broken *and* present. A missing file has nothing to delete. */
+  const corrupt = (scan?.broken ?? []).filter((t) => t.status.kind !== "missing");
 
   const run = useCallback(async () => {
     setBusy(true);
@@ -132,6 +141,17 @@ export function BrokenTracksPanel({ libraryPath }: Props) {
               Everything checked plays.
             </p>
           ) : (
+            <>
+            {corrupt.length > 0 && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleting(true)}
+                className="mb-2 rounded-md border border-red-500/40 px-3 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+              >
+                Delete {corrupt.length} unplayable file(s) from disk
+              </button>
+            )}
             <ul className="max-h-64 space-y-2 overflow-auto text-xs">
               {scan.broken.map((t) => (
                 <li key={t.track_id} className="border-l-2 border-red-500/50 pl-2">
@@ -155,8 +175,25 @@ export function BrokenTracksPanel({ libraryPath }: Props) {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
+      )}
+
+      {deleting && (
+        <DeleteFromDiskDialog
+          libraryPath={libraryPath}
+          trackIds={corrupt.map((t) => t.track_id)}
+          reason="Broken tracks"
+          onClose={() => setDeleting(false)}
+          onDeleted={(receipt) =>
+            toast({
+              variant: "success",
+              message: `Moved ${receipt.manifest.entries.length} file(s) to the deleted-audio folder.`,
+              detail: "Restore or empty the batch in Settings.",
+            })
+          }
+        />
       )}
     </section>
   );

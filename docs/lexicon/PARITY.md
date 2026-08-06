@@ -12,23 +12,38 @@ regardless of how much of Lexicon they represent.
 
 ## Summary
 
-| Domain | done | partial | missing | deferred |
-|---|---:|---:|---:|---:|
-| Interop & sync | 5 | 6 | 1 | 11 |
-| Library & browser | 11 | 4 | 2 | 0 |
-| Smartlists | 3 | 0 | 0 | 0 |
-| Analysis | 2 | 4 | 4 | 0 |
-| Player, cues, generator | 7 | 7 | 2 | 0 |
-| Files | 5 | 6 | 0 | 0 |
-| Health | 2 | 2 | 1 | 0 |
-| Recipes & editing | 7 | 1 | 1 | 0 |
-| Streaming | 1 | 1 | 7 | 0 |
-| History & backup | 3 | 0 | 0 | 2 |
-| Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **48** | **31** | **13** | **16** |
+| Domain | done | partial | missing | blocked | deferred |
+|---|---:|---:|---:|---:|---:|
+| Interop & sync | 5 | 5 | 1 | 1 | 11 |
+| Library & browser | 12 | 3 | 3 | 0 | 0 |
+| Smartlists | 2 | 1 | 0 | 0 | 0 |
+| Analysis | 2 | 4 | 4 | 1 | 0 |
+| Player, cues, generator | 7 | 6 | 3 | 0 | 0 |
+| Files | 6 | 5 | 0 | 0 | 0 |
+| Health | 2 | 1 | 1 | 0 | 0 |
+| Recipes & editing | 7 | 1 | 1 | 0 | 0 |
+| Streaming | 1 | 1 | 7 | 0 | 0 |
+| History & backup | 3 | 0 | 0 | 0 | 2 |
+| Extensibility | 0 | 0 | 0 | 0 | 3 |
+| **Total** | **47** | **27** | **20** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
+
+**How to read these numbers.** They are self-reported against a matrix written from Lexicon's
+manual, not from Lexicon itself. Three specific limits apply:
+
+- The denominator may be short. `lexicondj.com/features` has never been readable from this
+  environment (HTTP 403 — see [`GAPS.md`](GAPS.md) gap 1), and it enumerates named features the
+  manual does not.
+- Nothing here has been checked against a running Lexicon or a real Rekordbox library. Every
+  fixture in the repository is synthetic; real ones are gitignored.
+- `done` means "parity or better *on the behaviour the manual describes*". Several `done` rows
+  carry a divergence in their Notes — read the row, not the count.
+
+The `blocked` column is new: two rows cannot be built as specified (`Colors → nearest` has no
+`Track` colour field to map to; the Camelot/Open Key posture is a licensing decision, not code).
+They were previously miscounted as `partial` and `missing`.
 
 ---
 
@@ -70,7 +85,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Custom Tags | partial | OR-within-category / AND-across-category selection now honoured. Still missing category colours, drag-reorder, MyTag import, per-tag hotkeys | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
-| Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk deliberately not offered | 5 |
+| Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |
 | Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Extra artist fields need a wider `Track` | 5 |
 
 ## Smartlists — `03-smartlists.md`
@@ -123,7 +138,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Watch folder | **done** | Debounced scan rather than a native watcher; settle rule; dismissals | **4** |
-| Incoming staging | partial | Watch queue, Selected done with auto-advance + D hotkey; no delete-from-disk | 4 |
+| Incoming staging | partial | Watch queue, Selected done with auto-advance + D hotkey; delete-from-disk reachable from Archive/Broken/Duplicates but not yet from the Incoming triage row | 4 |
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
@@ -131,6 +146,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
+| Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |
 | Automatic Actions settings group | partial | Group + auto-analyse work; other four disabled with reasons | 4 |
 
 ## Health — `07-health.md`

@@ -2423,3 +2423,26 @@ snapshots.
 
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.
+
+## Session — 2026-08-06 (delete from disk)
+
+### Plan
+- Answer the user's parity question honestly, then build delete-from-disk with guard rails, as
+  explicitly authorised.
+
+### End of session
+- **Shipped:** `crates/file-organizer::trash` (quarantine + manifest + restore + purge, 30 tests),
+  nine Tauri commands, `DeleteFromDiskDialog`, `DeletedAudioSection` in Settings, and the three
+  call sites this was previously declined at — Archive, Find Broken Tracks, duplicate resolution.
+  E2E spec covers the fail-closed state, the delete/restore round trip and the permanent empty.
+- **Design note:** every earlier refusal of this feature is preserved as an argument, not deleted.
+  What changed is that the operation now has a reversible middle step, so "no undo" stopped being
+  true. The specs in `02-library.md` and `07-health.md` were rewritten to say that rather than
+  quietly dropping the objection.
+- **Correction to my own docs:** `PARITY.md`'s summary table did not match its body. Recounted
+  from the rows, added a `blocked` column, and wrote down what the numbers can and cannot support.
+- **Still unverified by CI.** GitHub stopped creating workflow runs after `e8a6120`; several
+  commits have no runs at all. Everything here passes locally: `cargo test --workspace`,
+  `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (623), `pnpm typecheck`,
+  `pnpm lint`, and the new Playwright spec.
+- **Next:** delete-from-disk from the Incoming triage row; Epic 7 needs a scoping decision.

@@ -1,5 +1,48 @@
 # Status
 
+## 2026-08-06 — Delete from disk, with guard rails
+
+Delete-from-disk was declined three times during Epic 5 — Find Broken Tracks, Archive cleanup,
+duplicate resolution — on the grounds that it is the only operation in the program with no undo.
+The user asked for it explicitly, "with proper guardrails". This is that.
+
+**It is a quarantine, not an `unlink`.** `crates/file-organizer::trash` moves files into a
+timestamped batch under the app data dir and writes a plain-JSON `manifest.json` beside them with
+each file's original absolute path — readable by a human with a text editor if this program is
+ever uninstalled. `restore` puts a batch back; `purge` is a separate call, per batch, by name, and
+is the only step that removes anything. There is no "skip the trash" and no "empty all".
+
+**The guards are refusals, not warnings.** `plan` is pure — it takes a filesystem oracle — and
+drops a candidate outright when the path is outside every configured music folder, is a symlink,
+is not an ordinary file, is missing, is pointed at by another track, or is already quarantined.
+Only "still in a playlist" is overridable, by one checkbox that **re-plans** rather than waving the
+rule through per file.
+
+**Off until the user says where their music is.** With no music folders configured, `plan` refuses
+everything — fail-closed by construction, and the dialog says so rather than looking broken.
+Settings → Deleted audio owns the list; `suggest_music_roots` reads the directories the library
+already draws from so filling it is one click.
+
+Three things the tests caught that the design did not:
+
+- `purge` accepted `..`. `PathBuf::join` does not normalise, so `starts_with(quarantine_root)`
+  passed for a path that escaped it. Now it requires the batch id to be exactly one `Normal`
+  component.
+- Cross-filesystem moves need copy-then-remove, and the copy has to be **verified before** the
+  source goes. A failed verification now leaves both copies: a duplicate is cleanable, a lost file
+  is not.
+- Two tracks with the same basename would have overwritten each other *inside* the quarantine —
+  destroying the very file being preserved. `free_name` suffixes.
+
+Also: `PARITY.md`'s summary table had drifted from its own body (it claimed 48/31/13/16 against
+rows that actually said 46/27/20/16, and had no column for the two `blocked` rows). Recounted, and
+a "how to read these numbers" note added — the counts are self-reported against a matrix written
+from the manual, `lexicondj.com/features` is still 403 from this environment, and nothing has been
+checked against a running Lexicon or a real library.
+
+**Next:** delete-from-disk is not yet reachable from the Incoming triage row, which is where the
+Lexicon spec puts it first. Epic 7 (streaming) still needs a scoping decision from the user.
+
 ## 2026-08-06 — Custom Tags selection semantics
 
 The Custom Tags page handed the library filter a flat list of tag ids with "match any". The spec's

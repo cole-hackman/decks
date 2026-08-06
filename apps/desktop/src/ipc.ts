@@ -2,6 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Track,
+  DeletePlanView,
+  DeleteReceipt,
+  DeleteBatch,
+  QuarantineRestoreReport,
+  MusicRootSuggestion,
   HotCue,
   KeyMixingMode,
   MixableOptions,
@@ -1814,4 +1819,72 @@ export async function previewM3uImport(
     fileName,
     content,
   });
+}
+
+// ── Delete from disk ─────────────────────────────────────────────────────────
+
+/** The folders the user has confirmed hold their music. Deleting from disk
+ *  refuses everything while this is empty — a fail-closed default, not a bug. */
+export async function musicRoots(): Promise<string[]> {
+  return invoke<string[]>("music_roots");
+}
+
+export async function setMusicRoots(roots: string[]): Promise<void> {
+  return invoke<void>("set_music_roots", { roots });
+}
+
+/** Folders the library actually draws audio from, for one-click setup. */
+export async function suggestMusicRoots(
+  libraryPath: string,
+): Promise<MusicRootSuggestion[]> {
+  return invoke<MusicRootSuggestion[]>("suggest_music_roots", { libraryPath });
+}
+
+/** What would happen, without doing it. */
+export async function planDeleteFromDisk(
+  libraryPath: string,
+  trackIds: string[],
+  reason: string,
+  allowPlaylistMembers = false,
+): Promise<DeletePlanView> {
+  return invoke<DeletePlanView>("plan_delete_from_disk", {
+    request: {
+      library_path: libraryPath,
+      track_ids: trackIds,
+      reason,
+      allow_playlist_members: allowPlaylistMembers,
+    },
+  });
+}
+
+/** Move the audio into the quarantine. Reversible until the batch is emptied. */
+export async function deleteFromDisk(
+  libraryPath: string,
+  trackIds: string[],
+  reason: string,
+  allowPlaylistMembers = false,
+): Promise<DeleteReceipt> {
+  return invoke<DeleteReceipt>("delete_from_disk", {
+    request: {
+      library_path: libraryPath,
+      track_ids: trackIds,
+      reason,
+      allow_playlist_members: allowPlaylistMembers,
+    },
+  });
+}
+
+export async function listDeletedBatches(): Promise<DeleteBatch[]> {
+  return invoke<DeleteBatch[]>("list_deleted_batches");
+}
+
+export async function restoreDeletedBatch(
+  batchId: string,
+): Promise<QuarantineRestoreReport> {
+  return invoke<QuarantineRestoreReport>("restore_deleted_batch", { batchId });
+}
+
+/** The irreversible one. Returns the bytes freed. */
+export async function purgeDeletedBatch(batchId: string): Promise<number> {
+  return invoke<number>("purge_deleted_batch", { batchId });
 }

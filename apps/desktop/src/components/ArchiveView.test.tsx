@@ -90,8 +90,10 @@ describe("ArchiveView", () => {
     expect(cleanupArchived).toHaveBeenCalledWith("/db", ["t1"]);
   });
 
-  it("cleanup says the audio files are never touched", async () => {
-    // The one thing a user needs to be sure of before pressing it.
+  it("cleanup says the audio files stay where they are", async () => {
+    // The one thing a user needs to be sure of before pressing it. Deleting
+    // audio is a separate button with its own preview — cleanup never does it
+    // as a side effect.
     vi.mocked(listArchivedTracks).mockResolvedValue([TRACK]);
     render_();
     await screen.findByText(/1 archived track/);
@@ -99,7 +101,7 @@ describe("ArchiveView", () => {
       screen.getByRole("button", { name: /Clean up selection/ }),
     );
     expect(
-      await screen.findByText(/Audio files on disk are never touched/),
+      await screen.findByText(/The audio files stay where they are/),
     ).toBeInTheDocument();
   });
 

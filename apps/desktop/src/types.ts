@@ -1180,3 +1180,98 @@ export interface M3uImportPreview {
   unmatched: number;
   suggested_name: string;
 }
+
+// ── Delete from disk ─────────────────────────────────────────────────────────
+
+/** Why a track will not be deleted. Discriminated on `kind`; the backend
+ *  resolves the sentence into `Refused.message`, so the renderer never has to
+ *  reimplement the match. */
+export type Refusal =
+  | { kind: "no_path" }
+  | { kind: "missing" }
+  | { kind: "not_a_regular_file" }
+  | { kind: "symlink" }
+  | { kind: "outside_music_roots" }
+  | { kind: "shared_with_tracks"; track_ids: string[] }
+  | { kind: "still_in_playlists"; playlists: string[] }
+  | { kind: "already_quarantined" };
+
+export interface PlannedDelete {
+  track_id: string;
+  source: string;
+  bytes: number;
+}
+
+export interface RefusedDelete {
+  track_id: string;
+  path: string;
+  reason: Refusal;
+  message: string;
+}
+
+export interface DeletePlanView {
+  deletable: PlannedDelete[];
+  refused: RefusedDelete[];
+  /** Bytes the quarantine will hold — not bytes freed. */
+  total_bytes: number;
+  /** Track id → "Artist — Title". */
+  labels: Record<string, string>;
+  /** Everything was refused because Settings has no music folders yet. */
+  no_roots_configured: boolean;
+}
+
+export interface DeleteManifestEntry {
+  track_id: string;
+  original_path: string;
+  stored_as: string;
+  bytes: number;
+}
+
+export interface DeleteManifest {
+  batch_id: string;
+  created_at: number;
+  library_path: string;
+  reason: string;
+  entries: DeleteManifestEntry[];
+}
+
+export interface DeleteBatch {
+  manifest: DeleteManifest;
+  total_bytes: number;
+  file_count: number;
+}
+
+export interface MoveFailure {
+  track_id: string;
+  path: string;
+  error: string;
+}
+
+export interface DeleteReceipt {
+  manifest: DeleteManifest;
+  failed: MoveFailure[];
+}
+
+export type QuarantineRestoreOutcome =
+  | { outcome: "restored"; path: string }
+  | { outcome: "occupied"; path: string }
+  | { outcome: "missing_from_quarantine" }
+  | { outcome: "failed"; error: string };
+
+export interface QuarantineRestoreResult {
+  track_id: string;
+  original_path: string;
+  outcome: QuarantineRestoreOutcome;
+}
+
+export interface QuarantineRestoreReport {
+  batch_id: string;
+  results: QuarantineRestoreResult[];
+  restored: number;
+  batch_emptied: boolean;
+}
+
+export interface MusicRootSuggestion {
+  path: string;
+  track_count: number;
+}

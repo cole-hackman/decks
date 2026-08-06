@@ -16,6 +16,7 @@ mod playlist_tools;
 mod recipes;
 mod share;
 mod smartlists;
+mod trash;
 mod undo;
 mod watch;
 mod write_tags;
@@ -2789,6 +2790,15 @@ pub fn run() {
             history::remove_history_track,
             history::preview_history_as_playlist,
             history::save_history_as_playlist,
+            trash::music_roots,
+            trash::set_music_roots,
+            trash::suggest_music_roots,
+            trash::plan_delete_from_disk,
+            trash::delete_from_disk,
+            trash::list_deleted_batches,
+            trash::restore_deleted_batch,
+            trash::purge_deleted_batch,
+            trash::quarantined_track_ids,
             playlist_tools::list_favourite_playlists,
             playlist_tools::toggle_favourite_playlist,
             playlist_tools::set_favourite_playlist_order,

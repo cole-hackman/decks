@@ -286,11 +286,11 @@ selection.
 makes archiving safe to do on a whim. It stages the playlist removals *before* the track deletes,
 so the playlist rows are never left pointing at a track that no longer exists.
 
-**Delete-from-disk is deliberately not implemented**, on the same grounds as Find Broken Tracks: it
-is the one operation with no undo, and a program whose first rule is that the library is read-only
-should not be the thing that deletes a DJ's audio. The confirmation dialog says so in as many
-words. If this is wanted it should be an explicit decision with its own guard rails, not something
-that arrives as part of a cleanup button.
+**Delete-from-disk is a separate button, never a side effect of cleanup.** It was declined here at
+first on the grounds that it is the one operation with no undo; it now ships as its own action with
+its own guard rails, per `06-files.md §Delete from disk`. Cleanup's confirmation still says the
+audio files stay where they are, because they do — deleting them is the other button, and it has
+its own preview.
 
 *Epic* — **5**.
 

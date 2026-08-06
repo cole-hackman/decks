@@ -7,7 +7,5 @@ description = "Filename patterns, subfolder patterns, move/rename planning and t
 
 [dependencies]
 serde = { workspace = true }
-walkdir = "2.5.0"
-
-[dev-dependencies]
 serde_json = { workspace = true }
+walkdir = "2.5.0"

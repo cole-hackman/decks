@@ -11,6 +11,7 @@ import {
 } from "../ipc";
 import type { ArchiveCriterion } from "../types";
 import { useDialog } from "../hooks/useDialog";
+import { DeleteFromDiskDialog } from "./DeleteFromDiskDialog";
 import type { Track } from "../types";
 
 interface Props {
@@ -35,6 +36,7 @@ export function ArchiveView({
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
   const { ctx: filterCtx } = useFilterContext(libraryPath);
+  const [deleting, setDeleting] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!libraryPath) return;
@@ -72,7 +74,7 @@ export function ArchiveView({
     const count = selectedTrackIds.size;
     const ok = await dialog.confirm({
       title: `Clean up ${count} archived track${count === 1 ? "" : "s"}?`,
-      body: "Stages removal from every playlist and a soft-delete from the library. Nothing is written until you apply in the Sync panel. Audio files on disk are never touched.",
+      body: "Stages removal from every playlist and a soft-delete from the library. Nothing is written until you apply in the Sync panel. The audio files stay where they are — use Delete from disk for those.",
       confirmLabel: "Stage cleanup",
       destructive: true,
     });
@@ -113,6 +115,13 @@ export function ArchiveView({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDeleting(true)}
+            disabled={selectedTrackIds.size === 0}
+            className="rounded border border-red-500/40 px-3 py-1 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+          >
+            Delete from disk
+          </button>
           <button
             onClick={handleCleanup}
             disabled={selectedTrackIds.size === 0}
@@ -170,6 +179,22 @@ export function ArchiveView({
         onTrackContextMenu={onTrackContextMenu}
         tracksOverride={tracks}
       />
+
+      {deleting && (
+        <DeleteFromDiskDialog
+          libraryPath={libraryPath}
+          trackIds={[...selectedTrackIds]}
+          reason="Archive cleanup"
+          onClose={() => setDeleting(false)}
+          onDeleted={(receipt) =>
+            toast({
+              variant: "success",
+              message: `Moved ${receipt.manifest.entries.length} file(s) to the deleted-audio folder.`,
+              detail: "Restore or empty the batch in Settings.",
+            })
+          }
+        />
+      )}
     </div>
   );
 }

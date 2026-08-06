@@ -59,8 +59,10 @@ through bitrate → playlist membership → play count, and a genuine tie resolv
 run, or a bulk `Prefer` over 200 groups would give a different answer each time it was previewed.
 
 **The review step** names the playlists that will be re-pointed before anything happens, and says
-so plainly when none will be. **Losers are archived, never deleted** — the spec's guarantee, and
-the confirmation says it.
+so plainly when none will be. **`Keep one, archive rest` never deletes** — the spec's guarantee, and
+the confirmation says it. Deleting the losing copies' audio is a second, separately styled button
+that goes through the quarantine flow in `06-files.md §Delete from disk`; archiving stays the
+primary action because it is the reversible one.
 
 Still missing: **interruptible scans** (the scan runs to completion; the manual's advice to work in
 passes is not yet possible) and **manual merge**.
@@ -173,10 +175,12 @@ truncation detectable in formats where the stream itself would not complain.
 
 Divergences:
 
-- **Nothing is deleted.** The spec optionally removes broken files from the library, from playlists
-  and from disk. `decks` reports; removing a track is `stage_track_delete`, reviewed and applied by
-  Sync under the write guard. Deleting audio from disk is not offered at all — it is the one
-  operation with no undo, and this program's entire posture is that the user reviews first.
+- **The scan itself deletes nothing.** The spec optionally removes broken files from the library,
+  from playlists and from disk. Here removing a track is `stage_track_delete`, reviewed and applied
+  by Sync under the write guard; deleting the audio is a separate button that moves the file to a
+  restorable quarantine rather than unlinking it, per `06-files.md §Delete from disk`. It is
+  offered only for files that are **present but do not decode** — a missing file has nothing to
+  delete.
 - **The report is saved where the user chooses**, not to `Documents/Lexicon`. Writing into a
   directory nobody asked for is the sort of thing that makes a tool feel like it is taking
   liberties. Each entry still names **which playlists held the track**, which is the whole reason
