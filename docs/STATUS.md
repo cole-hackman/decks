@@ -1,5 +1,41 @@
 # Status
 
+## 2026-08-06 — Epic 4 (part 2): Field Mappings
+
+`crates/changes::field_mappings` — the projection engine for fields the target does not have.
+Energy, Danceability and Custom Tags have no Rekordbox column and no standard ID3 frame; a mapping
+writes them somewhere that does. It lives in `changes` rather than beside Write Tags because the
+same `Energy → Comment` rule must produce the same string whether it lands in `master.db` or in an
+ID3 frame — one implementation, two call sites.
+
+Spec semantics: source → target, overwrite replaces while off appends, several sources on one
+target combine with `, `, custom tags write hashtag form, and a colour source writes the colour
+*name* since a text target cannot use a hex value.
+
+Three rules the spec leaves open, decided and tested:
+
+- A track with no value for a source contributes **nothing** — not `Energy` with no number after
+  it, and not a blanked target.
+- Numbers are zero-padded to two digits, so a text target sorts them correctly. Same reason Key
+  Conversion has a leading-zero option.
+- Where several mappings share a target, the **first** decides overwrite-vs-append. Mixing the two
+  on one target is a configuration mistake; first-wins is predictable and matches reading order.
+
+**Cache migration v11 drops the dead `field_mappings` table from v5.** Nothing ever read or wrote
+it, and its `(library_path, source_field)` primary key allowed exactly one target per source —
+which cannot express combining, the feature's most useful half. The replacement is scoped by
+*profile* rather than library path, because mappings are configured per destination.
+
+Write Tags honours them, with two guards: mappings only fill targets the per-field selection did
+**not** claim (quietly replacing a field the user explicitly ticked would be a nasty surprise), and
+a mapping onto a field audio files do not have produces a warning rather than silently vanishing.
+
+`FieldMappingsSection` in Settings configures the ID3 profile. Per-DJ-app profiles and applying
+mappings during sync are outstanding; the schema is ready for both.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 345, typecheck, lint, `pnpm e2e` 17 — all green.
+
 ## 2026-08-06 — Epic 4 (part 1): Move & Rename
 
 New `crates/file-organizer`, three pure layers with no filesystem access anywhere in the crate:

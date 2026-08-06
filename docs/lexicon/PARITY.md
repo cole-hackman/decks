@@ -14,7 +14,7 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
-| Interop & sync | 4 | 6 | 2 | 11 |
+| Interop & sync | 4 | 7 | 1 | 11 |
 | Library & browser | 0 | 9 | 7 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **22** | **40** | **25** | **16** |
+| **Total** | **22** | **41** | **24** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -45,7 +45,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Key conversion | partial | Camelot + Open Key done; no leading-zero option | 6 |
 | Colors → nearest | **missing** | Option plumbed through `SyncOptions` and **ignored** | 6 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
-| Field Mappings | **missing** | A vestigial `field_mappings` table exists from migration v5 but nothing reads it, and its `(library_path, source_field)` PK cannot express multi-source combining or per-app mappings — Epic 4 should replace it | 4 |
+| Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
 | Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues | 4 |
 | Serato / Traktor / VirtualDJ / Engine / djay / Apple Music / M3U / USB / DIRECT2CDJ | deferred | 11 items | — |

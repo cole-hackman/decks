@@ -504,3 +504,19 @@ export interface AutomaticAction {
   /** Non-null when decks cannot honour the action yet; the toggle is disabled. */
   unavailable: string | null;
 }
+
+export type MappingSource =
+  | { kind: "energy" }
+  | { kind: "danceability" }
+  | { kind: "popularity" }
+  | { kind: "happiness" }
+  | { kind: "all_custom_tags" }
+  | { kind: "tag_category"; name: string }
+  | { kind: "colour" };
+
+export interface FieldMappingRow {
+  id: string;
+  source: MappingSource;
+  target: string;
+  overwrite: boolean;
+}

@@ -20,6 +20,17 @@ vi.mock("../ipc", () => ({
   setLibraryPath: vi.fn().mockResolvedValue(undefined),
   getAgentModel: vi.fn().mockResolvedValue("claude-sonnet-4-6"),
   setAgentModel: vi.fn().mockResolvedValue(undefined),
+  // Sections mounted inside the panel.
+  listAutomaticActions: vi.fn().mockResolvedValue([]),
+  setAutomaticAction: vi.fn().mockResolvedValue(undefined),
+  listFieldMappings: vi.fn().mockResolvedValue([]),
+  createFieldMapping: vi.fn().mockResolvedValue("r1"),
+  deleteFieldMapping: vi.fn().mockResolvedValue(true),
+  mappableTagTargets: vi.fn().mockResolvedValue([]),
+  listPathMappings: vi.fn().mockResolvedValue([]),
+  createPathMapping: vi.fn().mockResolvedValue("m1"),
+  deletePathMapping: vi.fn().mockResolvedValue(true),
+  previewPathMapping: vi.fn().mockResolvedValue(["/x", false]),
 }));
 
 import {

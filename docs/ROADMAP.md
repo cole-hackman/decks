@@ -145,7 +145,7 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 - [x] Move & Rename over a selection, preview-then-apply, staging `TrackRelocate` per moved file
 - [x] Quick move with favourited folders on hotkeys 1–9
 - [x] Bulk Write Tags (ID3) with per-field selection
-- [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining
+- [x] **Field Mappings** — per-target, overwrite vs append, multi-source combining (ID3 profile; per-DJ-app profiles and sync-time application outstanding)
 - [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
 - [ ] Album art: fetch, embed, replace, remove, reload
 - [ ] Energy / Danceability / Popularity / Happiness from our own analysis (**not** Spotify — see

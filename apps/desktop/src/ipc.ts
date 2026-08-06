@@ -44,6 +44,8 @@ import type {
   WatchScan,
   ImportResult,
   AutomaticAction,
+  FieldMappingRow,
+  MappingSource,
 } from "./types";
 import type {
   ChatMessage,
@@ -1121,4 +1123,24 @@ export async function setAutomaticAction(
   enabled: boolean,
 ): Promise<void> {
   return invoke<void>("set_automatic_action", { key, enabled });
+}
+
+export async function mappableTagTargets(): Promise<string[]> {
+  return invoke<string[]>("mappable_tag_targets");
+}
+
+export async function listFieldMappings(): Promise<FieldMappingRow[]> {
+  return invoke<FieldMappingRow[]>("list_field_mappings");
+}
+
+export async function createFieldMapping(
+  source: MappingSource,
+  target: string,
+  overwrite: boolean,
+): Promise<string> {
+  return invoke<string>("create_field_mapping", { source, target, overwrite });
+}
+
+export async function deleteFieldMapping(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_field_mapping", { id });
 }

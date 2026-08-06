@@ -1,5 +1,6 @@
 use crate::migrations;
 use anyhow::{Context, Result};
+use changes::field_mappings::{FieldMapping, FieldMappings, MappingSource};
 use changes::{ChangeKind, ChangeStatus};
 use file_organizer::{PathMapping, PathMappings};
 use rusqlite::Connection;
@@ -1251,6 +1252,101 @@ impl CacheDb {
     }
 }
 
+/// The default mapping profile — ID3 tag writing.
+///
+/// Mappings are configured per destination, and `decks` has exactly one
+/// non-Rekordbox destination today. The column exists so adding Serato or
+/// Traktor later is a row, not a migration.
+pub const ID3_PROFILE: &str = "id3";
+
+/// Field mapping rules (Epic 4).
+impl CacheDb {
+    pub fn list_field_mappings(&self, profile: &str) -> Result<FieldMappings> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source_json, target, overwrite FROM field_mapping_rules
+             WHERE profile = ?1 ORDER BY seq, rowid",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![profile])?;
+        let mut mappings = Vec::new();
+        while let Some(r) = rows.next()? {
+            let source_json: String = r.get(0)?;
+            // A rule whose source no longer deserialises is skipped rather than
+            // failing the whole list — one stale row must not disable mapping.
+            let Ok(source) = serde_json::from_str::<MappingSource>(&source_json) else {
+                tracing::warn!(source_json, "skipping unreadable field mapping rule");
+                continue;
+            };
+            mappings.push(FieldMapping {
+                source,
+                target: r.get(1)?,
+                overwrite: r.get::<_, i64>(2)? != 0,
+            });
+        }
+        Ok(FieldMappings::new(mappings))
+    }
+
+    /// Rules with their ids, for the settings list.
+    pub fn list_field_mapping_rows(&self, profile: &str) -> Result<Vec<(String, FieldMapping)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source_json, target, overwrite FROM field_mapping_rules
+             WHERE profile = ?1 ORDER BY seq, rowid",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![profile])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            let source_json: String = r.get(1)?;
+            let Ok(source) = serde_json::from_str::<MappingSource>(&source_json) else {
+                continue;
+            };
+            out.push((
+                r.get(0)?,
+                FieldMapping {
+                    source,
+                    target: r.get(2)?,
+                    overwrite: r.get::<_, i64>(3)? != 0,
+                },
+            ));
+        }
+        Ok(out)
+    }
+
+    pub fn create_field_mapping(&self, profile: &str, mapping: &FieldMapping) -> Result<String> {
+        if mapping.target.trim().is_empty() {
+            anyhow::bail!("a target field is required");
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let seq: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(seq), -1) + 1 FROM field_mapping_rules WHERE profile = ?1",
+                rusqlite::params![profile],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO field_mapping_rules (id, profile, source_json, target, overwrite, seq)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                id,
+                profile,
+                serde_json::to_string(&mapping.source)?,
+                mapping.target.trim(),
+                i64::from(mapping.overwrite),
+                seq
+            ],
+        )?;
+        Ok(id)
+    }
+
+    pub fn delete_field_mapping(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM field_mapping_rules WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+}
+
 /// A folder under observation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WatchFolder {
@@ -1444,6 +1540,109 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn field_mappings_round_trip_in_configured_order() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_field_mapping(
+            ID3_PROFILE,
+            &FieldMapping {
+                source: MappingSource::Energy,
+                target: "Comment".into(),
+                overwrite: true,
+            },
+        )
+        .unwrap();
+        db.create_field_mapping(
+            ID3_PROFILE,
+            &FieldMapping {
+                source: MappingSource::AllCustomTags,
+                target: "Comment".into(),
+                overwrite: false,
+            },
+        )
+        .unwrap();
+
+        let loaded = db.list_field_mappings(ID3_PROFILE).unwrap();
+        assert_eq!(loaded.mappings.len(), 2);
+        assert_eq!(loaded.mappings[0].source, MappingSource::Energy);
+        assert!(loaded.mappings[0].overwrite);
+        assert_eq!(loaded.mappings[1].source, MappingSource::AllCustomTags);
+    }
+
+    #[test]
+    fn field_mappings_are_scoped_by_profile() {
+        // Mappings are configured per destination — ID3 rules must not leak
+        // into a DJ-app profile.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_field_mapping(
+            ID3_PROFILE,
+            &FieldMapping {
+                source: MappingSource::Energy,
+                target: "Comment".into(),
+                overwrite: true,
+            },
+        )
+        .unwrap();
+        assert!(db.list_field_mappings("rekordbox").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_mapping_with_no_target_is_refused() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db
+            .create_field_mapping(
+                ID3_PROFILE,
+                &FieldMapping {
+                    source: MappingSource::Energy,
+                    target: "  ".into(),
+                    overwrite: true,
+                },
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn field_mappings_can_be_deleted() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db
+            .create_field_mapping(
+                ID3_PROFILE,
+                &FieldMapping {
+                    source: MappingSource::Energy,
+                    target: "Comment".into(),
+                    overwrite: true,
+                },
+            )
+            .unwrap();
+        assert!(db.delete_field_mapping(&id).unwrap());
+        assert!(!db.delete_field_mapping(&id).unwrap());
+        assert!(db.list_field_mappings(ID3_PROFILE).unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unreadable_rule_is_skipped_rather_than_disabling_every_mapping() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_field_mapping(
+            ID3_PROFILE,
+            &FieldMapping {
+                source: MappingSource::Energy,
+                target: "Comment".into(),
+                overwrite: true,
+            },
+        )
+        .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO field_mapping_rules (id, profile, source_json, target, overwrite, seq)
+                 VALUES ('bad', ?1, '{\"kind\":\"from_the_future\"}', 'Comment', 0, 9)",
+                rusqlite::params![ID3_PROFILE],
+            )
+            .unwrap();
+
+        let loaded = db.list_field_mappings(ID3_PROFILE).unwrap();
+        assert_eq!(loaded.mappings.len(), 1);
+    }
 
     #[test]
     fn adding_the_same_watch_folder_twice_is_idempotent() {
