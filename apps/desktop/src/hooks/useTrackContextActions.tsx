@@ -4,6 +4,7 @@ import { useToast } from "../components/Toast";
 import type { TrackContextMenuAction } from "../components/TrackContextMenu";
 import { CONTEXT_MENU_SEPARATOR } from "../components/TrackContextMenuItems";
 import {
+  archiveTracksFrom,
   analyzeTrack,
   libraryStageIntroCues,
   libraryStagePlaylistRemoveTrack,
@@ -152,6 +153,39 @@ export function useTrackContextActions({
     [libraryPath, playlistId, queryClient, toast],
   );
 
+  /**
+   * Archive, with the spec's context-sensitive playlist rule.
+   *
+   * From inside a playlist this also stages removal from **that** playlist and
+   * leaves every other alone; from the browser it touches no playlist at all.
+   * The asymmetry is the point: from a playlist you are saying "not in this
+   * set", from the browser you are saying "not in my way".
+   */
+  const doArchive = useCallback(
+    (track: Track) => {
+      archiveTracksFrom(libraryPath, [track.id], playlistId ?? null)
+        .then((result) => {
+          void queryClient.invalidateQueries({ queryKey: ["staged-changes"] });
+          toast({
+            variant: "success",
+            message: "Archived",
+            detail:
+              result.staged.length > 0
+                ? "Removal from this playlist staged; other playlists are untouched."
+                : "Still in every playlist it was in.",
+          });
+        })
+        .catch((e: unknown) => {
+          toast({
+            variant: "error",
+            message: "Could not archive",
+            detail: e instanceof Error ? e.message : String(e),
+          });
+        });
+    },
+    [libraryPath, playlistId, queryClient, toast],
+  );
+
   const doStageIntroCue = useCallback(
     (track: Track) => {
       libraryStageIntroCues(libraryPath, [track.id])
@@ -283,6 +317,18 @@ export function useTrackContextActions({
       },
     ];
 
+    actions.push(CONTEXT_MENU_SEPARATOR, {
+      id: "archive",
+      label: playlistId ? "Archive (and remove from this playlist)" : "Archive",
+      hint: playlistId ? "Stages change" : "Hidden, not deleted",
+      icon: (
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <path d="M2 3.5A.5.5 0 012.5 3h11a.5.5 0 01.5.5v1a.5.5 0 01-.5.5h-11a.5.5 0 01-.5-.5v-1zM3 6h10v6.5a.5.5 0 01-.5.5h-9a.5.5 0 01-.5-.5V6zm2.5 2a.5.5 0 000 1h5a.5.5 0 000-1h-5z" />
+        </svg>
+      ),
+      onSelect: doArchive,
+    });
+
     if (playlistId) {
       actions.push(CONTEXT_MENU_SEPARATOR, {
         id: "remove-from-playlist",
@@ -309,6 +355,7 @@ export function useTrackContextActions({
     doCopyPath,
     doCopyId,
     doRemoveFromPlaylist,
+    doArchive,
     playlistId,
     onEditTags,
     onSendToFiles,

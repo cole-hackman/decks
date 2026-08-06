@@ -841,3 +841,17 @@ export interface BrokenScan {
   /** Tracks with no file path at all: nothing to check, and not a failure. */
   no_path: number;
 }
+
+// ── Archive (Epic 5) ─────────────────────────────────────────────────────────
+// See docs/lexicon/02-library.md §Archive.
+
+export type ArchiveCriterion =
+  | { kind: "older_than_days"; value: number }
+  | { kind: "without_cues" }
+  | { kind: "in_no_playlist" };
+
+export interface ArchiveResult {
+  archived: string[];
+  /** Staged `PlaylistRemoveTrack` ids — only when archiving from a playlist. */
+  staged: string[];
+}

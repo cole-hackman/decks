@@ -67,6 +67,8 @@ import type {
   BrokenScan,
   BrokenTrack,
   CheckDepth,
+  ArchiveCriterion,
+  ArchiveResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1345,4 +1347,30 @@ export async function saveTextFile(
   if (!path) return null;
   await invoke<void>("save_broken_tracks_report", { path, contents });
   return path;
+}
+
+export async function archiveTracksFrom(
+  libraryPath: string,
+  trackIds: string[],
+  fromPlaylistId: string | null,
+): Promise<ArchiveResult> {
+  return invoke<ArchiveResult>("archive_tracks_from", {
+    libraryPath,
+    trackIds,
+    fromPlaylistId,
+  });
+}
+
+export async function selectArchived(
+  libraryPath: string,
+  criterion: ArchiveCriterion,
+): Promise<string[]> {
+  return invoke<string[]>("select_archived", { libraryPath, criterion });
+}
+
+export async function cleanupArchived(
+  libraryPath: string,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("cleanup_archived", { libraryPath, trackIds });
 }

@@ -1,3 +1,4 @@
+mod archive;
 mod audio;
 mod automation;
 mod broken;
@@ -2757,6 +2758,9 @@ pub fn run() {
             broken::scan_broken_tracks,
             broken::broken_tracks_report,
             broken::save_broken_tracks_report,
+            archive::archive_tracks_from,
+            archive::select_archived,
+            archive::cleanup_archived,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

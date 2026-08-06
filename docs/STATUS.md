@@ -1,5 +1,37 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 6): Archive — the playlist rule and the selection helper
+
+**The context-sensitive playlist rule** is the interesting half. Archiving *from inside a playlist*
+removes the track from **that** playlist and leaves every other alone; archiving *from the browser*
+touches no playlist at all. The asymmetry is the whole point — from a playlist you are saying "not
+in this set", from the browser you are saying "not in my way" — and it is implemented where users
+actually archive, on the track context menu, whose label changes to say which one you are about to
+get.
+
+Archiving is cache-only and takes effect at once; the playlist removal is a staged change and goes
+through review and Sync. The two halves are reported separately because they land at different
+times, and a toast claiming both had happened would be a lie about one of them.
+
+**The selection helper** offers the spec's three criteria over the archive. Two details worth
+keeping: "older than 0 days" does *not* sweep up something archived a second ago — almost certainly
+a misclick on the way to picking a real threshold — and a criterion matching nothing says so rather
+than silently clearing the selection, which would look identical to it having worked.
+
+**Cleanup is where tracks finally leave every playlist**, not archiving. That is exactly what makes
+archiving safe to do on a whim. It stages the playlist removals *before* the track deletes, so the
+playlist rows are never left pointing at a track that no longer exists.
+
+**Delete-from-disk is deliberately not implemented**, and this is the second time in this epic that
+decision has come up (Find Broken Tracks was the first). It is the one operation with no undo, and
+a program whose first rule is that `master.db` is read-only should not be the thing that deletes a
+DJ's audio. The confirmation dialog says "Audio files on disk are never touched" in as many words,
+and there is a test asserting that sentence is there. If it is wanted it deserves its own decision
+and its own guard rails, not a quiet ride-along on a cleanup button.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 458, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 5): Find Broken Tracks
 
 The existing broken-link scan asks whether a path exists. That misses the failure DJs actually

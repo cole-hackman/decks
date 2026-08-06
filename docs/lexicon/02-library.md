@@ -213,9 +213,33 @@ leaves it in every playlist. The stated intent: archive freely without breaking 
 points, or those in no playlist. `Cleanup selection` removes from Lexicon, optionally from disk
 (permanent). Cleanup is also the point at which tracks finally leave all playlists.
 
-*decks status* — **partial.** `archived_tracks` table, `ArchiveView` with unarchive and
-delete-from-library. Missing: the context-sensitive playlist rule, the selection helper, and
-delete-from-disk.
+*decks status* — **done, except delete-from-disk.**
+
+**The context-sensitive playlist rule** is implemented where the user actually archives: the track
+context menu. From inside a playlist the action reads "Archive (and remove from this playlist)" and
+stages a `PlaylistRemoveTrack` for *that* playlist only; from the browser it reads "Archive" and
+stages nothing. The asymmetry is the point — from a playlist you are saying "not in this set", from
+the browser you are saying "not in my way" — so the label says which one you are about to get.
+
+Archiving itself is cache-only and takes effect at once; the playlist removal is a staged change
+like any other and goes through review and Sync. The two halves are reported separately because
+they land at different times.
+
+**The selection helper** offers the spec's three criteria — archived over six months ago, without
+cues, in no playlist — over the archive only. Two details worth recording: "older than 0 days" does
+**not** sweep up something archived a second ago (almost certainly a misclick on the way to picking
+a real threshold), and a criterion that matches nothing says so rather than silently clearing the
+selection.
+
+**Cleanup** is where tracks finally leave every playlist, not archiving — which is exactly what
+makes archiving safe to do on a whim. It stages the playlist removals *before* the track deletes,
+so the playlist rows are never left pointing at a track that no longer exists.
+
+**Delete-from-disk is deliberately not implemented**, on the same grounds as Find Broken Tracks: it
+is the one operation with no undo, and a program whose first rule is that the library is read-only
+should not be the thing that deletes a DJ's audio. The confirmation dialog says so in as many
+words. If this is wanted it should be an explicit decision with its own guard rails, not something
+that arrives as part of a cleanup button.
 
 *Epic* — **5**.
 
