@@ -18,14 +18,14 @@ regardless of how much of Lexicon they represent.
 | Library & browser | 13 | 3 | 2 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
-| Player, cues, generator | 9 | 6 | 1 | 0 | 0 |
+| Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 2 | 1 | 1 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **51** | **26** | **17** | **2** | **16** |
+| **Total** | **52** | **26** | **16** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -121,7 +121,7 @@ They were previously miscounted as `partial` and `missing`.
 | Cue CRUD | **done** | Set/play/delete/move/colour via `CueEditor`, all through staged changes. New `ChangeKind::TrackDeleteCue`. Placement is on the cue list + slot grid, not yet drag-on-waveform | 2 |
 | Loops | partial | Loop length in beats via `OutMsec`. **Active loops need a `djmdCue` column we do not model** — deferred | 2 |
 | Quantize (incl. grid-move-carries-cues) | **done** | 1/2/4/16/64-beat snapping; a grid nudge moves only cues already on the grid | 2 |
-| Cue templates | **missing** | | 2 |
+| Cue templates | **done** | Ship as *cue presets* — `CueTemplate` was taken by the generator. Immutable, promoted from a cue, applied as staged `CueMetadataEdit`s, hotkeys 1–8 with gap-closing on delete | 6 |
 | Beatgrid editing | partial | Grid nudge stages the cue moves that follow it. Writing the grid itself back to ANLZ, and half/double BPM, still missing | 2 |
 | Beat jump | **done** | ±4/±16 beats along the real ANLZ grid, clamped at both ends | 2 |
 | Hotkeys: rebinding, global, inline hints | partial | Rebinding + persistence + conflict detection exist in the registry; no settings UI yet, and no system-wide hotkeys | 2 |

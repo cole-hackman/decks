@@ -444,6 +444,34 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_history_tracks_set ON history_tracks(set_id, seq);
         ",
     ),
+    (
+        18,
+        "
+        -- Cue presets (Epic 2) — saved name+colour pairs for the player.
+        --
+        -- Named `cue_presets`, not `cue_templates`, because
+        -- `crates/cue-generator` already owns a `CueTemplate`: that one is a
+        -- *bulk generation* rule set (place a cue at the first downbeat, one at
+        -- the drop, …). This is the spec's other feature — a two-field preset
+        -- you stamp onto one cue so the same names and colours do not get
+        -- retyped. Two things called `template` in one player would be
+        -- unreadable.
+        --
+        -- **Not scoped by library_path**, unlike favourite_playlists. A preset
+        -- describes how *this DJ* labels cues, not anything inside a particular
+        -- database, and it should survive opening a different library.
+        CREATE TABLE cue_presets (
+          id         TEXT PRIMARY KEY,
+          name       TEXT NOT NULL,
+          -- The `Color` value the cue applier writes, or NULL for
+          -- \"leave the cue's colour alone\".
+          color      INTEGER,
+          seq        INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_cue_presets_seq ON cue_presets(seq);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -837,6 +865,40 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM mixable_templates", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn cue_presets_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO cue_presets (id, name, color, seq, created_at)
+             VALUES ('c1', 'Drop', 4, 0, 1770000000);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cue_presets", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_cue_preset_may_have_no_colour() {
+        // NULL means "leave the cue's colour alone" — a preset that only
+        // renames is a legitimate one.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO cue_presets (id, name, color, seq, created_at)
+             VALUES ('c1', 'Intro', NULL, 0, 1770000000);",
+        )
+        .unwrap();
+        let color: Option<i64> = conn
+            .query_row("SELECT color FROM cue_presets WHERE id = 'c1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(color.is_none());
     }
 
     #[test]

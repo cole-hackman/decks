@@ -2390,6 +2390,132 @@ pub struct StagedUndo {
     pub blocked: Vec<(String, String)>,
 }
 
+// ── Cue presets (Epic 2) ─────────────────────────────────────────────────────
+
+/// A saved name+colour pair for the player's cue editor.
+///
+/// Deliberately **not** `CueTemplate`: `crates/cue-generator` already owns that
+/// name for its bulk-generation rule sets. This is the spec's other feature —
+/// a two-field preset stamped onto one cue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CuePreset {
+    pub id: String,
+    pub name: String,
+    /// The `Color` value the cue applier writes, or `None` for "leave the
+    /// cue's colour alone".
+    pub color: Option<i64>,
+    pub seq: i64,
+    pub created_at: i64,
+}
+
+impl CacheDb {
+    /// Every preset, in the order the player shows and binds them.
+    pub fn list_cue_presets(&self) -> Result<Vec<CuePreset>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, name, color, seq, created_at FROM cue_presets ORDER BY seq, created_at",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(CuePreset {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                color: r.get(2)?,
+                seq: r.get(3)?,
+                created_at: r.get(4)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    /// Add a preset at the end of the list.
+    ///
+    /// **Presets are immutable**, per the spec: there is no update. Changing
+    /// one means deleting it and creating it again, which keeps the hotkey a
+    /// stable promise — `2` always applies what `2` applied last set, rather
+    /// than whatever someone silently edited it into.
+    ///
+    /// A duplicate name is allowed. Two presets called "Drop" in different
+    /// colours is a reasonable thing to want, and rejecting it would be a rule
+    /// the spec does not ask for.
+    pub fn create_cue_preset(&self, name: &str, color: Option<i64>) -> Result<String> {
+        let name = name.trim();
+        if name.is_empty() {
+            anyhow::bail!("a cue preset needs a name");
+        }
+        let next_seq: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(seq), -1) + 1 FROM cue_presets",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        let id = new_id("cuepreset");
+        self.conn.execute(
+            "INSERT INTO cue_presets (id, name, color, seq, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, name, color, next_seq, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    /// Remove a preset and close the gap it leaves.
+    ///
+    /// Renumbering matters because the first eight presets carry hotkeys:
+    /// leaving a hole would silently retire a key while the ones after it kept
+    /// their old numbers, so deleting the second preset would leave `2` dead
+    /// and `3` still on the third.
+    pub fn delete_cue_preset(&self, id: &str) -> Result<bool> {
+        let removed = self
+            .conn
+            .execute("DELETE FROM cue_presets WHERE id = ?1", rusqlite::params![id])?;
+        if removed == 0 {
+            return Ok(false);
+        }
+        let ids: Vec<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM cue_presets ORDER BY seq, created_at")?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (index, preset_id) in ids.iter().enumerate() {
+            self.conn.execute(
+                "UPDATE cue_presets SET seq = ?1 WHERE id = ?2",
+                rusqlite::params![index as i64, preset_id],
+            )?;
+        }
+        Ok(true)
+    }
+
+    /// Reorder, which is what changes a preset's hotkey.
+    ///
+    /// Ids not in `ordered_ids` keep their relative order after the ones that
+    /// are, so a partial list from a stale UI cannot drop presets off the end.
+    pub fn set_cue_preset_order(&self, ordered_ids: &[String]) -> Result<()> {
+        let existing: Vec<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM cue_presets ORDER BY seq, created_at")?;
+            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut order: Vec<&String> = ordered_ids.iter().filter(|id| existing.contains(id)).collect();
+        for id in &existing {
+            if !order.contains(&id) {
+                order.push(id);
+            }
+        }
+        for (index, id) in order.iter().enumerate() {
+            self.conn.execute(
+                "UPDATE cue_presets SET seq = ?1 WHERE id = ?2",
+                rusqlite::params![index as i64, id],
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3663,5 +3789,102 @@ mod tests {
             vec!["h2", "h1"]
         );
         assert_eq!(got[0].track_count, 1);
+    }
+
+    // ── Cue presets ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn presets_come_back_in_creation_order_and_carry_their_colour() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_cue_preset("Intro", None).unwrap();
+        db.create_cue_preset("Drop", Some(4)).unwrap();
+
+        let got = db.list_cue_presets().unwrap();
+        assert_eq!(
+            got.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["Intro", "Drop"]
+        );
+        assert_eq!(got[0].color, None);
+        assert_eq!(got[1].color, Some(4));
+        assert_eq!(got.iter().map(|p| p.seq).collect::<Vec<_>>(), vec![0, 1]);
+    }
+
+    #[test]
+    fn a_preset_needs_a_name() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.create_cue_preset("   ", Some(1)).is_err());
+    }
+
+    #[test]
+    fn two_presets_may_share_a_name() {
+        // "Drop" in red and "Drop" in orange is a reasonable thing to want,
+        // and rejecting it would be a rule the spec does not ask for.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_cue_preset("Drop", Some(1)).unwrap();
+        db.create_cue_preset("Drop", Some(4)).unwrap();
+        assert_eq!(db.list_cue_presets().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn deleting_a_preset_closes_the_gap_so_hotkeys_do_not_go_dead() {
+        // The first eight presets carry hotkeys 1-8. Leaving a hole would
+        // retire a key while the ones after it kept their old numbers.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_cue_preset("One", None).unwrap();
+        let second = db.create_cue_preset("Two", None).unwrap();
+        db.create_cue_preset("Three", None).unwrap();
+
+        assert!(db.delete_cue_preset(&second).unwrap());
+        let got = db.list_cue_presets().unwrap();
+        assert_eq!(
+            got.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+            vec!["One", "Three"]
+        );
+        assert_eq!(got.iter().map(|p| p.seq).collect::<Vec<_>>(), vec![0, 1]);
+    }
+
+    #[test]
+    fn deleting_an_unknown_preset_reports_it_rather_than_erroring() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(!db.delete_cue_preset("nope").unwrap());
+    }
+
+    #[test]
+    fn reordering_changes_which_hotkey_a_preset_answers_to() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let one = db.create_cue_preset("One", None).unwrap();
+        let two = db.create_cue_preset("Two", None).unwrap();
+
+        db.set_cue_preset_order(&[two.clone(), one.clone()]).unwrap();
+        assert_eq!(
+            db.list_cue_presets()
+                .unwrap()
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Two", "One"]
+        );
+    }
+
+    #[test]
+    fn a_partial_order_from_a_stale_ui_does_not_drop_presets() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_cue_preset("One", None).unwrap();
+        db.create_cue_preset("Two", None).unwrap();
+        let three = db.create_cue_preset("Three", None).unwrap();
+
+        // The renderer only knew about "Three".
+        db.set_cue_preset_order(&[three]).unwrap();
+        let got = db.list_cue_presets().unwrap();
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].name, "Three");
+    }
+
+    #[test]
+    fn an_unknown_id_in_the_order_is_ignored() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let one = db.create_cue_preset("One", None).unwrap();
+        db.set_cue_preset_order(&["ghost".to_string(), one]).unwrap();
+        assert_eq!(db.list_cue_presets().unwrap().len(), 1);
     }
 }

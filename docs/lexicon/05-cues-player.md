@@ -117,7 +117,33 @@ once existing ones are filled. Hotkeys bind the first eight.
 *Applying* — press the cue button, or bind a per-template hotkey; if the playhead sits exactly on a
 cue, the hotkey applies that template to it.
 
-*decks status* — **missing.**
+*decks status* — **done, under a different name.** These ship as **cue presets**, not cue
+templates: `crates/cue-generator` already owns `CueTemplate` for its bulk-generation rule sets
+(place one at the first downbeat, one at the drop…), and two things called "template" in one player
+would be unreadable. Cache migration **v18**, `cache::CuePreset`, five IPC commands, and a preset
+bar in `CueEditor`.
+
+- **Immutable, per the spec.** There is no update path — changing a preset means deleting it and
+  creating it again. That is what keeps the hotkey a stable promise: `2` applies what `2` applied
+  last set, rather than whatever someone silently edited it into.
+- **Created by promoting a cue**, per the spec. `Save preset` on a cue lifts its name and colour.
+  An unnamed cue is refused rather than saved blank — a preset is a name *and* a colour, and there
+  is nothing to save yet.
+- **Applying stages; it never writes.** One `CueMetadataEdit` per field that actually changes, so a
+  preset with no colour stages only the name (which is what "leave the colour alone" has to mean)
+  and re-applying the same preset stages nothing at all.
+- **Deleting closes the gap.** The first eight presets carry hotkeys 1–8; leaving a hole would
+  retire a key while the ones after it kept their old numbers, so deleting the second preset would
+  leave `2` dead and `3` still on the third. Reordering is therefore how a preset's hotkey changes.
+- **Not scoped by library.** A preset describes how *this DJ* labels cues, not anything inside a
+  particular database, so it survives opening a different library. That differs from
+  `favourite_playlists`, which is scoped, and the migration says why.
+
+Two divergences: duplicate names are allowed ("Drop" in red and "Drop" in orange is a reasonable
+thing to want, and rejecting it is a rule the spec does not ask for), and applying goes through an
+explicit **target** cue rather than the playhead's position. Position-based targeting reads well in
+prose and badly in practice — "exactly on a cue" is a millisecond comparison the user cannot see,
+and getting it wrong stamps a preset onto the wrong cue.
 
 *Epic* — **2**.
 

@@ -2505,3 +2505,22 @@ first), CSV import, the duplicates work.
   comment now explains it rather than denying it.
 - Verified: `pnpm test` (732), `pnpm typecheck`, `pnpm lint`, 59 Playwright e2e.
 - **Next:** cue templates, inline waveform previews. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (cue presets)
+
+### Plan
+- Close the `Cue templates` row, the last unblocked player gap.
+
+### End of session
+- **Shipped:** cache v18 + `CuePreset` CRUD (10 store/migration tests), five IPC commands, and the
+  preset bar in `CueEditor` (9 new component tests).
+- **Naming call:** these are *presets*, not templates, because `cue-generator::CueTemplate` already
+  exists and means something else. Recorded in the migration, the store type and the spec so the
+  next reader does not have to rediscover it.
+- **Two deliberate divergences**, both documented rather than silently taken: duplicate preset
+  names are allowed, and applying targets an explicitly picked cue rather than "whatever the
+  playhead is exactly on" — a millisecond comparison the user cannot see is a bad way to choose
+  which cue gets overwritten.
+- Verified: `cargo test --workspace` (57 targets), `cargo clippy --workspace --all-targets
+  -D warnings`, `pnpm test` (741), `pnpm typecheck`, `pnpm lint`.
+- **Next:** inline per-row waveform previews. Epic 7 needs a scoping decision.

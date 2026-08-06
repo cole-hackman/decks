@@ -1275,3 +1275,20 @@ export interface MusicRootSuggestion {
   path: string;
   track_count: number;
 }
+
+// ── Cue presets (Epic 2) ─────────────────────────────────────────────────────
+
+/**
+ * A saved name+colour pair for the cue editor.
+ *
+ * Distinct from `CueTemplate`, which is the Cue Point Generator's bulk rule
+ * set. Two things called "template" in one player would be unreadable, so the
+ * spec's `Cue templates` ship here as presets.
+ */
+export interface CuePreset {
+  id: string;
+  name: string;
+  color: number | null;
+  /** 1–8 for the presets that carry a number key; null beyond that. */
+  hotkey: number | null;
+}

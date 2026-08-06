@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CueEditor } from "./CueEditor";
 import {
+  applyCuePreset,
   beatJumpPosition,
+  createCuePreset,
+  deleteCuePreset,
+  listCuePresets,
   stageCueAdd,
   stageCueDelete,
   stageCueEdit,
@@ -18,6 +22,10 @@ vi.mock("../ipc", () => ({
   stageCueEdit: vi.fn(),
   stageGridShift: vi.fn(),
   beatJumpPosition: vi.fn(),
+  listCuePresets: vi.fn(),
+  createCuePreset: vi.fn(),
+  deleteCuePreset: vi.fn(),
+  applyCuePreset: vi.fn(),
 }));
 
 const TRACK: Track = {
@@ -78,6 +86,10 @@ beforeEach(() => {
   vi.mocked(stageCueEdit).mockResolvedValue("ch3");
   vi.mocked(stageGridShift).mockResolvedValue(["ch4", "ch5"]);
   vi.mocked(beatJumpPosition).mockResolvedValue(7500);
+  vi.mocked(listCuePresets).mockResolvedValue([]);
+  vi.mocked(createCuePreset).mockResolvedValue("p1");
+  vi.mocked(deleteCuePreset).mockResolvedValue(true);
+  vi.mocked(applyCuePreset).mockResolvedValue(["ch6"]);
 });
 
 describe("CueEditor", () => {
@@ -240,5 +252,120 @@ describe("CueEditor", () => {
       await screen.findByText(/Track has no BPM — analyse it before making loops./),
     ).toBeInTheDocument();
     expect(stageCueEdit).not.toHaveBeenCalled();
+  });
+
+  // ── Cue presets ────────────────────────────────────────────────────────────
+
+  it("says how to make a preset when there are none", async () => {
+    renderEditor([cue("c1", 1, 1000)]);
+    expect(await screen.findByText(/No presets yet/)).toBeInTheDocument();
+  });
+
+  it("promotes a named cue into a preset", async () => {
+    const user = userEvent.setup();
+    const named = { ...cue("c1", 1, 1000), comment: "Drop", color: 4 };
+    renderEditor([named]);
+    await user.click(
+      await screen.findByRole("button", { name: "Save cue 1 as a preset" }),
+    );
+    expect(createCuePreset).toHaveBeenCalledWith("Drop", 4);
+  });
+
+  it("refuses to save an unnamed cue — a preset is a name and a colour", async () => {
+    const user = userEvent.setup();
+    renderEditor([cue("c1", 1, 1000)]);
+    await user.click(
+      await screen.findByRole("button", { name: "Save cue 1 as a preset" }),
+    );
+    expect(createCuePreset).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Name the cue first/)).toBeInTheDocument();
+  });
+
+  it("cannot apply a preset until a cue is targeted", async () => {
+    vi.mocked(listCuePresets).mockResolvedValue([
+      { id: "p1", name: "Drop", color: 4, hotkey: 1 },
+    ]);
+    renderEditor([cue("c1", 1, 1000)]);
+    expect(
+      await screen.findByRole("button", { name: "Apply preset Drop" }),
+    ).toBeDisabled();
+    expect(screen.getByTestId("preset-target")).toHaveTextContent(
+      /Pick a cue below/,
+    );
+  });
+
+  it("applies a preset to the targeted cue", async () => {
+    vi.mocked(listCuePresets).mockResolvedValue([
+      { id: "p1", name: "Drop", color: 4, hotkey: 1 },
+    ]);
+    const user = userEvent.setup();
+    const named = { ...cue("c1", 1, 1000), comment: "Old", color: 2 };
+    const { onChanged } = renderEditor([named]);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Target cue 1 for presets" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply preset Drop" }));
+
+    await waitFor(() =>
+      expect(applyCuePreset).toHaveBeenCalledWith(
+        "/lib.db",
+        "c1",
+        "p1",
+        "Old",
+        2,
+      ),
+    );
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("says nothing changed rather than claiming a staged edit", async () => {
+    // Re-applying the same preset stages nothing; the message has to match.
+    vi.mocked(listCuePresets).mockResolvedValue([
+      { id: "p1", name: "Drop", color: 4, hotkey: 1 },
+    ]);
+    vi.mocked(applyCuePreset).mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderEditor([{ ...cue("c1", 1, 1000), comment: "Drop", color: 4 }]);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Target cue 1 for presets" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply preset Drop" }));
+    expect(
+      await screen.findByText(/already matches/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the hotkey badge only on the presets that have one", async () => {
+    vi.mocked(listCuePresets).mockResolvedValue([
+      { id: "p1", name: "Drop", color: 4, hotkey: 1 },
+      { id: "p9", name: "Ninth", color: null, hotkey: null },
+    ]);
+    renderEditor([cue("c1", 1, 1000)]);
+    const list = await screen.findByTestId("preset-list");
+    expect(list.querySelectorAll("kbd")).toHaveLength(1);
+  });
+
+  it("deletes a preset — they are immutable, so this is how one changes", async () => {
+    vi.mocked(listCuePresets).mockResolvedValue([
+      { id: "p1", name: "Drop", color: 4, hotkey: 1 },
+    ]);
+    const user = userEvent.setup();
+    renderEditor([cue("c1", 1, 1000)]);
+    await user.click(
+      await screen.findByRole("button", { name: "Delete preset Drop" }),
+    );
+    expect(deleteCuePreset).toHaveBeenCalledWith("p1");
+  });
+
+  it("survives a preset list that fails to load", async () => {
+    vi.mocked(listCuePresets).mockRejectedValue(new Error("cache locked"));
+    renderEditor([cue("c1", 1, 1000)]);
+    // The cue editor still works; only the preset section is empty.
+    expect(await screen.findByText(/No presets yet/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Delete cue 1" }),
+    ).toBeInTheDocument();
   });
 });

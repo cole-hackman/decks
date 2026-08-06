@@ -1,5 +1,36 @@
 # Status
 
+## 2026-08-06 — Cue presets
+
+The spec's "Cue templates" — saved name+colour pairs stamped onto individual cues. Per
+`docs/lexicon/05-cues-player.md §Cue templates`. Cache migration **v18**, `cache::CuePreset`, five
+IPC commands, a preset bar in `CueEditor`.
+
+**Renamed on purpose.** `crates/cue-generator` already owns `CueTemplate` for its bulk-generation
+rule sets. Two things called "template" in one player would be unreadable, so these are presets,
+and the migration comment says why.
+
+Four behaviours worth recording:
+
+- **Immutable**, per the spec. No update path; changing one means delete and re-create. That is
+  what keeps the hotkey a stable promise — `2` applies what `2` applied last set.
+- **Deleting closes the gap.** The first eight carry hotkeys 1–8; a hole would retire a key while
+  the ones after it kept their old numbers. Reordering is how a preset's hotkey changes.
+- **Applying stages, never writes.** One `CueMetadataEdit` per field that actually changes, so a
+  colourless preset stages only the name and re-applying the same preset stages nothing.
+- **Not scoped by library**, unlike `favourite_playlists`. A preset describes how this DJ labels
+  cues, not anything inside a particular database.
+
+Two divergences from the manual, both written down in `05-cues-player.md`: duplicate names are
+allowed, and applying goes through an explicit **target** cue rather than the playhead's position.
+Position-based targeting reads well in prose and badly in practice — "exactly on a cue" is a
+millisecond comparison the user cannot see, and getting it wrong stamps a preset onto the wrong cue.
+
+With this, **Player, cues and generator has no `missing` rows left**.
+
+**Next:** inline per-row waveform previews is the last unblocked `missing` row outside streaming.
+Epic 7 still needs a scoping decision from the user.
+
 ## 2026-08-06 — Find Popup
 
 `Cmd/Ctrl+F` over playlists, smartlists and tracks in one box, with per-result actions. Per

@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  applyCuePreset,
   beatJumpPosition,
+  createCuePreset,
+  deleteCuePreset,
+  listCuePresets,
   stageCueAdd,
   stageCueDelete,
   stageCueEdit,
   stageGridShift,
 } from "../ipc";
 import { useToast } from "./Toast";
-import type { CueKind, HotCue, QuantizeResolution, Track } from "../types";
+import type { CueKind, CuePreset, HotCue, QuantizeResolution, Track } from "../types";
 
 const HOT_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -74,6 +78,95 @@ export function CueEditor({
   const [quantizeOn, setQuantizeOn] = useState(true);
   const [resolution, setResolution] = useState<QuantizeResolution>("beat");
   const [busy, setBusy] = useState(false);
+  /**
+   * Saved name+colour presets — the spec's "Cue templates".
+   *
+   * Renamed because `crates/cue-generator` already owns `CueTemplate` for its
+   * bulk-generation rule sets, and two things called "template" in one player
+   * would be unreadable.
+   */
+  const [presets, setPresets] = useState<CuePreset[]>([]);
+  /** The cue a preset click will be stamped onto. */
+  const [presetTarget, setPresetTarget] = useState<string | null>(null);
+
+  const refreshPresets = useCallback(async () => {
+    try {
+      setPresets(await listCuePresets());
+    } catch {
+      // A preset list that fails to load must not take the cue editor with it.
+      setPresets([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPresets();
+  }, [refreshPresets]);
+
+  const targetCue = cues.find((c) => c.id === presetTarget) ?? null;
+
+  const applyPreset = useCallback(
+    async (preset: CuePreset) => {
+      if (!targetCue) return;
+      setBusy(true);
+      try {
+        const staged = await applyCuePreset(
+          libraryPath,
+          targetCue.id,
+          preset.id,
+          targetCue.comment,
+          targetCue.color,
+        );
+        toast({
+          variant: staged.length > 0 ? "success" : "info",
+          message:
+            staged.length > 0
+              ? `Staged ${staged.length} change(s) from “${preset.name}”.`
+              : `That cue already matches “${preset.name}”.`,
+        });
+        onChanged?.();
+      } catch (e) {
+        toast({ variant: "error", message: String(e) });
+      } finally {
+        setBusy(false);
+      }
+    },
+    [targetCue, libraryPath, onChanged, toast],
+  );
+
+  /** Promote a cue's own name and colour into a reusable preset. */
+  const promoteCue = useCallback(
+    async (cue: HotCue) => {
+      const name = cue.comment?.trim();
+      if (!name) {
+        toast({
+          variant: "error",
+          message: "Name the cue first",
+          detail: "A preset is a name and a colour; there is nothing to save yet.",
+        });
+        return;
+      }
+      try {
+        await createCuePreset(name, cue.color);
+        await refreshPresets();
+        toast({ variant: "success", message: `Saved preset “${name}”.` });
+      } catch (e) {
+        toast({ variant: "error", message: String(e) });
+      }
+    },
+    [refreshPresets, toast],
+  );
+
+  const removePreset = useCallback(
+    async (preset: CuePreset) => {
+      try {
+        await deleteCuePreset(preset.id);
+        await refreshPresets();
+      } catch (e) {
+        toast({ variant: "error", message: String(e) });
+      }
+    },
+    [refreshPresets, toast],
+  );
 
   const bySlot = useMemo(() => {
     const map = new Map<number, HotCue>();
@@ -345,6 +438,64 @@ export function CueEditor({
         ))}
       </div>
 
+      <section className="mt-3 rounded border border-border p-2" aria-label="Cue presets">
+        <div className="flex items-center justify-between text-xs">
+          <h3 className="font-medium">Presets</h3>
+          <span className="text-muted" data-testid="preset-target">
+            {targetCue
+              ? `Applying to cue ${slotOf(targetCue.kind) === 0 ? "M" : slotOf(targetCue.kind)}`
+              : "Pick a cue below to apply one"}
+          </span>
+        </div>
+        {presets.length === 0 ? (
+          <p className="mt-1 text-xs text-muted">
+            No presets yet. Name a cue, then press <em>Save preset</em> on it.
+          </p>
+        ) : (
+          <ul className="mt-1 flex flex-wrap gap-1" data-testid="preset-list">
+            {presets.map((preset) => (
+              <li key={preset.id} className="flex items-center">
+                <button
+                  type="button"
+                  disabled={!targetCue || busy}
+                  onClick={() => void applyPreset(preset)}
+                  aria-label={`Apply preset ${preset.name}`}
+                  title={
+                    targetCue
+                      ? `Apply “${preset.name}”`
+                      : "Pick a cue first"
+                  }
+                  className="flex items-center gap-1 rounded-l border border-border px-1.5 py-0.5 text-xs hover:bg-surface-hover disabled:opacity-40"
+                >
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 rounded-full ${
+                      COLORS.find((c) => c.id === (preset.color ?? -1))
+                        ?.className ?? "bg-transparent"
+                    }`}
+                  />
+                  {preset.name}
+                  {preset.hotkey != null && (
+                    <kbd className="ml-0.5 rounded border border-border px-0.5 text-[9px] text-muted">
+                      {preset.hotkey}
+                    </kbd>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void removePreset(preset)}
+                  aria-label={`Delete preset ${preset.name}`}
+                  title="Presets are immutable — delete and re-create to change one"
+                  className="rounded-r border border-l-0 border-border px-1 py-0.5 text-xs text-muted hover:text-red-400"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <ul className="space-y-1">
         {cues.length === 0 && (
           <li className="py-2 text-xs text-muted">
@@ -401,6 +552,29 @@ export function CueEditor({
               ))}
             </select>
 
+            <button
+              type="button"
+              className={
+                presetTarget === cue.id
+                  ? "rounded border border-accent px-1 text-accent"
+                  : "text-muted hover:text-fg"
+              }
+              aria-pressed={presetTarget === cue.id}
+              onClick={() =>
+                setPresetTarget((id) => (id === cue.id ? null : cue.id))
+              }
+              aria-label={`Target cue ${slotOf(cue.kind)} for presets`}
+            >
+              Target
+            </button>
+            <button
+              type="button"
+              className="text-muted hover:text-fg"
+              onClick={() => void promoteCue(cue)}
+              aria-label={`Save cue ${slotOf(cue.kind)} as a preset`}
+            >
+              Save preset
+            </button>
             <button
               type="button"
               className="text-muted hover:text-fg"
