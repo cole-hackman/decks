@@ -1164,3 +1164,19 @@ export interface HistoryMatchReport {
   matched: number;
   unmatched: number;
 }
+
+// ── M3U import ───────────────────────────────────────────────────────────────
+
+export interface M3uImportRow {
+  path: string;
+  /** The `#EXTINF` label — the only identifier left for an unmatched row. */
+  label: string | null;
+  track_id: string | null;
+}
+
+export interface M3uImportPreview {
+  rows: M3uImportRow[];
+  matched: number;
+  unmatched: number;
+  suggested_name: string;
+}

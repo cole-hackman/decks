@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   applyPlaylistMerge,
+  previewM3uImport,
   applyPlaylistPrefix,
   applyPlaylistSort,
   applyRewriteOrder,
@@ -15,6 +16,7 @@ import {
 } from "../ipc";
 import { useToast } from "./Toast";
 import { SharePlaylistSection } from "./SharePlaylistSection";
+import { readTextFile } from "../lib/read-file";
 import {
   listFavouritePlaylists,
   toggleFavouritePlaylist,
@@ -24,6 +26,7 @@ import type {
   CrossReferencePreview,
   MergePreview,
   FavouritePlaylist,
+  M3uImportPreview,
   OccurrenceReport,
   Playlist,
   PlaylistRenamePlan,
@@ -46,7 +49,8 @@ type Tool =
   | "rewrite-order"
   | "occurrence"
   | "share"
-  | "favourites";
+  | "favourites"
+  | "import";
 
 const TOOLS: { id: Tool; label: string; blurb: string }[] = [
   {
@@ -78,6 +82,12 @@ const TOOLS: { id: Tool; label: string; blurb: string }[] = [
     label: "Rewrite Order",
     blurb:
       "Persist a sort as the playlist's stored order, so it reaches the CDJ that way.",
+  },
+  {
+    id: "import",
+    label: "Import M3U",
+    blurb:
+      "Read an .m3u or .m3u8 and stage it as a playlist. Paths are matched against the library, filename as a fallback.",
   },
   {
     id: "favourites",
@@ -196,6 +206,9 @@ export function PlaylistToolsView({ libraryPath }: Props) {
 
   const [favourites, setFavourites] = useState<FavouritePlaylist[]>([]);
 
+  const [m3u, setM3u] = useState<M3uImportPreview | null>(null);
+  const [m3uName, setM3uName] = useState("");
+
   const [occurrenceN, setOccurrenceN] = useState(0);
   const [occurrence, setOccurrence] = useState<OccurrenceReport | null>(null);
 
@@ -232,6 +245,7 @@ export function PlaylistToolsView({ libraryPath }: Props) {
     setRenames(null);
     setRewritePlan(null);
     setOccurrence(null);
+    setM3u(null);
   }, []);
 
   const toggle = useCallback(
@@ -316,7 +330,8 @@ export function PlaylistToolsView({ libraryPath }: Props) {
         {tool !== "sort" &&
           tool !== "occurrence" &&
           tool !== "share" &&
-          tool !== "favourites" && (
+          tool !== "favourites" &&
+          tool !== "import" && (
           <div className="w-64 shrink-0 overflow-auto border-r border-border p-2 text-xs">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-muted">
@@ -717,6 +732,105 @@ export function PlaylistToolsView({ libraryPath }: Props) {
                     ))}
                   </ul>
                 ))}
+            </div>
+          )}
+
+          {/* ── Import M3U ──────────────────────────────────────────── */}
+          {tool === "import" && (
+            <div className="space-y-2">
+              <label className="block">
+                <span className="mb-1 block text-muted">Playlist file</span>
+                <input
+                  type="file"
+                  accept=".m3u,.m3u8"
+                  aria-label="M3U file"
+                  className="text-xs"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    void run(async () => {
+                      const text = await readTextFile(file);
+                      const got = await previewM3uImport(
+                        libraryPath,
+                        file.name,
+                        text,
+                      );
+                      setM3u(got);
+                      setM3uName(got.suggested_name);
+                    });
+                  }}
+                />
+              </label>
+
+              {m3u != null && (
+                <div data-testid="m3u-preview">
+                  <p className="mb-1">
+                    {m3u.matched} of {m3u.rows.length} line(s) are in the
+                    library.
+                  </p>
+                  {m3u.unmatched > 0 && (
+                    <ul
+                      className="mb-2 max-h-32 space-y-0.5 overflow-auto text-[11px] text-amber-500"
+                      data-testid="m3u-unmatched"
+                    >
+                      {m3u.rows
+                        .filter((r) => r.track_id == null)
+                        .slice(0, 50)
+                        .map((r, i) => (
+                          <li key={`${r.path}-${i}`} className="truncate">
+                            {r.label ?? r.path} — not in the library
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label>
+                      <span className="mb-1 block text-muted">
+                        Playlist name
+                      </span>
+                      <input
+                        aria-label="Imported playlist name"
+                        className="w-56 rounded border border-border bg-surface px-2 py-1 text-xs"
+                        value={m3uName}
+                        onChange={(e) => setM3uName(e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={
+                        busy || m3u.matched === 0 || m3uName.trim() === ""
+                      }
+                      className="rounded bg-accent px-3 py-1 text-white disabled:opacity-50"
+                      onClick={() =>
+                        void run(async () => {
+                          const ids = m3u.rows
+                            .map((r) => r.track_id)
+                            .filter((id): id is string => id != null);
+                          await applyPlaylistMerge(
+                            libraryPath,
+                            m3uName,
+                            null,
+                            ids,
+                          );
+                          toast({
+                            variant: "success",
+                            message: `Staged “${m3uName}” with ${ids.length} track(s).`,
+                          });
+                          setM3u(null);
+                        })
+                      }
+                    >
+                      Stage {m3u.matched} track(s)
+                    </button>
+                  </div>
+                  {m3u.matched === 0 && (
+                    <p className="mt-1 text-muted">
+                      None of these paths are in the library, so there is no
+                      playlist to make.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

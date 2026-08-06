@@ -280,6 +280,57 @@ pub fn html(tracks: &[Track], columns: &[Column], title: &str) -> String {
     out
 }
 
+// ── M3U import ───────────────────────────────────────────────────────────────
+
+/// One entry read out of an M3U.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct M3uEntry {
+    /// The path as written in the file, untouched.
+    pub path: String,
+    /// The `#EXTINF` label, when the file carried one.
+    pub label: Option<String>,
+}
+
+/// Parse an M3U or M3U8 playlist.
+///
+/// The symmetry is deliberate: this module writes M3Us, so it reads them.
+///
+/// **Relative paths are returned as written.** Resolving them needs the file's
+/// own location, which the caller has and this function does not — and silently
+/// resolving against the process's working directory would produce paths that
+/// look absolute and point nowhere.
+pub fn parse_m3u(content: &str) -> Vec<M3uEntry> {
+    let mut out = Vec::new();
+    let mut pending_label: Option<String> = None;
+
+    for line in content.lines() {
+        // Strip a UTF-8 BOM: Windows tools write them and they otherwise make
+        // the first entry's path unmatchable.
+        let line = line.trim_start_matches('\u{feff}').trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("#EXTINF:") {
+            // `#EXTINF:<seconds>,<label>` — the label is everything after the
+            // first comma, since a title may contain more.
+            pending_label = rest
+                .split_once(',')
+                .map(|(_, label)| label.trim().to_string())
+                .filter(|l| !l.is_empty());
+            continue;
+        }
+        if line.starts_with('#') {
+            // Any other directive (#EXTM3U, #PLAYLIST, comments).
+            continue;
+        }
+        out.push(M3uEntry {
+            path: line.to_string(),
+            label: pending_label.take(),
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -514,5 +565,89 @@ mod tests {
         let json = serde_json::to_string(&default_columns()).unwrap();
         assert_eq!(json, r#"["title","artist","bpm","key","duration"]"#);
         assert!(serde_json::from_str::<Column>("\"remixer\"").is_err());
+    }
+
+    // ── M3U import ───────────────────────────────────────────────────────
+
+    #[test]
+    fn m3u_import_reads_paths_and_labels() {
+        let entries = parse_m3u(
+            "#EXTM3U\n#EXTINF:365,A - One\n/music/One.mp3\n#EXTINF:-1,B - Two\n/music/Two.mp3\n",
+        );
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, "/music/One.mp3");
+        assert_eq!(entries[0].label.as_deref(), Some("A - One"));
+        assert_eq!(entries[1].label.as_deref(), Some("B - Two"));
+    }
+
+    #[test]
+    fn a_label_containing_a_comma_survives() {
+        // The label is everything after the *first* comma; a title may contain
+        // more of them.
+        let entries = parse_m3u("#EXTINF:200,Artist - Hello, Goodbye\n/a.mp3\n");
+        assert_eq!(entries[0].label.as_deref(), Some("Artist - Hello, Goodbye"));
+    }
+
+    #[test]
+    fn a_plain_path_list_is_a_valid_m3u() {
+        // The simplest M3U has no directives at all.
+        let entries = parse_m3u("/music/One.mp3\n/music/Two.mp3\n");
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| e.label.is_none()));
+    }
+
+    #[test]
+    fn directives_comments_and_blank_lines_are_skipped() {
+        let entries =
+            parse_m3u("#EXTM3U\n\n# just a comment\n#PLAYLIST:Warmup\n/music/One.mp3\n\n");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/music/One.mp3");
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_corrupt_the_first_path() {
+        // Windows tools write them, and it otherwise makes entry one
+        // unmatchable for a reason nobody can see.
+        let entries = parse_m3u("\u{feff}#EXTM3U\n/music/One.mp3\n");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "/music/One.mp3");
+    }
+
+    #[test]
+    fn an_extinf_with_no_path_after_it_does_not_leak_onto_the_next_entry() {
+        let entries = parse_m3u("#EXTINF:1,Orphan\n#EXTINF:2,Real\n/a.mp3\n");
+        assert_eq!(entries.len(), 1);
+        // The orphaned label is replaced, not carried.
+        assert_eq!(entries[0].label.as_deref(), Some("Real"));
+    }
+
+    #[test]
+    fn relative_paths_come_back_as_written() {
+        // Resolving needs the file's own location, which the caller has and
+        // this function does not.
+        let entries = parse_m3u("../Music/One.mp3\n");
+        assert_eq!(entries[0].path, "../Music/One.mp3");
+    }
+
+    #[test]
+    fn windows_paths_and_crlf_survive() {
+        let entries = parse_m3u("#EXTM3U\r\nD:\\Music\\One.mp3\r\n");
+        assert_eq!(entries[0].path, "D:\\Music\\One.mp3");
+    }
+
+    #[test]
+    fn an_empty_file_yields_nothing() {
+        assert!(parse_m3u("").is_empty());
+        assert!(parse_m3u("#EXTM3U\n").is_empty());
+    }
+
+    #[test]
+    fn what_we_write_is_what_we_read() {
+        // The round trip is the point of putting both in one module.
+        let written = m3u(&[track("One", Some("A")), track("Two", Some("B"))]);
+        let read = parse_m3u(&written.content);
+        assert_eq!(read.len(), 2);
+        assert_eq!(read[0].path, "/music/One.mp3");
+        assert_eq!(read[0].label.as_deref(), Some("A - One"));
     }
 }

@@ -56,7 +56,10 @@ import {
   listTagCategories,
   listTags,
   keyCompatibility,
+  applyPlaylistMerge,
 } from "./ipc";
+import { useToast } from "./components/Toast";
+import { useDialog } from "./hooks/useDialog";
 import { useQuery } from "@tanstack/react-query";
 import type { Track } from "./types";
 
@@ -88,6 +91,8 @@ export default function App() {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [currentView, setCurrentView] = useState<WorkspaceView>("library");
+  const { toast } = useToast();
+  const dialog = useDialog();
   const [inspector, setInspector] = useState<
     "details" | "agent" | "mixable" | null
   >(null);
@@ -200,6 +205,33 @@ export default function App() {
         ? new Set(selectedTrackIds)
         : new Set([track.id]);
       setTagPickerTrackIds(ids);
+    },
+    onCreatePlaylist: (track) => {
+      // The right-clicked track joins the selection if it was not in it, so
+      // "new playlist from selection" never quietly excludes the row you
+      // actually clicked.
+      const ids = selectedTrackIds.has(track.id)
+        ? Array.from(selectedTrackIds)
+        : [track.id];
+      void (async () => {
+        const name = await dialog.prompt({
+          title: "New playlist",
+          body: `${ids.length} track(s) from the current selection.`,
+          defaultValue: "",
+          placeholder: "Playlist name",
+          confirmLabel: "Stage playlist",
+        });
+        if (name == null || name.trim() === "") return;
+        try {
+          await applyPlaylistMerge(libraryPath ?? "", name, null, ids);
+          toast({
+            variant: "success",
+            message: `Staged “${name}” with ${ids.length} track(s).`,
+          });
+        } catch (e) {
+          toast({ variant: "error", message: String(e) });
+        }
+      })();
     },
     onFindMixable: (track) => {
       setSelectedTrack(track);

@@ -15,6 +15,7 @@ import type {
   PrefixSpec,
   PlaylistRenamePlan,
   RewriteOrderPlan,
+  M3uImportPreview,
   OccurrenceReport,
   ShareColumn,
   ShareExport,
@@ -1800,4 +1801,17 @@ export async function searchTracks(
   query: string,
 ): Promise<string[]> {
   return invoke<string[]>("search_tracks", { path, query });
+}
+
+/** Match an M3U against the library before importing it as a playlist. */
+export async function previewM3uImport(
+  path: string,
+  fileName: string,
+  content: string,
+): Promise<M3uImportPreview> {
+  return invoke<M3uImportPreview>("preview_m3u_import", {
+    path,
+    fileName,
+    content,
+  });
 }

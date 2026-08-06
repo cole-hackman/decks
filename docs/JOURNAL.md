@@ -2318,6 +2318,29 @@ a promise about muscle memory (favourites). A snapshot is a different kind of ta
 Absence is not a value (the timeline). Six of those are the same instinct wearing different
 clothes: **say what you actually know, and nothing more.**
 
+## 2026-08-06 — M3U import, and new playlist from selection
+
+**A format module should read what it writes.** Putting `parse_m3u` next to `m3u` means one place
+knows the format and a round-trip test can hold them together. Splitting reader and writer across
+crates is how the two stop agreeing.
+
+**Every M3U parser bug is invisible.** A BOM on line one, a label with a comma in it, an orphaned
+`#EXTINF` — none of them error, they just silently produce one wrong or missing entry in a hundred.
+That is exactly the shape that needs a test per case rather than a happy-path test.
+
+**Do not resolve a relative path you cannot resolve.** The parser has the string; the caller has the
+file's location. Resolving against the process's working directory would produce absolute-looking
+paths that point nowhere, which is worse than handing back what was written.
+
+**The right-clicked row is part of the selection.** "New playlist from selection" on a track outside
+the current selection should include it. Anything else means the user right-clicks a track, asks for
+a playlist, and does not get that track.
+
+**A component that gains a provider dependency breaks bare renders.** `App` started needing
+`DialogHost`, exactly as `SettingsPanel` did when Backup added a dialog. The test was rendering it
+without the providers `main.tsx` always supplies; wrapping it is the honest fix, not weakening the
+component.
+
 ## 2026-08-06 — browser search shares the rule engine
 
 **Parse in one place, evaluate in another that already exists.** The search box needed operators the

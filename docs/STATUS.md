@@ -1,5 +1,39 @@
 # Status
 
+## 2026-08-06 — M3U import and new-playlist-from-selection
+
+Two playlist-tree gaps, both reusing primitives that were already there.
+
+**M3U import** — Playlist Tools → Import M3U. `crates/share` writes M3Us, so it now reads them:
+one module owns the format in both directions, and a round-trip test holds them together. Paths are
+matched against the library, filename as a fallback — the same priority as the history re-match, and
+for the same reason: an M3U written on another machine has paths that will not resolve here, but the
+filenames usually still do. **An ambiguous filename is no match**, because putting an arbitrary one
+of two same-named tracks into a set is worse than saying it was not found. Unmatched lines are
+listed by their `#EXTINF` label, which is the only identifier left for them.
+
+Parser details that each cost a real bug elsewhere: a **UTF-8 BOM** is stripped (Windows tools write
+them, and it otherwise makes line one unmatchable for a reason nobody can see); the `#EXTINF` label
+is everything after the *first* comma, since titles contain commas; an orphaned `#EXTINF` does not
+leak onto the next entry; and **relative paths come back as written**, because resolving them needs
+the file's own location, which the caller has and the parser does not.
+
+**New playlist from selection** — right-click a track. The right-clicked track joins the selection
+if it was not in it, so the action never quietly excludes the row you actually clicked. It reuses
+`apply_playlist_merge`, which was already the create-a-playlist-and-fill-it primitive.
+
+`App` now depends on `DialogHost` and `ToastProvider` — it always had them in `main.tsx`, and its
+test was rendering it bare. Wrapped, the same way `SettingsPanel`'s tests were when Backup
+introduced a dialog.
+
+**CI caveat:** GitHub has not scheduled check runs for the last several commits — `e8a6120` sat
+queued for half an hour and the pushes after it produced no runs at all. The workflow is unchanged
+and the previous run on it (`12988f5`) passed, so this is the Actions queue rather than the code.
+Local verification is complete and green; that is not the same as a green check.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 594, typecheck, lint, `pnpm e2e` 46 — all green locally.
+
 ## 2026-08-06 — browser search shares the rule engine
 
 The track-browser search box was a plain substring match across six fields. Lexicon's accepts the

@@ -25,6 +25,8 @@ interface Options {
   onEditTags?: (track: Track) => void;
   /** Opens the Files view scoped to this track — the spec's "Send to". */
   onSendToFiles?: (track: Track) => void;
+  /** Makes a new playlist out of the current selection. */
+  onCreatePlaylist?: (track: Track) => void;
   /** Opens Mixable Tracks seeded from this track — the spec's
    *  "right-click → Track tools → Find mixable tracks". */
   onFindMixable?: (track: Track) => void;
@@ -39,6 +41,7 @@ export function useTrackContextActions({
   onEditTags,
   onSendToFiles,
   onFindMixable,
+  onCreatePlaylist,
 }: Options): TrackContextMenuAction[] {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -262,6 +265,21 @@ export function useTrackContextActions({
             } as TrackContextMenuAction,
           ]
         : []),
+      ...(onCreatePlaylist
+        ? [
+            {
+              id: "create-playlist",
+              label: "New playlist from selection…",
+              icon: (
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
+                  <path d="M2 4h8M2 8h5M2 12h5" />
+                  <path d="M11 8.5v5M8.5 11h5" />
+                </svg>
+              ),
+              onSelect: (track: Track) => onCreatePlaylist(track),
+            } as TrackContextMenuAction,
+          ]
+        : []),
       ...(onFindMixable
         ? [
             {
@@ -380,5 +398,6 @@ export function useTrackContextActions({
     onEditTags,
     onSendToFiles,
     onFindMixable,
+    onCreatePlaylist,
   ]);
 }

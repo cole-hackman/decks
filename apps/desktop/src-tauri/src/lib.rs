@@ -2770,6 +2770,7 @@ pub fn run() {
             set_library_path,
             library_search,
             suggest_next_tracks,
+            playlist_tools::preview_m3u_import,
             playlist_tools::preview_playlist_merge,
             playlist_tools::apply_playlist_merge,
             playlist_tools::preview_playlist_sort,

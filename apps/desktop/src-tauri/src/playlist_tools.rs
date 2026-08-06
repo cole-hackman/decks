@@ -560,6 +560,109 @@ pub async fn add_tracks_to_playlist(
     .map_err(|e| e.to_string())?
 }
 
+// ── M3U import ───────────────────────────────────────────────────────────────
+
+/// One M3U line, matched against the library.
+#[derive(Debug, Serialize)]
+pub struct M3uImportRow {
+    pub path: String,
+    /// The `#EXTINF` label, for rows that did not match — it is the only thing
+    /// left to identify the track by.
+    pub label: Option<String>,
+    /// `None` when the path is not in the library.
+    pub track_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct M3uImportPreview {
+    pub rows: Vec<M3uImportRow>,
+    pub matched: usize,
+    pub unmatched: usize,
+    /// Suggested playlist name, from the file.
+    pub suggested_name: String,
+}
+
+fn path_key(path: &str) -> String {
+    path.trim().replace('\\', "/").to_lowercase()
+}
+
+fn file_name_key(path: &str) -> Option<String> {
+    let name = path.rsplit(['/', '\\']).next()?.trim();
+    (!name.is_empty()).then(|| name.to_lowercase())
+}
+
+/// Match an M3U against the library: full path first, then filename.
+///
+/// Same priority as the history re-match, and for the same reason — an M3U
+/// written on another machine has paths that will not resolve here, but the
+/// filenames usually still do. An **ambiguous filename is no match**: putting
+/// an arbitrary one of two same-named tracks into the playlist is worse than
+/// saying it could not be found.
+#[tauri::command]
+pub async fn preview_m3u_import(
+    path: String,
+    file_name: String,
+    content: String,
+) -> Result<M3uImportPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let entries = share::parse_m3u(&content);
+        let tracks = open_db(&path)?.tracks().map_err(|e| e.to_string())?;
+
+        let mut by_path: std::collections::HashMap<String, &str> = std::collections::HashMap::new();
+        let mut by_name: std::collections::HashMap<String, Vec<&str>> =
+            std::collections::HashMap::new();
+        for t in &tracks {
+            let Some(p) = t.folder_path.as_deref() else {
+                continue;
+            };
+            by_path.entry(path_key(p)).or_insert(t.id.as_str());
+            if let Some(n) = file_name_key(p) {
+                by_name.entry(n).or_default().push(t.id.as_str());
+            }
+        }
+
+        let rows: Vec<M3uImportRow> = entries
+            .into_iter()
+            .map(|e| {
+                let track_id = by_path
+                    .get(&path_key(&e.path))
+                    .map(|id| (*id).to_string())
+                    .or_else(|| match by_name.get(&file_name_key(&e.path)?)?.as_slice() {
+                        [only] => Some((*only).to_string()),
+                        _ => None,
+                    });
+                M3uImportRow {
+                    path: e.path,
+                    label: e.label,
+                    track_id,
+                }
+            })
+            .collect();
+
+        let matched = rows.iter().filter(|r| r.track_id.is_some()).count();
+        let suggested_name = file_name
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&file_name)
+            .rsplit_once('.')
+            .map(|(stem, _)| stem.to_string())
+            .unwrap_or_else(|| file_name.clone());
+
+        Ok(M3uImportPreview {
+            unmatched: rows.len() - matched,
+            matched,
+            rows,
+            suggested_name: if suggested_name.trim().is_empty() {
+                "Imported playlist".to_string()
+            } else {
+                suggested_name
+            },
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use changes::playlist_tools::{CrossReferenceMode, PlaylistSortMode, PrefixSpec};

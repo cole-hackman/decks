@@ -63,7 +63,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |
 | Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |
 | Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |
-| Playlists tree | partial | No folder-drop, no M3U import, no drag-between, no create-from-selection | 6 |
+| Playlists tree | partial | M3U import and create-from-selection done. Still no folder-drop and no drag-between | 6 |
 | Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
 | Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
