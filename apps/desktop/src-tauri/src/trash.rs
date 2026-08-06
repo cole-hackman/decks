@@ -390,31 +390,58 @@ pub fn quarantined_track_ids(
 mod tests {
     use super::*;
 
+    /// The filesystem root, spelled the way the platform means it.
+    ///
+    /// `Path::new("/Music").is_absolute()` is **false** on Windows: a rooted
+    /// path with no drive prefix is relative to the *current* drive, which is
+    /// exactly the ambiguity `collection_root` refuses. Hard-coding `/` here
+    /// made these tests assert Unix semantics everywhere, and they failed the
+    /// first time CI ran them on Windows.
+    #[cfg(windows)]
+    const ROOT: &str = "C:\\";
+    #[cfg(not(windows))]
+    const ROOT: &str = "/";
+
+    fn abs(parts: &[&str]) -> PathBuf {
+        let mut p = PathBuf::from(ROOT);
+        for part in parts {
+            p.push(part);
+        }
+        p
+    }
+
     #[test]
     fn a_collection_root_stops_two_levels_down() {
         assert_eq!(
-            collection_root(Path::new("/Users/cole/Music/House")),
-            Some(PathBuf::from("/Users/cole"))
+            collection_root(&abs(&["Users", "cole", "Music", "House"])),
+            Some(abs(&["Users", "cole"]))
         );
     }
 
     #[test]
     fn a_shallow_directory_is_still_a_root() {
-        assert_eq!(
-            collection_root(Path::new("/Music")),
-            Some(PathBuf::from("/Music"))
-        );
+        assert_eq!(collection_root(&abs(&["Music"])), Some(abs(&["Music"])));
     }
 
     #[test]
     fn the_filesystem_root_is_never_suggested() {
-        // Suggesting `/` would make the guard meaningless.
-        assert_eq!(collection_root(Path::new("/")), None);
+        // Suggesting `/` — or `C:\` — would make the guard meaningless.
+        assert_eq!(collection_root(Path::new(ROOT)), None);
     }
 
     #[test]
     fn a_relative_or_traversing_path_is_never_suggested() {
         assert_eq!(collection_root(Path::new("../Music")), None);
         assert_eq!(collection_root(Path::new("Music/House")), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_drive_less_rooted_path_is_refused_on_windows() {
+        // `\Music\House` is relative to whichever drive happens to be current,
+        // so it cannot name a stable music root. This is the behaviour the
+        // Windows CI failure taught us, and it is worth pinning rather than
+        // rediscovering.
+        assert_eq!(collection_root(Path::new("\\Music\\House")), None);
     }
 }
