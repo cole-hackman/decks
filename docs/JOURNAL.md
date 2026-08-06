@@ -2443,6 +2443,7 @@ first), CSV import, the duplicates work.
   from the rows, added a `blocked` column, and wrote down what the numbers can and cannot support.
 - **Still unverified by CI.** GitHub stopped creating workflow runs after `e8a6120`; several
   commits have no runs at all. Everything here passes locally: `cargo test --workspace`,
-  `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (623), `pnpm typecheck`,
+  `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (624), `pnpm typecheck`,
   `pnpm lint`, and the new Playwright spec.
-- **Next:** delete-from-disk from the Incoming triage row; Epic 7 needs a scoping decision.
+- **Next:** Epic 7 needs a scoping decision. Unblocked: spreadsheet keyboard navigation, inline
+  waveform preview, and the four remaining Custom Tags gaps.

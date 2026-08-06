@@ -19,13 +19,13 @@ regardless of how much of Lexicon they represent.
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 4 | 1 | 0 |
 | Player, cues, generator | 7 | 6 | 3 | 0 | 0 |
-| Files | 6 | 5 | 0 | 0 | 0 |
+| Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 2 | 1 | 1 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **47** | **27** | **20** | **2** | **16** |
+| **Total** | **48** | **26** | **20** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -138,7 +138,7 @@ They were previously miscounted as `partial` and `missing`.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Watch folder | **done** | Debounced scan rather than a native watcher; settle rule; dismissals | **4** |
-| Incoming staging | partial | Watch queue, Selected done with auto-advance + D hotkey; delete-from-disk reachable from Archive/Broken/Duplicates but not yet from the Incoming triage row | 4 |
+| Incoming staging | **done** | Watch queue, Selected done with auto-advance + D hotkey, archive, and delete-from-disk as the third triage outcome | 4 |
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |

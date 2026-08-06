@@ -7,6 +7,7 @@ import {
   clearIncoming,
   listIncomingTracks,
   markIncomingReviewed,
+  planDeleteFromDisk,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 
@@ -15,6 +16,8 @@ vi.mock("../ipc", () => ({
   clearIncoming: vi.fn(),
   archiveTracks: vi.fn(),
   markIncomingReviewed: vi.fn(),
+  planDeleteFromDisk: vi.fn(),
+  deleteFromDisk: vi.fn(),
   // Touched transitively via useFilterContext / TrackTable:
   listTracksWithCues: vi.fn().mockResolvedValue([]),
   listTracksInAnyPlaylist: vi.fn().mockResolvedValue([]),
@@ -161,6 +164,33 @@ describe("IncomingView — Selected done", () => {
     await user.keyboard("d");
     expect(markIncomingReviewed).toHaveBeenCalledWith("/db", ["t1"]);
     expect(onSelectionChange).toHaveBeenCalledWith(new Set(["t2"]));
+  });
+
+  it("offers delete-from-disk, and previews before it asks", async () => {
+    // Triage's third outcome. It goes through the same quarantine preview as
+    // everywhere else — the button opens a plan, not a deletion.
+    vi.mocked(listIncomingTracks).mockResolvedValue([TRACK]);
+    vi.mocked(planDeleteFromDisk).mockResolvedValue({
+      deletable: [{ track_id: "t1", source: "/x.mp3", bytes: 1024 }],
+      refused: [],
+      total_bytes: 1024,
+      labels: { t1: "X — Fresh Track" },
+      no_roots_configured: false,
+    });
+    const user = userEvent.setup();
+    render_();
+    await screen.findByText(/1 new track/);
+
+    await user.click(screen.getByRole("button", { name: "Delete from disk" }));
+    expect(
+      await screen.findByRole("button", { name: /Delete 1 from disk/ }),
+    ).toBeInTheDocument();
+    expect(planDeleteFromDisk).toHaveBeenCalledWith(
+      "/db",
+      ["t1"],
+      "Incoming triage",
+      false,
+    );
   });
 
   it("does not advance when marking reviewed failed", async () => {

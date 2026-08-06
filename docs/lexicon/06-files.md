@@ -262,9 +262,10 @@ stale state is not a guard.
 verified by length before the source is removed. A failed verification leaves *both* copies: a
 duplicate is something the user can clean up, a lost file is not.
 
-Reachable from Archive (`Delete from disk`), Find Broken Tracks (`Delete N unplayable file(s) from
-disk`, offered only for files that are present but do not decode) and duplicate resolution
-(`Delete rest from disk`, alongside — never instead of — the reversible `Keep one, archive rest`).
+Reachable from Incoming triage (`Delete from disk` — the third outcome beside "keep" and "put
+away", and the case where the guards are least likely to bite since a just-arrived file is in no
+playlist), Archive, Find Broken Tracks (offered only for files that are present but do not decode)
+and duplicate resolution (alongside — never instead of — the reversible `Keep one, archive rest`).
 
 *Epic* — **6**.
 

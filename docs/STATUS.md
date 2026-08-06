@@ -40,8 +40,14 @@ a "how to read these numbers" note added — the counts are self-reported agains
 from the manual, `lexicondj.com/features` is still 403 from this environment, and nothing has been
 checked against a running Lexicon or a real library.
 
-**Next:** delete-from-disk is not yet reachable from the Incoming triage row, which is where the
-Lexicon spec puts it first. Epic 7 (streaming) still needs a scoping decision from the user.
+Reachable from all four places the spec puts it: Incoming triage, Archive, Find Broken Tracks and
+duplicate resolution.
+
+**Next:** Epic 7 (streaming) still needs a scoping decision from the user — it is all network and
+third-party accounts against the local-first, no-telemetry constraint, and this container's proxy
+403s outbound calls anyway. Unblocked frontend work remains in the browser (spreadsheet keyboard
+navigation, inline waveform preview) and Custom Tags (category colours, drag-reorder, MyTag
+import, per-tag hotkeys).
 
 ## 2026-08-06 — Custom Tags selection semantics
 
