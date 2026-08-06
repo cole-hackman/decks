@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { FirstRunWizard } from "./components/FirstRunWizard";
 import { TrackTable } from "./components/TrackTable";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
@@ -225,6 +225,26 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [actionCenterOpen, setActionCenterOpen] = useState(false);
+
+  /**
+   * Alt/Option-click a cleanup chip to filter the browser to it.
+   *
+   * Genre has a real filter dimension. Artist does not, so it goes through the
+   * search box — which searches artist among other fields, so the result is a
+   * superset rather than an exact match. Close enough to be useful and honest
+   * about being a search rather than a filter.
+   */
+  const filterBrowserTo = useCallback(
+    (mode: "genre" | "artist", value: string) => {
+      setFilters((prev) =>
+        mode === "genre"
+          ? { ...prev, genres: [value] }
+          : { ...prev, query: value },
+      );
+      setCurrentView("library");
+    },
+    [],
+  );
 
   // The global action list. Everything bindable lives here, which is also what
   // makes it all reachable from the Action Center — see lib/actions.ts.
@@ -535,6 +555,7 @@ export default function App() {
               mode="genre"
               libraryPath={libraryPath}
               onGoToSync={() => setCurrentView("sync")}
+              onFilterTo={filterBrowserTo}
             />
           )}
           {currentView === "artist-cleanup" && (
@@ -542,6 +563,7 @@ export default function App() {
               mode="artist"
               libraryPath={libraryPath}
               onGoToSync={() => setCurrentView("sync")}
+              onFilterTo={filterBrowserTo}
             />
           )}
           {currentView === "smart-fixes" && (

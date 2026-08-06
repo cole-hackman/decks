@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CleanupPanel } from "./CleanupPanel";
@@ -9,6 +9,9 @@ import {
   renameArtist,
   deleteGenre,
   deleteArtist,
+  listCleanupLocks,
+  toggleCleanupLock,
+  togglePinnedLetter,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 
@@ -22,11 +25,20 @@ vi.mock("../ipc", async () => {
     renameArtist: vi.fn(),
     deleteGenre: vi.fn(),
     deleteArtist: vi.fn(),
+    listCleanupLocks: vi.fn(async () => []),
+    toggleCleanupLock: vi.fn(async () => true),
+    listPinnedLetters: vi.fn(async () => []),
+    togglePinnedLetter: vi.fn(async () => true),
   };
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The panel loads locks and pinned letters on mount; default to none so the
+  // existing tests do not have to know about them.
+  vi.mocked(listCleanupLocks).mockResolvedValue([]);
+  vi.mocked(toggleCleanupLock).mockResolvedValue(true);
+  vi.mocked(togglePinnedLetter).mockResolvedValue(true);
 });
 
 function render_(
@@ -190,4 +202,114 @@ describe("CleanupPanel (artist)", () => {
     expect(deleteArtist).toHaveBeenCalledWith("/db", "DJ Solo");
     expect(deleteGenre).not.toHaveBeenCalled();
   });
+
+  it("a locked value cannot be selected", async () => {
+    // The whole point of a lock: a stray click cannot sweep it into a rename.
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "Drum & Bass", count: 5 }]);
+    vi.mocked(listCleanupLocks).mockResolvedValue(["Drum & Bass"]);
+    render_();
+    const chip = await screen.findByRole("button", {
+      name: /^Drum & Bass 5 locked$/,
+    });
+    await userEvent.click(chip);
+    expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+  });
+
+  it("right-clicking a chip toggles its lock", async () => {
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "House", count: 5 }]);
+    vi.mocked(listCleanupLocks).mockResolvedValue([]);
+    vi.mocked(toggleCleanupLock).mockResolvedValue(true);
+    render_();
+    const chip = await screen.findByRole("button", { name: /^House 5$/ });
+    fireEvent.contextMenu(chip);
+    await waitFor(() => {
+      expect(toggleCleanupLock).toHaveBeenCalledWith("genre", "House");
+    });
+    expect(
+      await screen.findByRole("button", { name: /^House 5 locked$/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("locking something already selected deselects it", async () => {
+    // Otherwise it stays selected and unselectable, which reads as the lock
+    // not working.
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "House", count: 5 }]);
+    vi.mocked(listCleanupLocks).mockResolvedValue([]);
+    vi.mocked(toggleCleanupLock).mockResolvedValue(true);
+    render_();
+    const chip = await screen.findByRole("button", { name: /^House 5$/ });
+    await userEvent.click(chip);
+    expect(screen.getByRole("button", { name: "Rename" })).toBeEnabled();
+    fireEvent.contextMenu(chip);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+    });
+  });
+
+  it("select-all skips locked values", async () => {
+    vi.mocked(listGenres).mockResolvedValue([
+      { genre: "House", count: 5 },
+      { genre: "Techno", count: 3 },
+    ]);
+    vi.mocked(listCleanupLocks).mockResolvedValue(["Techno"]);
+    render_();
+    await screen.findByRole("button", { name: /^House 5$/ });
+    fireEvent.keyDown(window, { key: "a", metaKey: true });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Rename" })).toBeEnabled();
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    // Only the unlocked one is offered for rename.
+    expect(await screen.findByText(/Selected: House$/)).toBeInTheDocument();
+  });
+
+  it("Escape clears the selection", async () => {
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "House", count: 5 }]);
+    render_();
+    await userEvent.click(await screen.findByRole("button", { name: /^House 5$/ }));
+    expect(screen.getByRole("button", { name: "Rename" })).toBeEnabled();
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+    });
+  });
+
+  it("alt-clicking a chip filters the browser instead of selecting it", async () => {
+    const onFilterTo = vi.fn();
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "House", count: 5 }]);
+    render_({ onFilterTo });
+    const chip = await screen.findByRole("button", { name: /^House 5$/ });
+    fireEvent.click(chip, { altKey: true });
+    expect(onFilterTo).toHaveBeenCalledWith("genre", "House");
+    expect(screen.getByRole("button", { name: "Rename" })).toBeDisabled();
+  });
+
+  it("sorts by count by default and by name on request", async () => {
+    vi.mocked(listGenres).mockResolvedValue([
+      { genre: "Ambient", count: 1 },
+      { genre: "House", count: 9 },
+    ]);
+    render_();
+    await screen.findByRole("button", { name: /^House 9$/ });
+    const chips = () =>
+      screen
+        .getAllByRole("button")
+        .map((b) => b.textContent?.trim() ?? "")
+        .filter((n) => n === "House9" || n === "Ambient1")
+        .map((n) => n.replace(/\d+$/, ""));
+    expect(chips()).toEqual(["House", "Ambient"]);
+    await userEvent.selectOptions(screen.getByLabelText("Sort by"), "name");
+    expect(chips()).toEqual(["Ambient", "House"]);
+  });
+
+  it("right-clicking a letter pins it", async () => {
+    vi.mocked(listGenres).mockResolvedValue([{ genre: "House", count: 5 }]);
+    vi.mocked(togglePinnedLetter).mockResolvedValue(true);
+    render_();
+    fireEvent.contextMenu(await screen.findByRole("button", { name: "Jump to H" }));
+    await waitFor(() => {
+      expect(togglePinnedLetter).toHaveBeenCalledWith("genre", "H");
+    });
+  });
+
 });

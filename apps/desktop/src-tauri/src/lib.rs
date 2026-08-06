@@ -2267,6 +2267,66 @@ async fn smart_fix_apply(
     .map_err(|e| e.to_string())?
 }
 
+// ── Genre / Artist Cleanup state (Epic 5) ────────────────────────────────────
+//
+// A lock marks a value the user has decided is correct, so a stray Cmd+A or
+// shift-click cannot sweep it into a rename. Neither locks nor pinned letters
+// are scoped by library — a value the user has declared canonical is canonical
+// for them, not for one database.
+
+#[tauri::command]
+async fn list_cleanup_locks(app: tauri::AppHandle, kind: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cache_db(&app)?
+            .list_cleanup_locks(&kind)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Returns the new state, so the caller does not have to guess what a toggle did.
+#[tauri::command]
+async fn toggle_cleanup_lock(
+    app: tauri::AppHandle,
+    kind: String,
+    value: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cache_db(&app)?
+            .toggle_cleanup_lock(&kind, &value)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn list_pinned_letters(app: tauri::AppHandle, kind: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cache_db(&app)?
+            .list_pinned_letters(&kind)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn toggle_pinned_letter(
+    app: tauri::AppHandle,
+    kind: String,
+    letter: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        cache_db(&app)?
+            .toggle_pinned_letter(&kind, &letter)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn common_text_blocklist_list(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -2765,6 +2825,10 @@ pub fn run() {
             backup::create_backup,
             backup::inspect_backup,
             backup::restore_backup,
+            list_cleanup_locks,
+            toggle_cleanup_lock,
+            list_pinned_letters,
+            toggle_pinned_letter,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

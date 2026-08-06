@@ -263,8 +263,31 @@ manual warns: clean genres *first*, or you import a mess.
 extend the tool beyond `Artist` to `Remixer`, `Producer`, `Composer` and `Lyricist` — and enabling
 a field means renames update it too. Sort by name or by track count.
 
-*decks status* — **partial.** `CleanupPanel` handles both modes with list/rename/delete,
-shift-click multi-select, and `import_genres_as_tags`. Missing: locking, pinned letters,
-alt-click-to-filter, the extra artist fields, and sort modes.
+*decks status* — **done, except the extra artist fields.**
+
+**Locking** persists in cache migration v14, scoped by kind (`genre` | `artist`) because the same
+string can be a good genre and a misspelt artist — but **not** by library: a value the user has
+declared canonical is canonical for *them*, and re-locking the same fifty genres per library would
+defeat the point. Right-click a chip to toggle. A locked value cannot be selected at all, and
+`Cmd/Ctrl+A` selects everything *unlocked* — which is the half that matters, since select-all is
+the gesture most likely to sweep a good value into a rename. Locking something already selected
+deselects it, or it would sit there selected and unselectable, reading as the lock not working.
+
+**Pinned letters** persist the same way. The letter bar only offers letters actually present, so it
+never advertises a dead jump; non-alphabetic values group under `#`.
+
+**Alt/Option-click filters the browser.** Genre has a real filter dimension; artist does not, so it
+goes through the search box — which searches artist among other fields, making the result a superset
+rather than an exact match. Worth naming rather than pretending otherwise.
+
+**Sort by track count (default) or name.** Count sorts descending with name as the tie-break, or
+equal counts would shuffle between loads.
+
+`Esc` clears the selection.
+
+**Not done: the extra artist fields** (`Remixer`, `Producer`, `Composer`, `Lyricist`). `decks`'s
+`Track` does not model them and the core `SELECT` does not read them — this is the same gap that
+puts `label`, `mix` and `colour` out of scope, and it belongs with whichever epic widens the track
+model rather than being bolted on here.
 
 *Epic* — **5**.

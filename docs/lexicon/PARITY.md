@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 4 | 7 | 1 | 11 |
-| Library & browser | 2 | 8 | 6 | 0 |
+| Library & browser | 3 | 7 | 6 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **32** | **39** | **19** | **16** |
+| **Total** | **33** | **38** | **19** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -70,7 +70,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
 | Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk deliberately not offered | 5 |
-| Genre / Artist Cleanup | partial | Missing locking, pinned letters, alt-click filter, extra artist fields | 5 |
+| Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Extra artist fields need a wider `Track` | 5 |
 
 ## Smartlists — `03-smartlists.md`
 
