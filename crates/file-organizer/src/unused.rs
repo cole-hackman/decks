@@ -215,7 +215,7 @@ pub fn scan(
     }
 
     out.skipped_directories = SKIPPED_DIRECTORIES.iter().map(|s| s.to_string()).collect();
-    out.files.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+    out.files.sort_by_key(|f| std::cmp::Reverse(f.size_bytes));
     Ok(out)
 }
 
