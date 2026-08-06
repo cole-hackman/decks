@@ -26,11 +26,15 @@ Feature parity with [Lexicon DJ](https://www.lexicondj.com), Rekordbox-first.
 A change is not done until all of these pass:
 
 ```sh
+cargo fmt --all -- --check
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 pnpm test && pnpm typecheck && pnpm lint
 pnpm e2e
 ```
+
+`cargo fmt` was missing from this list until CI failed on it. The list has to match what CI
+actually runs, or following it exactly still ships a red build.
 
 And: the feature is reachable from the UI (never tests-only), `docs/STATUS.md` and
 `docs/JOURNAL.md` are updated **in the same commit** as the code, and any behaviour change is
