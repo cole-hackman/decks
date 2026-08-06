@@ -364,6 +364,287 @@ pub async fn other_recipe_apply(
     .map_err(|e| e.to_string())?
 }
 
+// ── Cue recipes ──────────────────────────────────────────────────────────────
+
+/// Rekordbox holds eight hot-cue slots; a sort can only reassign that many.
+const HOT_CUE_SLOTS: usize = 8;
+
+/// One field of one cue, before and after.
+///
+/// Values are JSON rather than strings so the staged change carries the right
+/// SQL type — `InMsec` has to reach `djmdCue` as an integer, not `"1000"`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CueChange {
+    pub cue_id: String,
+    /// For the preview row; not staged.
+    pub cue_label: String,
+    /// `djmdCue` column.
+    pub field: String,
+    pub before: serde_json::Value,
+    pub after: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CueDeletion {
+    pub cue_id: String,
+    pub cue_label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CueRecipeTrack {
+    pub track_id: String,
+    pub track_title: String,
+    pub edits: Vec<CueChange>,
+    pub deletions: Vec<CueDeletion>,
+    /// Why the recipe did nothing on this track, when it did nothing.
+    pub skipped: Option<String>,
+}
+
+fn cue_label(cue: &::recipes::RecipeCue) -> String {
+    let time = format!(
+        "{}:{:02}",
+        cue.position_ms / 60_000,
+        (cue.position_ms % 60_000) / 1000
+    );
+    match cue.name.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+        Some(name) => format!("{time} {name}"),
+        None => time,
+    }
+}
+
+/// A track's cues in the shape the engine wants, plus the hot-cue slot each one
+/// currently occupies.
+///
+/// The slots come back separately because they are not part of the recipe
+/// model — the engine works in track order, and only a sort turns that order
+/// back into slot numbers.
+///
+/// A colour of -1 is Rekordbox's "unset", which the engine models as `None` so
+/// that "cues without a colour" means what a user would expect.
+type CueSlots = std::collections::HashMap<String, i64>;
+
+fn recipe_cues(
+    db: &decks_core::rekordbox_db::RekordboxDb,
+    track_id: &str,
+) -> Result<(Vec<::recipes::RecipeCue>, CueSlots), String> {
+    use decks_core::rekordbox_db::CueKind;
+
+    let mut cues = Vec::new();
+    let mut slots = CueSlots::new();
+    for c in db.hot_cues_for_track(track_id).map_err(|e| e.to_string())? {
+        let Some(position_ms) = c.in_msec else {
+            continue;
+        };
+        if let CueKind::HotCue(slot) = c.kind {
+            slots.insert(c.id.clone(), slot as i64);
+        }
+        cues.push(::recipes::RecipeCue {
+            id: c.id,
+            position_ms,
+            loop_end_ms: c.out_msec.filter(|v| *v > 0),
+            name: c.comment,
+            color: c.color.filter(|v| *v >= 0),
+            memory: matches!(c.kind, CueKind::MemoryCue),
+        });
+    }
+    Ok((cues, slots))
+}
+
+/// The beat grid, or an empty grid when the track has no analysis file.
+///
+/// Empty rather than an error: only `QuantizeCues` needs it, and it reports the
+/// absence itself rather than every other recipe failing on an unanalysed track.
+fn beat_grid(library_path: &str, track: &decks_core::rekordbox_db::Track) -> Vec<i64> {
+    use decks_core::rekordbox_db::anlz;
+    let lib_dir = Path::new(library_path).parent().unwrap_or(Path::new(""));
+    track
+        .analysis_data_path
+        .as_deref()
+        .and_then(|p| anlz::resolve_anlz_path(lib_dir, p))
+        .map(|resolved| anlz::read_beat_grid(&resolved).unwrap_or_default())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|b| b.time_ms as i64)
+        .collect()
+}
+
+fn colour_json(colour: Option<i64>) -> serde_json::Value {
+    // Rekordbox stores "no colour" as -1, not NULL.
+    serde_json::json!(colour.unwrap_or(-1))
+}
+
+/// Turn an engine result into staged-change shaped edits.
+///
+/// Ordering matters to the user, not to `djmdCue`: cues have no stored order,
+/// only hot-cue slot numbers. So a sort becomes a slot reassignment over the
+/// hot cues, and memory cues — which have no slot — are left where they are.
+fn diff_cues(
+    before: &[::recipes::RecipeCue],
+    slots: &CueSlots,
+    edits: &::recipes::CueEdits,
+    reorders: bool,
+) -> (Vec<CueChange>, Vec<CueDeletion>) {
+    let by_id: std::collections::HashMap<&str, &::recipes::RecipeCue> =
+        before.iter().map(|c| (c.id.as_str(), c)).collect();
+
+    let mut changes = Vec::new();
+    for (index, after) in edits.cues.iter().enumerate() {
+        let Some(orig) = by_id.get(after.id.as_str()) else {
+            continue;
+        };
+        let label = cue_label(orig);
+        let mut push = |field: &str, b: serde_json::Value, a: serde_json::Value| {
+            if b != a {
+                changes.push(CueChange {
+                    cue_id: after.id.clone(),
+                    cue_label: label.clone(),
+                    field: field.to_string(),
+                    before: b,
+                    after: a,
+                });
+            }
+        };
+        push(
+            "InMsec",
+            serde_json::json!(orig.position_ms),
+            serde_json::json!(after.position_ms),
+        );
+        push(
+            "OutMsec",
+            serde_json::json!(orig.loop_end_ms),
+            serde_json::json!(after.loop_end_ms),
+        );
+        push(
+            "Commnt",
+            serde_json::json!(orig.name),
+            serde_json::json!(after.name),
+        );
+        push("Color", colour_json(orig.color), colour_json(after.color));
+
+        if reorders && !after.memory && index < HOT_CUE_SLOTS {
+            // Slot numbers run 1..=8 in the recipe's new order. Anything past
+            // the eighth keeps its slot — there is nowhere else to put it.
+            push(
+                "Kind",
+                serde_json::json!(slots.get(after.id.as_str()).copied()),
+                serde_json::json!(index as i64 + 1),
+            );
+        }
+    }
+
+    let deletions = edits
+        .deleted
+        .iter()
+        .map(|id| CueDeletion {
+            cue_id: id.clone(),
+            cue_label: by_id
+                .get(id.as_str())
+                .map(|c| cue_label(c))
+                .unwrap_or_default(),
+        })
+        .collect();
+
+    (changes, deletions)
+}
+
+/// Preview a cue recipe over a selection.
+#[tauri::command]
+pub async fn cue_recipe_preview(
+    library_path: String,
+    track_ids: Vec<String>,
+    recipe: ::recipes::CueRecipe,
+) -> Result<Vec<CueRecipeTrack>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+        let reorders = matches!(recipe, ::recipes::CueRecipe::SortCues { .. });
+
+        let mut out = Vec::new();
+        for id in &track_ids {
+            let Some(track) = db.track_by_id(id).map_err(|e| e.to_string())? else {
+                continue;
+            };
+            let (cues, slots) = recipe_cues(&db, id)?;
+            if cues.is_empty() {
+                continue;
+            }
+            let grid = beat_grid(&library_path, &track);
+            let edits = ::recipes::apply_cue_recipe(&recipe, &cues, &grid);
+            let (changes, deletions) = diff_cues(&cues, &slots, &edits, reorders);
+            if changes.is_empty() && deletions.is_empty() && edits.skipped.is_none() {
+                continue;
+            }
+            out.push(CueRecipeTrack {
+                track_id: track.id.clone(),
+                track_title: track.title.clone(),
+                edits: changes,
+                deletions,
+                skipped: edits.skipped,
+            });
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stage reviewed cue edits.
+///
+/// Takes the preview back rather than re-running, so what is staged is exactly
+/// what was on screen. Deletions are staged last: staging them first would make
+/// the edit rows above them refer to cues the same batch is about to remove.
+#[tauri::command]
+pub async fn cue_recipe_apply(
+    app: tauri::AppHandle,
+    library_path: String,
+    tracks: Vec<CueRecipeTrack>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let mut staged = Vec::new();
+
+        for track in &tracks {
+            for edit in &track.edits {
+                let record = cache
+                    .stage_change(changes::NewChange {
+                        library_path: Some(library_path.clone()),
+                        kind: changes::ChangeKind::CueMetadataEdit,
+                        target_id: Some(edit.cue_id.clone()),
+                        field: Some(edit.field.clone()),
+                        old_value: Some(edit.before.clone()),
+                        new_value: Some(edit.after.clone()),
+                        reason: Some("Cue recipe".to_string()),
+                        confidence: Some(1.0),
+                    })
+                    .map_err(|e| e.to_string())?;
+                staged.push(record.id);
+            }
+        }
+
+        for track in &tracks {
+            for deletion in &track.deletions {
+                let record = cache
+                    .stage_change(changes::NewChange {
+                        library_path: Some(library_path.clone()),
+                        kind: changes::ChangeKind::TrackDeleteCue,
+                        target_id: Some(deletion.cue_id.clone()),
+                        field: None,
+                        old_value: None,
+                        new_value: None,
+                        reason: Some(format!("Cue recipe — delete {}", deletion.cue_label)),
+                        confidence: Some(1.0),
+                    })
+                    .map_err(|e| e.to_string())?;
+                staged.push(record.id);
+            }
+        }
+
+        Ok(staged)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ── Tag recipes ──────────────────────────────────────────────────────────────
 
 /// What a tag recipe would do to one track, as the preview shows it.
@@ -606,6 +887,137 @@ mod tests {
         let got = proposals_for(&track(), &changes);
         assert_ne!(got[0].id, got[1].id);
         assert!(got[0].id.starts_with("t1:"));
+    }
+
+    // ── cue recipes ─────────────────────────────────────────────────────────
+
+    fn rcue(id: &str, pos: i64, name: Option<&str>, color: Option<i64>) -> ::recipes::RecipeCue {
+        ::recipes::RecipeCue {
+            id: id.into(),
+            position_ms: pos,
+            loop_end_ms: None,
+            name: name.map(String::from),
+            color,
+            memory: false,
+        }
+    }
+
+    fn diff_of(
+        before: &[::recipes::RecipeCue],
+        recipe: ::recipes::CueRecipe,
+    ) -> (Vec<CueChange>, Vec<CueDeletion>) {
+        let reorders = matches!(recipe, ::recipes::CueRecipe::SortCues { .. });
+        let edits = ::recipes::apply_cue_recipe(&recipe, before, &[]);
+        let slots: CueSlots = before
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.id.clone(), i as i64 + 1))
+            .collect();
+        diff_cues(before, &slots, &edits, reorders)
+    }
+
+    #[test]
+    fn a_cue_label_reads_as_a_timestamp_and_name() {
+        assert_eq!(
+            cue_label(&rcue("a", 65_000, Some("Drop"), None)),
+            "1:05 Drop"
+        );
+        assert_eq!(cue_label(&rcue("a", 5_000, None, None)), "0:05");
+        // A blank name is not a name.
+        assert_eq!(cue_label(&rcue("a", 5_000, Some("  "), None)), "0:05");
+    }
+
+    #[test]
+    fn only_the_fields_a_recipe_touched_become_edits() {
+        let cues = vec![rcue("a", 1000, Some("Intro"), Some(1))];
+        let (edits, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].field, "InMsec");
+        assert_eq!(edits[0].after, serde_json::json!(1500));
+    }
+
+    #[test]
+    fn a_position_edit_stages_a_number_not_a_string() {
+        // `djmdCue.InMsec` is an integer column; staging "1500" would land as
+        // text and the applier's json_to_sql has no way to know better.
+        let cues = vec![rcue("a", 1000, None, None)];
+        let (edits, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
+        assert!(edits[0].after.is_number());
+    }
+
+    #[test]
+    fn clearing_a_colour_stages_minus_one_not_null() {
+        // Rekordbox spells "no colour" as -1.
+        let cues = vec![rcue("a", 1000, None, Some(4))];
+        let (edits, _) = diff_of(
+            &cues,
+            ::recipes::CueRecipe::ChangeColours {
+                scheme: ::recipes::ColourScheme::None,
+            },
+        );
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].field, "Color");
+        assert_eq!(edits[0].after, serde_json::json!(-1));
+    }
+
+    #[test]
+    fn only_a_sort_reassigns_hot_cue_slots() {
+        let cues = vec![rcue("a", 2000, None, None), rcue("b", 1000, None, None)];
+        let (sorted, _) = diff_of(
+            &cues,
+            ::recipes::CueRecipe::SortCues {
+                order: ::recipes::SortOrder::TimeAsc,
+            },
+        );
+        assert!(sorted.iter().any(|e| e.field == "Kind"));
+
+        let (shifted, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 1 });
+        assert!(shifted.iter().all(|e| e.field != "Kind"));
+    }
+
+    #[test]
+    fn a_sort_that_changes_nothing_stages_nothing() {
+        let cues = vec![rcue("a", 1000, None, None), rcue("b", 2000, None, None)];
+        let (edits, _) = diff_of(
+            &cues,
+            ::recipes::CueRecipe::SortCues {
+                order: ::recipes::SortOrder::TimeAsc,
+            },
+        );
+        assert!(edits.is_empty());
+    }
+
+    #[test]
+    fn memory_cues_never_get_a_slot() {
+        // Memory cues have no slot to reassign; writing Kind on one would turn
+        // it into a hot cue.
+        let cues = vec![
+            ::recipes::RecipeCue {
+                memory: true,
+                ..rcue("m", 2000, None, None)
+            },
+            rcue("h", 1000, None, None),
+        ];
+        let (edits, _) = diff_of(
+            &cues,
+            ::recipes::CueRecipe::SortCues {
+                order: ::recipes::SortOrder::TimeAsc,
+            },
+        );
+        assert!(edits.iter().all(|e| e.field != "Kind" || e.cue_id == "h"));
+    }
+
+    #[test]
+    fn deletions_carry_a_label_from_before_the_recipe_ran() {
+        let cues = vec![rcue("a", 65_000, Some("Drop"), None)];
+        let (_, deletions) = diff_of(
+            &cues,
+            ::recipes::CueRecipe::RemoveCuesByLabel {
+                text: "drop".into(),
+            },
+        );
+        assert_eq!(deletions.len(), 1);
+        assert_eq!(deletions[0].cue_label, "1:05 Drop");
     }
 
     #[test]

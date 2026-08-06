@@ -54,6 +54,8 @@ import type {
   TagApplyResult,
   OtherRecipe,
   OtherRecipeResult,
+  CueRecipe,
+  CueRecipeTrack,
 } from "./types";
 import type {
   ChatMessage,
@@ -1214,4 +1216,23 @@ export async function otherRecipeApply(
     trackIds,
     recipe,
   });
+}
+
+export async function cueRecipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: CueRecipe,
+): Promise<CueRecipeTrack[]> {
+  return invoke<CueRecipeTrack[]>("cue_recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
+}
+
+export async function cueRecipeApply(
+  libraryPath: string,
+  tracks: CueRecipeTrack[],
+): Promise<string[]> {
+  return invoke<string[]>("cue_recipe_apply", { libraryPath, tracks });
 }

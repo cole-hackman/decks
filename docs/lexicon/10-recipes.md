@@ -65,6 +65,29 @@ This category is the most valuable and the furthest from anything `decks` has.
 | Remove Cue Text | Strip all cue names |
 | Remove Cues by Label | Delete cues whose label contains a string (case-insensitive) |
 
+**Status in `decks`:** nine of the eleven are implemented in `crates/recipes::cues` and reachable
+from the Recipes panel's Cue Recipes section. Deliberate divergences and omissions:
+
+- **`Change Active Loops` and `Half/Double BPM` are not implemented.** The first needs a
+  `djmdCue` "active loop" column `decks` does not model; the second has to move beatgrid markers,
+  which means writing an ANLZ file — that is a beatgrid recipe wearing a cue recipe's name, and it
+  belongs with the beatgrid category below.
+- **`Shift Cues/Beatgrid` shifts cues only.** The grid half is the same ANLZ write. Loops move
+  whole rather than having only their start shifted, which would silently resize them.
+- **"Random" is spelled `Cycle` and is deterministic**, walking an eight-colour palette in track
+  order. A preview that showed different colours from the apply would be worse than no preview.
+- **"First" and "last" mean first and last in the *track*,** not in storage order — `djmdCue` rows
+  come back in insertion order, and a user means the timeline.
+- **`Sort Cues` reassigns hot-cue slots 1–8** in the new order, because `djmdCue` stores no cue
+  ordering of its own. Memory cues have no slot and stay put; a ninth hot cue keeps its slot.
+- **`Quantize Cues` reports "this track has no beat grid"** rather than quietly changing nothing,
+  per ADR-0008. It preserves loop length instead of snapping both ends independently.
+- **`Remove Cues by Label` refuses an empty needle** — it would match every named cue, which is
+  `Remove Cue Text`'s job.
+
+Everything stages as `CueMetadataEdit` / `TrackDeleteCue` and goes through Sync; nothing here
+writes to `master.db` directly.
+
 ### Beatgrid recipes
 
 `Delete Beatgrid` · `Round BPM` (rounds track BPM and every marker to a whole number — for

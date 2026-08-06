@@ -165,9 +165,14 @@ pattern, filed into a genre/BPM tree, and marked done — untouched by hand.
 Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-recipes.md),
 [`02-library.md`](lexicon/02-library.md), [`07-health.md`](lexicon/07-health.md).
 
-- [x] Recipes engine + the casing / field / text / number operations (18). Tag and "other" recipes outstanding
-- [ ] Cue and beatgrid recipes (14 ops) — depends on Epic 2
+- [x] Recipes engine + the casing / field / text / number operations (18)
+- [x] Cue recipes — 9 of 11. `Change Active Loops` needs a `djmdCue` column we do not model;
+      `Half/Double BPM` moves grid markers, so it belongs with the beatgrid recipes below
+- [ ] Beatgrid recipes (3 ops) — `Delete Beatgrid`, `Round BPM`, `Quantize Beatgrid`. All three
+      write a grid, so they need an ANLZ **writer**; `crates/rekordbox-db::anlz` only reads
 - [x] `Import Tags from Text` (hashtag → custom tags, idempotent), plus add/remove/replace/clear
+- [x] The three "other" recipes: Mark as Incoming, Remove from All Playlists, Import Date from
+      Filesystem
 - [ ] Multi-track manual editor with `<multiple values>`
 - [ ] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, report
 - [ ] Undo History (60 min / until restart)

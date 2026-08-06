@@ -113,6 +113,44 @@ test.beforeEach(async ({ page }) => {
               return proposals.map((_, i) => `c${i}`);
             }
 
+            case "cue_recipe_preview": {
+              const recipe = args.recipe as Record<string, unknown>;
+              const base = { track_id: "1", track_title: "get lucky" };
+              // The fixture track has no analysis file, so quantize has no
+              // grid to snap to and says so rather than reporting no changes.
+              if (recipe.op === "quantize_cues") {
+                return [
+                  {
+                    ...base,
+                    edits: [],
+                    deletions: [],
+                    skipped: "this track has no beat grid",
+                  },
+                ];
+              }
+              return [
+                {
+                  ...base,
+                  edits: [
+                    {
+                      cue_id: "cue-1",
+                      cue_label: "1:05 Drop",
+                      field: "Color",
+                      before: -1,
+                      after: 1,
+                    },
+                  ],
+                  deletions: [{ cue_id: "cue-2", cue_label: "2:00" }],
+                  skipped: null,
+                },
+              ];
+            }
+            case "cue_recipe_apply": {
+              const tracks = args.tracks as Array<Record<string, unknown>>;
+              tracks.forEach((t) => staged.push(t));
+              return tracks.map((_, i) => `cue-change-${i}`);
+            }
+
             default:
               return null;
           }
@@ -127,9 +165,15 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-/** The field-recipe Preview button; the tag section has one of its own. */
+/**
+ * The field-recipe Preview button.
+ *
+ * `exact` matters twice over: getByRole matches the accessible name as a
+ * case-insensitive substring, so a plain "Preview" also picks up the cue
+ * section's "Preview cues", and the tag section has a "Preview" of its own.
+ */
 function fieldPreview(page: import("@playwright/test").Page) {
-  return page.getByRole("button", { name: "Preview" }).first();
+  return page.getByRole("button", { name: "Preview", exact: true }).first();
 }
 
 async function openRecipes(page: import("@playwright/test").Page) {
@@ -180,7 +224,7 @@ test("tag recipes: import from text previews the tags it would add", async ({
   await expect(page.getByLabel("Import source field")).toHaveValue("comment");
   await expect(page.getByLabel("Tag marker")).toHaveValue("#");
 
-  await page.getByRole("button", { name: "Preview" }).nth(1).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).nth(1).click();
 
   const preview = page.getByTestId("tag-recipe-preview");
   await expect(preview).toBeVisible();
@@ -190,4 +234,39 @@ test("tag recipes: import from text previews the tags it would add", async ({
   await page.getByRole("button", { name: /Apply to 1 track/ }).click();
   // Importing may have to invent tags, and says which.
   await expect(page.getByText(/created Techno/)).toBeVisible();
+});
+
+test("cue recipes: preview edits and deletions, then stage them", async ({
+  page,
+}) => {
+  await openRecipes(page);
+
+  await expect(page.getByRole("button", { name: /Stage 0 track/ })).toBeDisabled();
+  await page.getByRole("button", { name: "Preview cues" }).click();
+
+  const preview = page.getByTestId("cue-recipe-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview.getByText("1 edit(s)")).toBeVisible();
+  await expect(preview.getByText("−1 cue(s)")).toBeVisible();
+
+  await page.getByRole("button", { name: /Stage 1 track/ }).click();
+  await expect(page.getByText(/Staged 1 cue change\(s\) for review/)).toBeVisible();
+  // The preview clears, so a second Stage cannot double-stage the same edits.
+  await expect(preview).toBeHidden();
+});
+
+test("cue recipes: quantizing an unanalysed track says why, and stages nothing", async ({
+  page,
+}) => {
+  await openRecipes(page);
+
+  await page.getByLabel("Cue operation").selectOption("quantize_cues");
+  await expect(page.getByLabel("Quantize resolution")).toBeVisible();
+  await page.getByRole("button", { name: "Preview cues" }).click();
+
+  const preview = page.getByTestId("cue-recipe-preview");
+  await expect(preview.getByText("this track has no beat grid")).toBeVisible();
+  // Honest labelling: the track is listed with its reason, not silently
+  // dropped, but there is nothing to stage.
+  await expect(page.getByRole("button", { name: /Stage 0 track/ })).toBeDisabled();
 });

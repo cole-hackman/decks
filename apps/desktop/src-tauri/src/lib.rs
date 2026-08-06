@@ -2723,6 +2723,8 @@ pub fn run() {
             recipes::tag_recipe_preview,
             recipes::tag_recipe_apply,
             recipes::other_recipe_apply,
+            recipes::cue_recipe_preview,
+            recipes::cue_recipe_apply,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

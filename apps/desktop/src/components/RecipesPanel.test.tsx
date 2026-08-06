@@ -14,6 +14,9 @@ vi.mock("../ipc", () => ({
   tagRecipePreview: vi.fn(async () => []),
   tagRecipeApply: vi.fn(),
   otherRecipeApply: vi.fn(),
+  // Used by the cue section mounted below.
+  cueRecipePreview: vi.fn(async () => []),
+  cueRecipeApply: vi.fn(),
 }));
 
 const PREVIEW: RecipePreview = {

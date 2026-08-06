@@ -629,3 +629,77 @@ export interface OtherRecipeResult {
   staged: string[];
   skipped: [string, string][];
 }
+
+export type CueDeleteMode =
+  | "all"
+  | "first"
+  | "last"
+  | "keep_first"
+  | "keep_last"
+  | "loops_only"
+  | "without_colour"
+  | "without_text"
+  | "memory_cues";
+
+export type CueColourScheme =
+  | "basic"
+  | "grayscale"
+  | "cold"
+  | "warm"
+  | "cycle"
+  | "none"
+  | "first_cue_colour";
+
+export type CueSortOrder =
+  | "time_asc"
+  | "time_desc"
+  | "label_asc"
+  | "label_desc"
+  | "empty_labels_first"
+  | "empty_labels_last"
+  | "cues_before_loops"
+  | "loops_before_cues";
+
+export type CueRecipe =
+  | { op: "delete_cues"; mode: CueDeleteMode }
+  | { op: "change_colours"; scheme: CueColourScheme }
+  | {
+      op: "find_and_replace";
+      match_text: string | null;
+      match_colour: number | null;
+      new_text: string | null;
+      new_colour: number | null;
+    }
+  | { op: "sort_cues"; order: CueSortOrder }
+  | {
+      op: "replace_cue_text";
+      find: string;
+      replace: string;
+      case_insensitive: boolean;
+    }
+  | { op: "remove_cue_text" }
+  | { op: "remove_cues_by_label"; text: string }
+  | { op: "shift_cues"; offset_ms: number }
+  | { op: "quantize_cues"; resolution_beats: number };
+
+/** One `djmdCue` column edit, ready to stage. Values are typed, not stringified. */
+export interface CueChange {
+  cue_id: string;
+  cue_label: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface CueDeletion {
+  cue_id: string;
+  cue_label: string;
+}
+
+export interface CueRecipeTrack {
+  track_id: string;
+  track_title: string;
+  edits: CueChange[];
+  deletions: CueDeletion[];
+  skipped: string | null;
+}

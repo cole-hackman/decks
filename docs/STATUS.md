@@ -1,6 +1,6 @@
 # Status
 
-## 2026-08-06 — Epic 5 (part 1): the Recipes engine
+## 2026-08-06 — Epic 5: the Recipes engine
 
 New `crates/recipes` — the *other* bulk-editing system. `crates/smart-fixes` is ten fixed,
 zero-parameter cleanups; a recipe takes parameters, and the user assembles the one they need. The
@@ -63,11 +63,39 @@ mtime while its ctime becomes the copy date — worse than useless as a release 
 Incoming` is the exact inverse of `Selected done`, clearing the per-track reviewed flag added in
 migration v12.
 
-**Not done:** the cue (11) and beatgrid (3) recipes, which operate on cue lists rather than text and
-need the quantize arithmetic from `crates/rekordbox-db`.
+**The cue recipes** land in `crates/recipes::cues` — nine of the spec's eleven. The spec calls this
+category the most valuable and the furthest from anything `decks` had, and it needed a different
+shape: one operation can delete, reorder, rename and recolour in a single pass, so the engine
+returns a whole new cue list plus the ids it removed, rather than a per-field diff.
+
+The beat grid is passed **in** rather than read, which keeps the category a pure function and means
+`QuantizeCues` is testable without an ANLZ file on disk.
+
+Decisions worth recording, all tested:
+
+- **"First" and "last" mean first and last in the track.** `djmdCue` rows come back in insertion
+  order; a user means the timeline. Every mode that says first/last sorts by position before
+  picking.
+- **`Sort Cues` reassigns hot-cue slots 1–8** in the new order, because `djmdCue` has no cue
+  ordering of its own — the slot *is* the order. Memory cues have no slot and stay put; a ninth hot
+  cue keeps the slot it had. A sort that changes nothing stages nothing.
+- **Quantizing preserves loop length** rather than snapping both ends independently, which would
+  stretch the loop. Shifting takes loops whole, for the same reason, and clamps at zero.
+- **`QuantizeCues` on an unanalysed track says "this track has no beat grid"** instead of reporting
+  no changes (ADR-0008). The UI lists the track with its reason and excludes it from the count.
+- **"Random" is `Cycle` and is deterministic.** A preview showing different colours from the apply
+  would be worse than no preview at all.
+- **Colour edits stage `-1`, not null** — Rekordbox's spelling of "no colour" — and position edits
+  stage a JSON *number*, so `json_to_sql` lands them as integers rather than text.
+
+`Change Active Loops` and `Half/Double BPM` are deliberately out: the first needs a `djmdCue`
+column `decks` does not model, the second has to move beatgrid markers, which is an ANLZ write and
+belongs with the beatgrid recipes.
+
+**Not done:** the beatgrid recipes (3), which all write a grid.
 
 Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
-clean, `pnpm test` 390, typecheck, lint, `pnpm e2e` 20 — all green.
+clean, `pnpm test` 401, typecheck, lint, `pnpm e2e` 22 — all green.
 
 ## Blockers — verified, not assumed (2026-08-06)
 

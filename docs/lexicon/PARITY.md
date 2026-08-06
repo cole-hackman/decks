@@ -21,11 +21,11 @@ regardless of how much of Lexicon they represent.
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
 | Health | 0 | 3 | 2 | 0 |
-| Recipes & editing | 4 | 2 | 3 | 0 |
+| Recipes & editing | 4 | 3 | 2 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **25** | **41** | **24** | **16** |
+| **Total** | **25** | **42** | **23** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -149,7 +149,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Recipes: casing / field / text / number | **done** | 18 ops in `crates/recipes`, preview-then-stage | 5 |
 | Recipes: tag | **done** | Import from text (idempotent), add/remove/replace/clear | 5 |
 | Recipes: other (3 ops) | **done** | Mark as Incoming, Remove from All Playlists, Import Date from Filesystem | 5 |
-| Recipes: cue point (11 ops) | **missing** | Depends on the Epic 2 cue model | 5 |
+| Recipes: cue point (11 ops) | partial | 9 of 11 in `crates/recipes::cues`; Change Active Loops and Half/Double BPM need an unmodelled column and ANLZ writes | 5 |
 | Recipes: beatgrid (3 ops) | **missing** | Depends on Epic 2 | 5 |
 | Import Tags From CSV | partial | CSV parses, but only to match — never writes fields | 5 |
 | Undo History | **missing** | We gate before applying; no recourse after | 5 |

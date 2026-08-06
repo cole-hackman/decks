@@ -14,18 +14,23 @@
 //! because tags are a *set* attached to a track rather than a string on it —
 //! the operations are expressed as a delta to that set.
 //!
-//! Cue and beatgrid recipes are deliberately **not** here. They operate on cue
-//! lists and beat grids rather than text fields, they need the quantize
-//! arithmetic from `crates/rekordbox-db`, and the spec itself says to sequence
-//! field/text/tag recipes first. See `docs/lexicon/10-recipes.md`.
+//! Cue recipes live in [`cues`] for the same reason: they rewrite a *list* of
+//! cues rather than a string, and one operation can delete, reorder and edit in
+//! a single pass. The beat grid they occasionally need is passed in rather than
+//! read, so the category stays a pure function too. Beatgrid recipes — the ones
+//! that *write* a grid — are still out; see `docs/lexicon/10-recipes.md`.
 
 pub mod casing;
+pub mod cues;
 pub mod fields;
 pub mod tags;
 pub mod text;
 
 use serde::{Deserialize, Serialize};
 
+pub use cues::{
+    apply_cue_recipe, ColourScheme, CueEdits, CueRecipe, DeleteMode, RecipeCue, SortOrder,
+};
 pub use fields::{diff, FieldChange, TrackFields};
 pub use tags::{apply_tag_recipe, parse_hashtags, TagChange, TagRecipe};
 pub use text::{DelimiterPair, SpecialCharacterMode};

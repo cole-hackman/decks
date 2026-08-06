@@ -1733,5 +1733,44 @@ user got a new hard disk.
 without the smartlist caveat spelled out, a user watching tracks stay in their smartlists would
 reasonably conclude the recipe was broken.
 
-**Next in Epic 5:** the cue and beatgrid recipes, which need the Epic 2 quantize arithmetic. Then
-the larger items — Undo History, CSV import, the duplicates work.
+**The cue recipes were the interesting half.** Every other recipe category is a function from a
+string to a string; a cue recipe rewrites a *list*, and one operation can delete, reorder, rename
+and recolour in the same pass. Trying to force that into the `FieldChange` shape would have meant
+running the engine three times. `CueEdits { cues, deleted, skipped }` — the whole new list plus
+what went — was the model that fit.
+
+**Passing the beat grid in rather than reading it** is the trick that made the category testable.
+`QuantizeCues` is the only operation that needs a grid, and having it take `&[i64]` means the
+entire cue vocabulary has unit tests without a single ANLZ file on disk. The Tauri command does the
+reading, the way `cue_generator` already does.
+
+**"First cue" is ambiguous and the ambiguity matters.** `djmdCue` rows come back in insertion
+order, so "delete the first cue" could mean the earliest in the track or the earliest one added.
+Users mean the timeline every time. There is a test whose name says so, built on a fixture stored
+deliberately out of order.
+
+**`Sort Cues` had no obvious target.** `djmdCue` stores no cue ordering — the hot-cue slot number
+*is* the order, which is why a sort had to become a slot reassignment over slots 1–8. Memory cues
+have no slot, so they are excluded rather than being silently promoted to hot cues by a `Kind`
+write. That one is worth remembering: the obvious implementation would have changed what the cues
+*were*, not just where they sat.
+
+**Two operations from the spec are deliberately absent,** and saying why beats leaving a gap.
+`Change Active Loops` needs a `djmdCue` column `decks` does not model; `Half/Double BPM` moves
+beatgrid markers, which means writing an ANLZ file — that is a beatgrid recipe with a cue recipe's
+name. Both are recorded in `10-recipes.md` rather than living only in a commit message.
+
+**Staged values have to carry their type.** `InMsec` is an integer column and `json_to_sql` has no
+schema to consult — it maps JSON strings to `TEXT` and JSON numbers to `INTEGER`. So the cue diff
+holds `serde_json::Value`, not the display strings the field recipes use, and there is a test
+asserting a position edit stages a number. Rekordbox's "no colour" being `-1` rather than `NULL` is
+the same class of detail: the preview shows *its* spelling, not ours.
+
+**Playwright's `getByRole` name option matches a substring by default,** which the existing
+`getByRole("button", { name: "Preview" }).first()` would have quietly survived — "Preview cues"
+sorts after both existing Preview buttons, so `.first()` and `.nth(1)` still resolved correctly.
+Surviving by accident is not the same as being correct, so both got `exact: true`. The next section
+added would have broken them.
+
+**Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
+first). Then the larger items — Undo History, CSV import, the duplicates work.
