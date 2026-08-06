@@ -1743,6 +1743,103 @@ impl CacheDb {
     }
 }
 
+// ── Favourite playlists ──────────────────────────────────────────────────────
+
+/// A starred playlist, with the hotkey position it holds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FavouritePlaylist {
+    pub playlist_id: String,
+    /// 1-based. Favourite `n` is bound to hotkey `n`.
+    pub seq: i64,
+}
+
+/// Hotkeys only reach 1–9, so there is no point storing a tenth favourite the
+/// user could never press.
+pub const MAX_FAVOURITE_PLAYLISTS: usize = 9;
+
+impl CacheDb {
+    pub fn list_favourite_playlists(&self, library_path: &str) -> Result<Vec<FavouritePlaylist>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT playlist_id, seq FROM favourite_playlists
+             WHERE library_path = ?1 ORDER BY seq",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![library_path], |r| {
+            Ok(FavouritePlaylist {
+                playlist_id: r.get(0)?,
+                seq: r.get(1)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    /// Star or unstar a playlist. Returns the new state.
+    ///
+    /// **Un-starring closes the gap.** Leaving a hole would either strand a
+    /// hotkey on nothing or silently renumber the ones after it on the next
+    /// read — and a hotkey that quietly changes what it does between sessions
+    /// is worse than one that does nothing.
+    pub fn toggle_favourite_playlist(&self, library_path: &str, playlist_id: &str) -> Result<bool> {
+        let removed = self.conn.execute(
+            "DELETE FROM favourite_playlists WHERE library_path = ?1 AND playlist_id = ?2",
+            rusqlite::params![library_path, playlist_id],
+        )?;
+        if removed > 0 {
+            self.resequence_favourites(library_path)?;
+            return Ok(false);
+        }
+
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM favourite_playlists WHERE library_path = ?1",
+            rusqlite::params![library_path],
+            |r| r.get(0),
+        )?;
+        if count as usize >= MAX_FAVOURITE_PLAYLISTS {
+            anyhow::bail!(
+                "only {MAX_FAVOURITE_PLAYLISTS} playlists can be favourited — hotkeys stop at 9"
+            );
+        }
+        self.conn.execute(
+            "INSERT INTO favourite_playlists (library_path, playlist_id, seq) VALUES (?1, ?2, ?3)",
+            rusqlite::params![library_path, playlist_id, count + 1],
+        )?;
+        Ok(true)
+    }
+
+    /// Set the whole favourite order at once — for drag-reordering.
+    pub fn set_favourite_playlist_order(&self, library_path: &str, ids: &[String]) -> Result<()> {
+        if ids.len() > MAX_FAVOURITE_PLAYLISTS {
+            anyhow::bail!(
+                "only {MAX_FAVOURITE_PLAYLISTS} playlists can be favourited — hotkeys stop at 9"
+            );
+        }
+        self.conn.execute(
+            "DELETE FROM favourite_playlists WHERE library_path = ?1",
+            rusqlite::params![library_path],
+        )?;
+        for (i, id) in ids.iter().enumerate() {
+            self.conn.execute(
+                "INSERT INTO favourite_playlists (library_path, playlist_id, seq)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![library_path, id, (i as i64) + 1],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn resequence_favourites(&self, library_path: &str) -> Result<()> {
+        let existing = self.list_favourite_playlists(library_path)?;
+        for (i, fav) in existing.iter().enumerate() {
+            self.conn.execute(
+                "UPDATE favourite_playlists SET seq = ?3
+                 WHERE library_path = ?1 AND playlist_id = ?2",
+                rusqlite::params![library_path, fav.playlist_id, (i as i64) + 1],
+            )?;
+        }
+        Ok(())
+    }
+}
+
 // ── Backup and restore ───────────────────────────────────────────────────────
 
 impl CacheDb {
@@ -3017,5 +3114,103 @@ mod tests {
         // An empty rule set matches nothing, so a corrupt row is inert rather
         // than accidentally selecting the entire library.
         assert!(reloaded.clauses.is_empty());
+    }
+
+    // ── Favourite playlists ──────────────────────────────────────────────
+
+    #[test]
+    fn favourites_take_the_next_hotkey_position() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.toggle_favourite_playlist("/db", "p1").unwrap());
+        assert!(db.toggle_favourite_playlist("/db", "p2").unwrap());
+        let favs = db.list_favourite_playlists("/db").unwrap();
+        assert_eq!(
+            favs.iter()
+                .map(|f| (f.playlist_id.as_str(), f.seq))
+                .collect::<Vec<_>>(),
+            vec![("p1", 1), ("p2", 2)]
+        );
+    }
+
+    #[test]
+    fn unstarring_closes_the_gap_rather_than_stranding_a_hotkey() {
+        // A hole would either leave hotkey 2 doing nothing or silently
+        // renumber on the next read — either way the key changes meaning
+        // between sessions, which is worse than it doing nothing at all.
+        let db = CacheDb::open_in_memory().unwrap();
+        for id in ["p1", "p2", "p3"] {
+            db.toggle_favourite_playlist("/db", id).unwrap();
+        }
+        assert!(!db.toggle_favourite_playlist("/db", "p2").unwrap());
+
+        let favs = db.list_favourite_playlists("/db").unwrap();
+        assert_eq!(
+            favs.iter()
+                .map(|f| (f.playlist_id.as_str(), f.seq))
+                .collect::<Vec<_>>(),
+            vec![("p1", 1), ("p3", 2)]
+        );
+    }
+
+    #[test]
+    fn toggling_a_favourite_playlist_twice_returns_it_to_plain() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.toggle_favourite_playlist("/db", "p1").unwrap());
+        assert!(!db.toggle_favourite_playlist("/db", "p1").unwrap());
+        assert!(db.list_favourite_playlists("/db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_tenth_favourite_is_refused_because_hotkeys_stop_at_nine() {
+        let db = CacheDb::open_in_memory().unwrap();
+        for i in 1..=MAX_FAVOURITE_PLAYLISTS {
+            db.toggle_favourite_playlist("/db", &format!("p{i}"))
+                .unwrap();
+        }
+        let err = db.toggle_favourite_playlist("/db", "p10");
+        assert!(err.is_err(), "expected a refusal, got {err:?}");
+        assert_eq!(
+            db.list_favourite_playlists("/db").unwrap().len(),
+            MAX_FAVOURITE_PLAYLISTS
+        );
+    }
+
+    #[test]
+    fn favourites_are_scoped_to_one_library() {
+        // A playlist id only means anything inside the database it came from.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.toggle_favourite_playlist("/one", "p1").unwrap();
+        assert_eq!(db.list_favourite_playlists("/one").unwrap().len(), 1);
+        assert!(db.list_favourite_playlists("/two").unwrap().is_empty());
+    }
+
+    #[test]
+    fn setting_the_order_renumbers_from_one() {
+        let db = CacheDb::open_in_memory().unwrap();
+        for id in ["p1", "p2", "p3"] {
+            db.toggle_favourite_playlist("/db", id).unwrap();
+        }
+        db.set_favourite_playlist_order(
+            "/db",
+            &["p3".to_string(), "p1".to_string(), "p2".to_string()],
+        )
+        .unwrap();
+        let favs = db.list_favourite_playlists("/db").unwrap();
+        assert_eq!(
+            favs.iter()
+                .map(|f| (f.playlist_id.as_str(), f.seq))
+                .collect::<Vec<_>>(),
+            vec![("p3", 1), ("p1", 2), ("p2", 3)]
+        );
+    }
+
+    #[test]
+    fn setting_an_over_long_order_is_refused_and_changes_nothing() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.toggle_favourite_playlist("/db", "keep").unwrap();
+        let too_many: Vec<String> = (0..10).map(|i| format!("p{i}")).collect();
+        assert!(db.set_favourite_playlist_order("/db", &too_many).is_err());
+        // The refusal happens before the delete, so the existing list survives.
+        assert_eq!(db.list_favourite_playlists("/db").unwrap().len(), 1);
     }
 }

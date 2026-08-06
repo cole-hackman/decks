@@ -97,7 +97,24 @@ drag between playlists, create-from-selection.
 *What it does* — Star any playlist to pin it above the track browser as a drop target. **Hotkeys
 per favourite** jump to that playlist or add the selection to it. A fast filing system.
 
-*decks status* — **missing.**
+*decks status* — **done**, except the drop target. Star from **Playlist Tools → Favourites**; the
+bar pins above the track browser with a hotkey each — **`1`–`9` opens, `Shift+1`–`9` files the
+selection**. Cache migration **v16**.
+
+Notes:
+
+- **The hotkey is the position, and positions are stable.** Un-starring closes the gap rather than
+  leaving a hole — a key that quietly changes what it does between sessions is worse than one that
+  does nothing.
+- **Nine is the cap**, because that is where the hotkeys stop. A tenth star is refused with that
+  reason rather than stored where nobody could press it.
+- **A favourite whose playlist is gone is pruned on read**, from the table as well as the response,
+  so the stored order and the shown order never disagree.
+- Filing skips tracks the playlist already holds and reports how many, rather than staging
+  duplicates or silently doing less than asked.
+
+**Not done:** drag-and-drop onto a favourite. The hotkeys and the `+` button cover the same intent,
+and the track table has no drag source yet.
 
 *Epic* — **6**.
 

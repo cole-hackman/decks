@@ -4,6 +4,7 @@ import { TrackTable } from "./components/TrackTable";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
 import { MixableTracksPanel } from "./components/MixableTracksPanel";
 import { PlaylistToolsView } from "./components/PlaylistToolsView";
+import { FavouritePlaylistsBar } from "./components/FavouritePlaylistsBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { PlaylistPanel } from "./components/PlaylistPanel";
@@ -88,6 +89,8 @@ export default function App() {
   const [inspector, setInspector] = useState<
     "details" | "agent" | "mixable" | null
   >(null);
+  /** Set when a favourite hotkey asks the playlist panel to jump. */
+  const [focusPlaylistId, setFocusPlaylistId] = useState<string | null>(null);
   const [pendingAgentPrompt, setPendingAgentPrompt] = useState<string | null>(
     null,
   );
@@ -517,6 +520,14 @@ export default function App() {
           )}
           {currentView === "library" && (
             <>
+              <FavouritePlaylistsBar
+                libraryPath={libraryPath ?? ""}
+                selectedTrackIds={selectedTrackIds}
+                onOpenPlaylist={(playlistId) => {
+                  setFocusPlaylistId(playlistId);
+                  setCurrentView("playlists");
+                }}
+              />
               <FilterChips
                 filters={filters}
                 onChange={setFilters}
@@ -562,6 +573,7 @@ export default function App() {
               selectedTrackId={selectedTrack?.id ?? null}
               onSelectTrack={handleTrackSelect}
               onTrackContextMenu={handleTrackContextMenu}
+              focusPlaylistId={focusPlaylistId}
             />
           )}
           {currentView === "tags" && (

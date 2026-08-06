@@ -367,6 +367,27 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        16,
+        "
+        -- Favourite playlists (Epic 6).
+        --
+        -- Starred playlists pin above the track browser as a fast filing
+        -- system; `seq` is the hotkey position, so favourite 1 is always the
+        -- same playlist between sessions. A hotkey that moves when the list
+        -- re-sorts is worse than no hotkey.
+        --
+        -- Scoped by library_path, unlike cleanup_locks and mixable_templates:
+        -- a playlist id only means anything inside the database it came from.
+        CREATE TABLE favourite_playlists (
+          library_path TEXT NOT NULL,
+          playlist_id  TEXT NOT NULL,
+          seq          INTEGER NOT NULL,
+          PRIMARY KEY (library_path, playlist_id)
+        );
+        CREATE INDEX idx_favourite_playlists ON favourite_playlists(library_path, seq);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -651,6 +672,44 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM smartlists", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn favourite_playlists_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO favourite_playlists (library_path, playlist_id, seq)
+             VALUES ('/db', 'p1', 1);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM favourite_playlists", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_playlist_cannot_be_favourited_twice_in_one_library() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO favourite_playlists (library_path, playlist_id, seq)
+             VALUES ('/db', 'p1', 1);",
+        )
+        .unwrap();
+        assert!(conn
+            .execute_batch(
+                "INSERT INTO favourite_playlists (library_path, playlist_id, seq)
+                 VALUES ('/db', 'p1', 2);",
+            )
+            .is_err());
+        // ...but the same playlist id in a different library is a different row.
+        conn.execute_batch(
+            "INSERT INTO favourite_playlists (library_path, playlist_id, seq)
+             VALUES ('/other', 'p1', 1);",
+        )
+        .unwrap();
     }
 
     #[test]

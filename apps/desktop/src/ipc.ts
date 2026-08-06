@@ -19,6 +19,7 @@ import type {
   ShareColumn,
   ShareExport,
   ShareFormat,
+  FavouritePlaylist,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -1675,4 +1676,44 @@ export async function saveShareFile(
   if (!path) return null;
   await invoke<void>("write_share_file", { path, contents });
   return path;
+}
+
+// ── Favourite playlists (Epic 6) ─────────────────────────────────────────────
+
+export async function listFavouritePlaylists(
+  libraryPath: string,
+): Promise<FavouritePlaylist[]> {
+  return invoke<FavouritePlaylist[]>("list_favourite_playlists", { libraryPath });
+}
+
+export async function toggleFavouritePlaylist(
+  libraryPath: string,
+  playlistId: string,
+): Promise<boolean> {
+  return invoke<boolean>("toggle_favourite_playlist", {
+    libraryPath,
+    playlistId,
+  });
+}
+
+export async function setFavouritePlaylistOrder(
+  libraryPath: string,
+  playlistIds: string[],
+): Promise<void> {
+  return invoke<void>("set_favourite_playlist_order", {
+    libraryPath,
+    playlistIds,
+  });
+}
+
+export async function addTracksToPlaylist(
+  libraryPath: string,
+  playlistId: string,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("add_tracks_to_playlist", {
+    libraryPath,
+    playlistId,
+    trackIds,
+  });
 }

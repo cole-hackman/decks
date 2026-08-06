@@ -29,6 +29,9 @@ interface Props {
     anchor: { x: number; y: number },
     options?: { playlistId?: string },
   ) => void;
+  /** Jump to a playlist from outside — a favourite hotkey, for instance.
+   *  Each distinct value selects once; the panel owns the selection after. */
+  focusPlaylistId?: string | null;
 }
 
 interface TreeNode {
@@ -105,6 +108,7 @@ export function PlaylistPanel({
   selectedTrackId,
   onSelectTrack,
   onTrackContextMenu,
+  focusPlaylistId = null,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -155,6 +159,26 @@ export function PlaylistPanel({
     const firstLeaf = visibleRows.find((r) => !isFolder(r.playlist));
     setSelectedId(firstLeaf ? firstLeaf.playlist.id : null);
   }, [selectableIds, selectedId, visibleRows]);
+
+  // Jump to a playlist asked for from outside. It also has to be *reachable*:
+  // a favourite inside a collapsed folder would otherwise select invisibly and
+  // then be reset by the fallback effect above.
+  useEffect(() => {
+    if (focusPlaylistId == null) return;
+    const target = playlists.find((p) => p.id === focusPlaylistId);
+    if (!target) return;
+    setFilter("");
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      let parent = target.parent_id;
+      while (parent != null) {
+        next.add(parent);
+        parent = playlists.find((p) => p.id === parent)?.parent_id ?? null;
+      }
+      return next;
+    });
+    setSelectedId(focusPlaylistId);
+  }, [focusPlaylistId, playlists]);
 
   const toggleFolder = (id: string) => {
     setExpanded((prev) => {

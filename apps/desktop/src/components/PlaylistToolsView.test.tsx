@@ -15,6 +15,8 @@ import {
   previewPlaylistSort,
   previewRewriteOrder,
   playlistOccurrence,
+  listFavouritePlaylists,
+  toggleFavouritePlaylist,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 import type { Playlist, Track } from "../types";
@@ -32,6 +34,8 @@ vi.mock("../ipc", () => ({
   previewRewriteOrder: vi.fn(),
   applyRewriteOrder: vi.fn(),
   playlistOccurrence: vi.fn(),
+  listFavouritePlaylists: vi.fn(),
+  toggleFavouritePlaylist: vi.fn(),
 }));
 
 const PLAYLISTS: Playlist[] = [
@@ -99,6 +103,8 @@ beforeEach(() => {
     unchanged: false,
   });
   vi.mocked(applyRewriteOrder).mockResolvedValue("c1");
+  vi.mocked(listFavouritePlaylists).mockResolvedValue([]);
+  vi.mocked(toggleFavouritePlaylist).mockResolvedValue(true);
   vi.mocked(playlistOccurrence).mockResolvedValue({
     tracks: [track("3", "Orphan", null)],
     distribution: [
@@ -373,5 +379,56 @@ describe("PlaylistToolsView", () => {
     expect(screen.getByTestId("tool-blurb")).toHaveTextContent(
       /so it reaches the CDJ that way/,
     );
+  });
+  it("favourites: starring shows the hotkey position it took", async () => {
+    renderView();
+    await screen.findByTestId("playlist-picker");
+    await pickTool("Favourites");
+
+    const toggles = await screen.findByTestId("favourite-toggles");
+    expect(toggles).toHaveTextContent("Warmup");
+
+    vi.mocked(listFavouritePlaylists).mockResolvedValue([
+      { playlist_id: "p1", name: "Warmup", seq: 1, track_count: 2 },
+    ]);
+    await userEvent.click(screen.getByRole("button", { name: "Star Warmup" }));
+
+    await waitFor(() =>
+      expect(toggleFavouritePlaylist).toHaveBeenCalledWith("/lib.db", "p1"),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Unstar Warmup" }),
+    ).toBeInTheDocument();
+  });
+
+  it("favourites: a tenth star is refused rather than silently dropped", async () => {
+    // Hotkeys stop at 9, so the tenth would be a favourite nobody can press.
+    vi.mocked(listFavouritePlaylists).mockResolvedValue(
+      Array.from({ length: 9 }, (_, i) => ({
+        playlist_id: `x${i}`,
+        name: `Other ${i}`,
+        seq: i + 1,
+        track_count: 1,
+      })),
+    );
+    renderView();
+    await screen.findByTestId("playlist-picker");
+    await pickTool("Favourites");
+
+    expect(await screen.findByTestId("favourites-full")).toHaveTextContent(
+      "All nine hotkeys are taken. Un-star one to free a key.",
+    );
+    expect(screen.getByRole("button", { name: "Star Warmup" })).toBeDisabled();
+  });
+
+  it("favourites: explains that positions stay put", async () => {
+    renderView();
+    await pickTool("Favourites");
+    expect(screen.getByTestId("tool-blurb")).toHaveTextContent(
+      /1–9 opens, Shift\+1–9 files the selection/,
+    );
+    expect(
+      await screen.findByText(/un-starring closes the gap rather than leaving a dead key/),
+    ).toBeInTheDocument();
   });
 });

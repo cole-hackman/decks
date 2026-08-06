@@ -1,5 +1,40 @@
 # Status
 
+## 2026-08-06 — Epic 6 (part 6): favourite playlists
+
+The spec calls it a fast filing system, and that is exactly the shape: star up to nine playlists,
+and each gets a hotkey. **`1`–`9` opens the playlist, `Shift+1`–`9` files the current selection
+into it.** Star from **Playlist Tools → Favourites**; the bar pins above the track browser.
+
+Decisions, each tested:
+
+- **The hotkey is the position, and positions are stable.** Un-starring closes the gap rather than
+  leaving a hole. A hole would either strand a key on nothing or renumber silently on the next
+  read — and a key that quietly changes what it does between sessions is worse than one that does
+  nothing at all.
+- **Nine is the cap, and the refusal says why.** A tenth favourite would be one nobody could press.
+- **A favourite whose playlist is gone is pruned on read** — from the table as well as the
+  response, so the stored order and the shown order can never disagree.
+- **`e.code`, not `e.key`.** With Shift held, `key` is `"!"`, not `"1"`. The test presses
+  `Shift+1` specifically to catch that.
+- **Digits are never stolen from a text field**, and modified chords are left to whatever owns
+  them.
+- **Filing reports what it skipped.** Tracks already in the playlist are not staged twice, and the
+  toast says how many were already there rather than quietly doing less than asked.
+- **The bar renders nothing when nothing is starred**, and survives a null list — it sits above the
+  browser and must never take the view down with it.
+- **Jumping to a favourite expands the folders on the way to it.** A playlist inside a collapsed
+  folder would otherwise be selected invisibly and then reset by the panel's own fallback.
+
+Cache migration **v16** (`favourite_playlists`), scoped by `library_path` — unlike the cleanup
+locks and mixable templates, a playlist id only means anything inside the database it came from.
+
+**Not done:** drag-and-drop onto a favourite. The hotkeys and the `+` button cover the same intent,
+and the track table has no drag source yet.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 546, typecheck, lint, `pnpm e2e` 39 — all green.
+
 ## 2026-08-06 — Epic 6 (part 5): key leading-zero option
 
 Small and entirely about one thing: sorted as text, an unpadded key column reads

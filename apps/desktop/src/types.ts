@@ -1100,3 +1100,16 @@ export interface ShareExport {
   /** Titles the format could not carry — M3U tracks with no file path. */
   skipped: string[];
 }
+
+// ── Favourite playlists (Epic 6) ─────────────────────────────────────────────
+
+export interface FavouritePlaylist {
+  playlist_id: string;
+  name: string;
+  /** 1-based hotkey position. Favourite n is bound to key n. */
+  seq: number;
+  track_count: number;
+}
+
+/** Hotkeys stop at 9, so there is no point storing a tenth. */
+export const MAX_FAVOURITE_PLAYLISTS = 9;

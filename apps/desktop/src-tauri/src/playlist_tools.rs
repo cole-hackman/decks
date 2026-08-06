@@ -422,6 +422,144 @@ pub async fn playlist_occurrence(path: String, n: usize) -> Result<OccurrenceRep
     .map_err(|e| e.to_string())?
 }
 
+// ── Favourite playlists ──────────────────────────────────────────────────────
+
+/// A starred playlist, resolved to its name and hotkey.
+#[derive(Debug, Serialize)]
+pub struct FavouritePlaylistView {
+    pub playlist_id: String,
+    pub name: String,
+    /// 1-based hotkey position.
+    pub seq: i64,
+    pub track_count: usize,
+}
+
+/// The starred playlists for a library, in hotkey order.
+///
+/// A favourite whose playlist no longer exists is **dropped from the result
+/// and from the table**, and the rest close up. Leaving it would strand a
+/// hotkey on a playlist that is gone; renumbering only in the response would
+/// make the hotkey mean something different from what is stored.
+#[tauri::command]
+pub async fn list_favourite_playlists(
+    app: tauri::AppHandle,
+    library_path: String,
+) -> Result<Vec<FavouritePlaylistView>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let stored = cache
+            .list_favourite_playlists(&library_path)
+            .map_err(|e| e.to_string())?;
+        if stored.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let db = open_db(&library_path)?;
+        let all = db.playlists().map_err(|e| e.to_string())?;
+
+        let live: Vec<_> = stored
+            .iter()
+            .filter_map(|fav| all.iter().find(|p| p.id == fav.playlist_id))
+            .collect();
+
+        if live.len() != stored.len() {
+            // Prune, so the stored order and the shown order never disagree.
+            let ids: Vec<String> = live.iter().map(|p| p.id.clone()).collect();
+            cache
+                .set_favourite_playlist_order(&library_path, &ids)
+                .map_err(|e| e.to_string())?;
+        }
+
+        Ok(live
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| FavouritePlaylistView {
+                track_count: db.playlist_entries(&p.id).map(|e| e.len()).unwrap_or(0),
+                playlist_id: p.id.clone(),
+                name: p.name.clone(),
+                seq: (i as i64) + 1,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Star or unstar. Returns the new state.
+#[tauri::command]
+pub async fn toggle_favourite_playlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    playlist_id: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        cache
+            .toggle_favourite_playlist(&library_path, &playlist_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn set_favourite_playlist_order(
+    app: tauri::AppHandle,
+    library_path: String,
+    playlist_ids: Vec<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        cache
+            .set_favourite_playlist_order(&library_path, &playlist_ids)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Add tracks to a playlist — the "add the selection to favourite N" half of
+/// the spec's fast filing system.
+///
+/// Staged like everything else. Tracks the playlist already holds are skipped
+/// rather than added twice; returns the staged change ids.
+#[tauri::command]
+pub async fn add_tracks_to_playlist(
+    app: tauri::AppHandle,
+    library_path: String,
+    playlist_id: String,
+    track_ids: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = open_db(&library_path)?;
+        let present: std::collections::HashSet<String> = db
+            .playlist_entries(&playlist_id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|e| e.content_id)
+            .collect();
+
+        let cache = cache_db(&app)?;
+        track_ids
+            .into_iter()
+            .filter(|id| !present.contains(id))
+            .map(|track_id| {
+                stage(
+                    &cache,
+                    &library_path,
+                    changes::ChangeKind::PlaylistAddTrack,
+                    Some(playlist_id.clone()),
+                    serde_json::json!(track_id),
+                    None,
+                    "Filed to a favourite playlist",
+                )
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use changes::playlist_tools::{CrossReferenceMode, PlaylistSortMode, PrefixSpec};

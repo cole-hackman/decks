@@ -2191,6 +2191,37 @@ at the boundary where a human reads it, not where the number is stored.
 **Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
 snapshots.
 
+## 2026-08-06 — Epic 6 (part 6): favourite playlists
+
+**A hotkey is a promise about muscle memory.** Which means the interesting question is not "what
+does key 2 do" but "does key 2 still do that tomorrow". Un-starring has to close the gap, a dead
+playlist has to be pruned from the *stored* order and not just the response, and the cap has to be
+where the keys stop. Every one of those is about the key meaning the same thing next session.
+
+**`e.key` lies when Shift is held.** `Shift+1` arrives as `"!"` on a US layout and something else
+entirely on others. `e.code` is `Digit1` regardless. Any digit shortcut with a Shift variant has
+this bug until someone presses the Shift variant — so the test does.
+
+**Global key handlers need two guards, always.** Not while typing (inputs, textareas, selects,
+contenteditable), and not when a modifier belongs to someone else. Cheap, and forgetting either one
+produces a bug that only shows up when a user does something perfectly ordinary.
+
+**Selecting something invisible does not select it.** Jumping to a favourite inside a collapsed
+folder set the id, and the panel's own "is the selection still reachable?" effect immediately reset
+it. The fix is to make the target reachable first — expand the ancestors — rather than to fight the
+fallback. When two effects disagree about state, the one enforcing an invariant is usually right.
+
+**Report the difference between "did nothing" and "did less".** Filing four tracks when three were
+already there is not the same as filing four, and the toast says which. Same instinct as the M3U
+skip list and the undo blocked reasons: the operation knows what it did not do, so it should say.
+
+**A docs script that fails halfway is a commit that lies.** One bad assert in the middle of a
+multi-file update left `STATUS.md` and `JOURNAL.md` unwritten while the code and the parity matrix
+went in — exactly the kind of partial state the definition of done exists to prevent. Amended, and
+worth doing the doc edits as one all-or-nothing pass in future.
+
+**Next in Epic 6:** Track Timeline, the sidepanel, and History snapshots.
+
 ## 2026-08-06 — Epic 6 (part 5): key leading-zero option
 
 **Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a

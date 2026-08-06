@@ -215,7 +215,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       the browser's transient column sort — a documented divergence
 - [x] Playlist Occurrence for arbitrary N — in Playlist Tools, counting *distinct* playlists, with
       the full distribution so N does not have to be guessed
-- [ ] Favorite Playlists with hotkeys
+- [x] Favorite Playlists with hotkeys — star up to 9 (cache migration **v16**); the bar pins above
+      the browser, `1`–`9` opens and `Shift+1`–`9` files the selection. Drag-and-drop onto a
+      favourite is not done: the track table has no drag source yet
 - [ ] Sidepanel (second track browser)
 - [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist
 - [x] Share/export: CSV, M3U, HTML/PDF with column selection — `crates/share`, in Playlist Tools.

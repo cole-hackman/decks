@@ -15,10 +15,15 @@ import {
 } from "../ipc";
 import { useToast } from "./Toast";
 import { SharePlaylistSection } from "./SharePlaylistSection";
+import {
+  listFavouritePlaylists,
+  toggleFavouritePlaylist,
+} from "../ipc";
 import type {
   CrossReferenceMode,
   CrossReferencePreview,
   MergePreview,
+  FavouritePlaylist,
   OccurrenceReport,
   Playlist,
   PlaylistRenamePlan,
@@ -27,6 +32,7 @@ import type {
   SortPreview,
   Track,
 } from "../types";
+import { MAX_FAVOURITE_PLAYLISTS } from "../types";
 
 interface Props {
   libraryPath: string;
@@ -39,7 +45,8 @@ type Tool =
   | "prefix"
   | "rewrite-order"
   | "occurrence"
-  | "share";
+  | "share"
+  | "favourites";
 
 const TOOLS: { id: Tool; label: string; blurb: string }[] = [
   {
@@ -71,6 +78,12 @@ const TOOLS: { id: Tool; label: string; blurb: string }[] = [
     label: "Rewrite Order",
     blurb:
       "Persist a sort as the playlist's stored order, so it reaches the CDJ that way.",
+  },
+  {
+    id: "favourites",
+    label: "Favourites",
+    blurb:
+      "Star up to nine playlists. They pin above the browser with a hotkey each: 1–9 opens, Shift+1–9 files the selection.",
   },
   {
     id: "share",
@@ -181,8 +194,19 @@ export function PlaylistToolsView({ libraryPath }: Props) {
   const [rewritePlan, setRewritePlan] = useState<RewriteOrderPlan | null>(null);
   const [rewriteNames, setRewriteNames] = useState<string[]>([]);
 
+  const [favourites, setFavourites] = useState<FavouritePlaylist[]>([]);
+
   const [occurrenceN, setOccurrenceN] = useState(0);
   const [occurrence, setOccurrence] = useState<OccurrenceReport | null>(null);
+
+  const refreshFavourites = useCallback(() => {
+    if (!libraryPath) return;
+    listFavouritePlaylists(libraryPath)
+      .then((got) => setFavourites(Array.isArray(got) ? got : []))
+      .catch(() => setFavourites([]));
+  }, [libraryPath]);
+
+  useEffect(refreshFavourites, [refreshFavourites]);
 
   useEffect(() => {
     listPlaylists(libraryPath)
@@ -289,7 +313,10 @@ export function PlaylistToolsView({ libraryPath }: Props) {
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {tool !== "sort" && tool !== "occurrence" && tool !== "share" && (
+        {tool !== "sort" &&
+          tool !== "occurrence" &&
+          tool !== "share" &&
+          tool !== "favourites" && (
           <div className="w-64 shrink-0 overflow-auto border-r border-border p-2 text-xs">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-muted">
@@ -339,8 +366,8 @@ export function PlaylistToolsView({ libraryPath }: Props) {
                 );
               })}
             </ul>
-          </div>
-        )}
+            </div>
+          )}
 
         <div className="flex-1 overflow-auto p-4 text-xs">
           {/* ── Merge ───────────────────────────────────────────────── */}
@@ -690,6 +717,56 @@ export function PlaylistToolsView({ libraryPath }: Props) {
                     ))}
                   </ul>
                 ))}
+            </div>
+          )}
+
+          {/* ── Favourites ──────────────────────────────────────────── */}
+          {tool === "favourites" && (
+            <div className="space-y-2">
+              <p className="text-muted">
+                {favourites.length} of {MAX_FAVOURITE_PLAYLISTS} starred. The
+                hotkey is the position, and positions stay put between sessions
+                — un-starring closes the gap rather than leaving a dead key.
+              </p>
+              <ul className="space-y-0.5" data-testid="favourite-toggles">
+                {leaves.map((p) => {
+                  const fav = favourites.find((f) => f.playlist_id === p.id);
+                  const full =
+                    fav == null && favourites.length >= MAX_FAVOURITE_PLAYLISTS;
+                  return (
+                    <li key={p.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label={
+                          fav ? `Unstar ${p.name}` : `Star ${p.name}`
+                        }
+                        aria-pressed={fav != null}
+                        disabled={busy || full}
+                        className={`w-6 text-center disabled:opacity-30 ${
+                          fav ? "text-accent" : "text-muted"
+                        }`}
+                        onClick={() =>
+                          void run(async () => {
+                            await toggleFavouritePlaylist(libraryPath, p.id);
+                            refreshFavourites();
+                          })
+                        }
+                      >
+                        {fav ? "★" : "☆"}
+                      </button>
+                      <span className="w-5 tabular-nums text-muted">
+                        {fav ? fav.seq : ""}
+                      </span>
+                      <span className="truncate">{p.name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {favourites.length >= MAX_FAVOURITE_PLAYLISTS && (
+                <p className="text-amber-500" data-testid="favourites-full">
+                  All nine hotkeys are taken. Un-star one to free a key.
+                </p>
+              )}
             </div>
           )}
 

@@ -40,6 +40,7 @@ test.beforeEach(async ({ page }) => {
       };
 
       const staged: Array<Record<string, unknown>> = [];
+      let favourites: Array<{ playlist_id: string; seq: number }> = [];
 
       (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string, args: Record<string, unknown>) => {
@@ -201,6 +202,24 @@ test.beforeEach(async ({ page }) => {
             }
             case "write_share_file":
               return null;
+
+            case "list_favourite_playlists":
+              return favourites.map((f, i) => ({
+                playlist_id: f.playlist_id,
+                name: playlists.find((p) => p.id === f.playlist_id)!.name,
+                seq: i + 1,
+                track_count: (members[f.playlist_id] ?? []).length,
+              }));
+            case "toggle_favourite_playlist": {
+              const id = String(args.playlistId);
+              const had = favourites.some((f) => f.playlist_id === id);
+              favourites = had
+                ? favourites.filter((f) => f.playlist_id !== id)
+                : [...favourites, { playlist_id: id, seq: favourites.length + 1 }];
+              return !had;
+            }
+            case "add_tracks_to_playlist":
+              return (args.trackIds as string[]).map((_, i) => `c${i}`);
 
             case "playlist_occurrence": {
               const counts = new Map<string, number>();
@@ -380,4 +399,24 @@ test("share: HTML says how to get a PDF instead of pretending to write one", asy
   await expect(page.getByTestId("share-format-blurb")).toContainText(
     "Use the browser's Save to PDF",
   );
+});
+
+test("favourites: star a playlist, then jump to it with its hotkey", async ({
+  page,
+}) => {
+  await openTools(page);
+  await page.getByRole("button", { name: "Favourites", exact: true }).click();
+
+  await page.getByRole("button", { name: "Star Peak" }).click();
+  await expect(page.getByRole("button", { name: "Unstar Peak" })).toBeVisible();
+
+  // The bar lives above the track browser, so it shows up in the Library view.
+  await page.getByRole("button", { name: "Library" }).click();
+  const bar = page.getByTestId("favourite-playlists");
+  await expect(bar).toContainText("Peak");
+  await expect(bar).toContainText("1–9 opens · Shift+1–9 files the selection");
+
+  // Hotkey 1 opens it in the playlist browser.
+  await page.keyboard.press("Digit1");
+  await expect(page.getByRole("heading", { name: "Peak" })).toBeVisible();
 });
