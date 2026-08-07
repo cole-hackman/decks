@@ -359,6 +359,43 @@ fn parse_pqtz_section(section_data: &[u8]) -> Result<Vec<BeatGridEntry>> {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
+/// Squash a preview waveform down to `bars` columns, for the browser's inline
+/// per-row preview.
+///
+/// Per `docs/lexicon/02-library.md §Browser`. A row is ~28px tall and a few
+/// hundred wide, so shipping the full ~400-point preview to draw forty bars
+/// would move two orders of magnitude more data than the picture contains —
+/// across a four-thousand-track library that is the difference between a
+/// feature and a stall.
+///
+/// **Peak, not mean.** Averaging a bucket flattens exactly what the preview is
+/// for: a quiet intro with one stab in it should show the stab. Meaning is more
+/// useful than fidelity at this size.
+///
+/// Returns an empty vector for empty input or `bars == 0`, so a track with no
+/// ANLZ renders as nothing rather than as a flat line — "no data" and "silence"
+/// must not look the same.
+pub fn downsample_preview(preview: &[PreviewPoint], bars: usize) -> Vec<u8> {
+    if preview.is_empty() || bars == 0 {
+        return Vec::new();
+    }
+    // Fewer points than bars: keep what there is rather than interpolating
+    // detail that was never measured.
+    let bars = bars.min(preview.len());
+
+    (0..bars)
+        .map(|i| {
+            let start = i * preview.len() / bars;
+            let end = ((i + 1) * preview.len() / bars).max(start + 1);
+            preview[start..end.min(preview.len())]
+                .iter()
+                .map(|p| p.height)
+                .max()
+                .unwrap_or(0)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,5 +553,72 @@ mod tests {
 
         let entries = parse_beat_grid(&buf).unwrap();
         assert!(entries.is_empty(), "should bail without panicking");
+    }
+
+    // ── Row-preview downsampling ─────────────────────────────────────────────
+
+    fn preview(heights: &[u8]) -> Vec<PreviewPoint> {
+        heights
+            .iter()
+            .map(|&height| PreviewPoint {
+                height,
+                color: WaveformColor::Blue(0),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn downsampling_keeps_the_peak_of_each_bucket() {
+        // Averaging would flatten a quiet intro with one stab in it, which is
+        // exactly the shape the preview exists to show.
+        let points = preview(&[0, 0, 200, 0, 1, 1, 1, 1]);
+        assert_eq!(downsample_preview(&points, 2), vec![200, 1]);
+    }
+
+    #[test]
+    fn the_output_has_the_requested_number_of_bars() {
+        let points = preview(&[1; 400]);
+        assert_eq!(downsample_preview(&points, 40).len(), 40);
+    }
+
+    #[test]
+    fn fewer_points_than_bars_is_not_padded_out() {
+        // Interpolating detail that was never measured would be inventing it.
+        let points = preview(&[5, 9, 3]);
+        assert_eq!(downsample_preview(&points, 40), vec![5, 9, 3]);
+    }
+
+    #[test]
+    fn no_data_and_silence_do_not_look_the_same() {
+        // An empty result renders as nothing; a vector of zeroes would render
+        // as a flat line, which is a claim about the audio.
+        assert!(downsample_preview(&[], 40).is_empty());
+        assert_eq!(downsample_preview(&preview(&[0, 0, 0]), 3), vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn zero_bars_is_empty_rather_than_a_panic() {
+        assert!(downsample_preview(&preview(&[1, 2, 3]), 0).is_empty());
+    }
+
+    #[test]
+    fn every_input_point_lands_in_exactly_one_bucket() {
+        // A gap would silently drop a peak; an overlap would double-count one.
+        // 397 is prime, so the buckets cannot divide evenly.
+        let points = preview(&(0..397).map(|i| (i % 256) as u8).collect::<Vec<_>>());
+        let bars = 40;
+        let mut covered = vec![false; points.len()];
+        for i in 0..bars {
+            let start = i * points.len() / bars;
+            let end = ((i + 1) * points.len() / bars).max(start + 1);
+            for slot in covered.iter_mut().take(end.min(points.len())).skip(start) {
+                assert!(!*slot, "bucket {i} overlaps a previous one");
+                *slot = true;
+            }
+        }
+        assert!(
+            covered.iter().all(|c| *c),
+            "some points were never bucketed"
+        );
     }
 }

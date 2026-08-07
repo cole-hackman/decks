@@ -1527,6 +1527,60 @@ async fn get_anlz_waveform(library_path: String, track_id: String) -> Result<Anl
     .map_err(|e| e.to_string())?
 }
 
+/// Compact waveforms for the browser's inline per-row preview.
+///
+/// Per `docs/lexicon/02-library.md §Browser`. Takes a **batch** of track ids
+/// rather than one, because the caller is a virtualized table: it knows all
+/// forty visible rows at once, and forty IPC round-trips per scroll would cost
+/// far more than the one read each of them needs.
+///
+/// Each entry is `bars` bytes of 0–255 heights. A track with no ANLZ, or one
+/// whose file has gone, is **absent from the map** rather than present with an
+/// empty vector — "we have no waveform" and "this track is silent" must not
+/// render the same, and only absence can say the first.
+#[tauri::command]
+async fn get_row_waveforms(
+    library_path: String,
+    track_ids: Vec<String>,
+    bars: usize,
+) -> Result<std::collections::HashMap<String, Vec<u8>>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
+            .map_err(|e| e.to_string())?;
+
+        let mut out = std::collections::HashMap::new();
+        for track_id in track_ids {
+            // One unreadable track must not fail the whole batch — the row just
+            // shows nothing, which is the honest rendering of "no data".
+            let Ok(Some(track)) = db.track_by_id(&track_id) else {
+                continue;
+            };
+            let Some(analysis_path) = track.analysis_data_path else {
+                continue;
+            };
+            let Some(dat_path) = resolve_anlz_path(&library_path, &analysis_path) else {
+                continue;
+            };
+            let ext_path = dat_path.with_extension("EXT");
+            let source = if ext_path.exists() {
+                ext_path
+            } else {
+                dat_path
+            };
+
+            let preview =
+                decks_core::rekordbox_db::anlz::read_preview_waveform(&source).unwrap_or_default();
+            let squashed = decks_core::rekordbox_db::anlz::downsample_preview(&preview, bars);
+            if !squashed.is_empty() {
+                out.insert(track_id, squashed);
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ── Audio tags ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -2919,6 +2973,7 @@ pub fn run() {
             analyze_track,
             get_audio_waveform,
             get_anlz_waveform,
+            get_row_waveforms,
             read_audio_tags,
             write_audio_tags,
             relocate_scan,

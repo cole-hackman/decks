@@ -1929,3 +1929,23 @@ export async function applyCuePreset(
     currentColor,
   });
 }
+
+/**
+ * Compact waveforms for the browser's inline per-row preview.
+ *
+ * Batched on purpose: the table knows all its visible rows at once, and one
+ * round-trip per row would cost far more than the read each of them needs.
+ * Tracks with no ANLZ are **absent** from the result rather than present with
+ * an empty array — "no waveform" and "silent" must not render the same.
+ */
+export async function getRowWaveforms(
+  libraryPath: string,
+  trackIds: string[],
+  bars: number,
+): Promise<Record<string, number[]>> {
+  return invoke<Record<string, number[]>>("get_row_waveforms", {
+    libraryPath,
+    trackIds,
+    bars,
+  });
+}
