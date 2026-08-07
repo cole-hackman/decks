@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Track,
+  CuePreset,
   DeletePlanView,
   DeleteReceipt,
   DeleteBatch,
@@ -1887,4 +1888,44 @@ export async function restoreDeletedBatch(
 /** The irreversible one. Returns the bytes freed. */
 export async function purgeDeletedBatch(batchId: string): Promise<number> {
   return invoke<number>("purge_deleted_batch", { batchId });
+}
+
+// ── Cue presets ──────────────────────────────────────────────────────────────
+
+export async function listCuePresets(): Promise<CuePreset[]> {
+  return invoke<CuePreset[]>("list_cue_presets");
+}
+
+/** Promote a name+colour into a preset. Presets are immutable once created. */
+export async function createCuePreset(
+  name: string,
+  color: number | null,
+): Promise<string> {
+  return invoke<string>("create_cue_preset", { name, color });
+}
+
+export async function deleteCuePreset(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_cue_preset", { id });
+}
+
+/** Reorder, which is what changes a preset's hotkey. */
+export async function setCuePresetOrder(ids: string[]): Promise<void> {
+  return invoke<void>("set_cue_preset_order", { ids });
+}
+
+/** Stamp a preset onto a cue. Stages only the fields that actually change. */
+export async function applyCuePreset(
+  libraryPath: string,
+  cueId: string,
+  presetId: string,
+  currentName: string | null,
+  currentColor: number | null,
+): Promise<string[]> {
+  return invoke<string[]>("apply_cue_preset", {
+    libraryPath,
+    cueId,
+    presetId,
+    currentName,
+    currentColor,
+  });
 }
