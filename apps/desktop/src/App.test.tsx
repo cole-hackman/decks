@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
+import { ToastProvider } from "./components/Toast";
+import { DialogHost } from "./components/ui/Dialog";
 
 vi.mock("./ipc", () => ({
   getLibraryPath: vi.fn().mockResolvedValue(null),
@@ -16,6 +18,8 @@ vi.mock("./ipc", () => ({
   listTagCategories: vi.fn().mockResolvedValue([]),
   listTags: vi.fn().mockResolvedValue([]),
   listTrackTagsMap: vi.fn().mockResolvedValue({}),
+  keyCompatibility: vi.fn().mockResolvedValue([]),
+  applyPlaylistMerge: vi.fn().mockResolvedValue([]),
 }));
 
 const mockState = {
@@ -37,8 +41,15 @@ function renderApp() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
+    // App is always rendered inside these in main.tsx, and now depends on
+    // both — the context menu's "new playlist from selection" prompts for a
+    // name and toasts the result.
     <QueryClientProvider client={client}>
-      <App />
+      <ToastProvider>
+        <DialogHost>
+          <App />
+        </DialogHost>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

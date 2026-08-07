@@ -136,4 +136,21 @@ describe("SyncPanel", () => {
       screen.getByText(/could not be mapped to Camelot/),
     ).toBeInTheDocument();
   });
+  it("forwards the leading-zero option, and says why it exists", async () => {
+    // Sorted as text an unpadded library reads 1A, 10A, 11A, 2A. The label has
+    // to carry that, or the option looks like cosmetics.
+    render_();
+    await screen.findByText("Some Title");
+    const box = screen.getByRole("checkbox", { name: /leading zero/i });
+    expect(box).not.toBeChecked();
+    expect(screen.getByText(/so apps sort them correctly/)).toBeInTheDocument();
+
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole("button", { name: /Apply 1 change/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+
+    expect(vi.mocked(syncExecute).mock.calls.at(-1)?.[2]).toMatchObject({
+      add_leading_zero: true,
+    });
+  });
 });

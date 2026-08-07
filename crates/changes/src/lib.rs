@@ -6,6 +6,7 @@ pub mod applier;
 pub mod field_mappings;
 pub mod key_format;
 pub mod multi_edit;
+pub mod playlist_tools;
 pub mod undo;
 
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,12 @@ pub enum ChangeKind {
     PlaylistAddTrack,
     PlaylistRemoveTrack,
     PlaylistReorderTrack,
+    /// Reorder the playlists themselves within one parent folder — the tree,
+    /// not the tracks inside a playlist.
+    ///
+    /// `target_id` is the parent folder id, or absent for the root level;
+    /// `new_value` is `{order: [playlist_id, …]}`.
+    PlaylistReorder,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

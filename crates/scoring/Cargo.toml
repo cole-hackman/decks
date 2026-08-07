@@ -9,5 +9,7 @@ description = "Transition scoring and beam-search set sequencer"
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
+changes = { path = "../changes" }
 rekordbox-db = { path = "../rekordbox-db" }

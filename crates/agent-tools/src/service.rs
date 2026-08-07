@@ -369,6 +369,72 @@ impl AgentToolService {
                 }))
             }
 
+            ToolRequest::MixableTracks {
+                library_path,
+                track_id,
+                bpm_tolerance_pct,
+                key_mixing_mode,
+                match_key,
+                include_half_double,
+                must_have_cues,
+                genres,
+                limit,
+            } => {
+                use scoring::{find_mixable, KeyMixingMode, MixableContext, MixableOptions};
+
+                let db = open_library(&library_path)?;
+                let Some(source) = db.track_by_id(&track_id)? else {
+                    anyhow::bail!("track not found: {track_id}");
+                };
+                let tracks = db.tracks()?;
+
+                let defaults = MixableOptions::basic();
+                let opts = MixableOptions {
+                    // A caller asking for `0` means "any tempo"; omitting the
+                    // field means "use the default", which is not the same
+                    // thing and must not collapse into it.
+                    bpm_tolerance_pct: match bpm_tolerance_pct {
+                        Some(p) if p <= 0.0 => None,
+                        Some(p) => Some(p),
+                        None => defaults.bpm_tolerance_pct,
+                    },
+                    key_mixing_mode: match key_mixing_mode.as_deref() {
+                        Some("fuzzy") => KeyMixingMode::Fuzzy,
+                        _ => KeyMixingMode::HarmonicallyCompatible,
+                    },
+                    match_key: match_key.unwrap_or(defaults.match_key),
+                    include_half_double: include_half_double
+                        .unwrap_or(defaults.include_half_double),
+                    must_have_cues: must_have_cues.unwrap_or(defaults.must_have_cues),
+                    genres,
+                    limit: limit.unwrap_or(defaults.limit),
+                    ..defaults
+                };
+
+                let ctx = MixableContext {
+                    tracks_with_cues: db.track_ids_with_cues()?.into_iter().collect(),
+                    ..Default::default()
+                };
+
+                let matches = find_mixable(&source, &tracks, &opts, &ctx);
+                to_value(serde_json::json!({
+                    "source": { "id": source.id, "title": source.title,
+                                "artist": source.artist, "bpm": source.bpm,
+                                "key": source.musical_key },
+                    "considered": tracks.len().saturating_sub(1),
+                    "matches": matches.iter().map(|m| serde_json::json!({
+                        "id": m.track.id,
+                        "title": m.track.title,
+                        "artist": m.track.artist,
+                        "bpm": m.track.bpm,
+                        "key": m.track.musical_key,
+                        "score": m.score,
+                        "reasons": m.reasons,
+                        "bpm_relation": m.bpm_relation,
+                    })).collect::<Vec<_>>(),
+                }))
+            }
+
             ToolRequest::HealthPlayableScan {
                 library_path,
                 depth,
@@ -938,6 +1004,90 @@ mod tests {
             found,
             "expected a relocate candidate for track 1; got {value}"
         );
+    }
+
+    #[test]
+    fn mixable_tracks_filters_by_key_and_tempo() {
+        // Seed: 1 = 132 BPM / 8A, 2 = 128 BPM / 11B, 3 = 140 BPM / 8A.
+        // Out of track 1, only Gamma is harmonically compatible; Beta is three
+        // steps around the wheel, so the key rule drops it even though its
+        // tempo is the closest of the three.
+        let library_path = make_fixture_db();
+
+        let value = service()
+            .execute(ToolRequest::MixableTracks {
+                library_path: library_path.display().to_string(),
+                track_id: "1".to_owned(),
+                bpm_tolerance_pct: Some(10.0),
+                key_mixing_mode: None,
+                match_key: None,
+                include_half_double: None,
+                must_have_cues: None,
+                genres: vec![],
+                limit: None,
+            })
+            .expect("mixable");
+
+        let ids: Vec<&str> = value["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .filter_map(|m| m["id"].as_str())
+            .collect();
+        assert_eq!(ids, vec!["3"]);
+        assert_eq!(value["considered"], 2);
+        assert_eq!(value["source"]["id"], "1");
+    }
+
+    #[test]
+    fn mixable_tracks_without_the_key_rule_keeps_the_clashing_track() {
+        let library_path = make_fixture_db();
+
+        let value = service()
+            .execute(ToolRequest::MixableTracks {
+                library_path: library_path.display().to_string(),
+                track_id: "1".to_owned(),
+                bpm_tolerance_pct: Some(10.0),
+                key_mixing_mode: None,
+                match_key: Some(false),
+                include_half_double: None,
+                must_have_cues: None,
+                genres: vec![],
+                limit: None,
+            })
+            .expect("mixable");
+
+        let mut ids: Vec<&str> = value["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .filter_map(|m| m["id"].as_str())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["2", "3"]);
+    }
+
+    #[test]
+    fn a_zero_bpm_tolerance_means_any_tempo_not_the_default() {
+        // 0 is the caller saying "ignore tempo". Collapsing it into the default
+        // would silently reinstate a 6% window they asked to remove.
+        let library_path = make_fixture_db();
+
+        let value = service()
+            .execute(ToolRequest::MixableTracks {
+                library_path: library_path.display().to_string(),
+                track_id: "2".to_owned(),
+                bpm_tolerance_pct: Some(0.0),
+                key_mixing_mode: None,
+                match_key: Some(false),
+                include_half_double: None,
+                must_have_cues: None,
+                genres: vec![],
+                limit: None,
+            })
+            .expect("mixable");
+
+        assert_eq!(value["matches"].as_array().expect("matches").len(), 2);
     }
 
     #[test]

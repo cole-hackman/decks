@@ -21,6 +21,16 @@ export interface Filters {
   commentContains: string;
   /** Custom-tag IDs to restrict to. Empty = no constraint. */
   tagIds: string[];
+  /**
+   * Tag ids grouped by category, for the Custom Tags page's selection
+   * semantics: **OR within a category, AND across categories**. Picking House
+   * and Techno from Genre plus Peak from Energy means
+   * `(House OR Techno) AND Peak` — which `tagIds` + `tagMatchAll` cannot say,
+   * since they are one flat set with one combinator.
+   *
+   * When set, this takes precedence over `tagIds`.
+   */
+  tagGroups?: string[][];
   /** When true, a track must have *all* `tagIds` (AND); when false, *any*
    *  matching tag is enough (OR). */
   tagMatchAll: boolean;
@@ -116,7 +126,8 @@ export function activeFilterCount(f: Filters): number {
   if (f.notInAnyPlaylist) n += 1;
   if (f.missingFiles) n += 1;
   if (f.commentContains.trim().length > 0) n += 1;
-  if (f.tagIds.length > 0) n += 1;
+  if (f.tagIds.length > 0 || (f.tagGroups?.some((g) => g.length > 0) ?? false))
+    n += 1;
   return n;
 }
 
@@ -224,7 +235,16 @@ export function applyFilters(
     if (comment && !(t.comment?.toLowerCase().includes(comment) ?? false))
       return false;
 
-    if (filters.tagIds.length > 0) {
+    const groups = filters.tagGroups?.filter((g) => g.length > 0) ?? [];
+    if (groups.length > 0) {
+      const bound = ctx.tagsByTrack.get(t.id);
+      if (!bound || bound.size === 0) return false;
+      // Every category must contribute at least one tag: AND across groups,
+      // OR within each.
+      for (const group of groups) {
+        if (!group.some((id) => bound.has(id))) return false;
+      }
+    } else if (filters.tagIds.length > 0) {
       const bound = ctx.tagsByTrack.get(t.id);
       if (!bound || bound.size === 0) return false;
       if (filters.tagMatchAll) {

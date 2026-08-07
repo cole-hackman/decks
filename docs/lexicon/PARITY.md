@@ -12,23 +12,38 @@ regardless of how much of Lexicon they represent.
 
 ## Summary
 
-| Domain | done | partial | missing | deferred |
-|---|---:|---:|---:|---:|
-| Interop & sync | 4 | 7 | 1 | 11 |
-| Library & browser | 3 | 7 | 6 | 0 |
-| Smartlists | 2 | 1 | 0 | 0 |
-| Analysis | 0 | 5 | 4 | 0 |
-| Player, cues, generator | 7 | 7 | 2 | 0 |
-| Files | 5 | 6 | 0 | 0 |
-| Health | 2 | 2 | 1 | 0 |
-| Recipes & editing | 7 | 1 | 1 | 0 |
-| Streaming | 0 | 1 | 8 | 0 |
-| History & backup | 2 | 0 | 1 | 2 |
-| Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **34** | **37** | **19** | **16** |
+| Domain | done | partial | missing | blocked | deferred |
+|---|---:|---:|---:|---:|---:|
+| Interop & sync | 5 | 5 | 1 | 1 | 11 |
+| Library & browser | 12 | 3 | 3 | 0 | 0 |
+| Smartlists | 2 | 1 | 0 | 0 | 0 |
+| Analysis | 2 | 4 | 4 | 1 | 0 |
+| Player, cues, generator | 7 | 6 | 3 | 0 | 0 |
+| Files | 7 | 4 | 0 | 0 | 0 |
+| Health | 2 | 1 | 1 | 0 | 0 |
+| Recipes & editing | 7 | 1 | 1 | 0 | 0 |
+| Streaming | 1 | 1 | 7 | 0 | 0 |
+| History & backup | 3 | 0 | 0 | 0 | 2 |
+| Extensibility | 0 | 0 | 0 | 0 | 3 |
+| **Total** | **48** | **26** | **20** | **2** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
+
+**How to read these numbers.** They are self-reported against a matrix written from Lexicon's
+manual, not from Lexicon itself. Three specific limits apply:
+
+- The denominator may be short. `lexicondj.com/features` has never been readable from this
+  environment (HTTP 403 — see [`GAPS.md`](GAPS.md) gap 1), and it enumerates named features the
+  manual does not.
+- Nothing here has been checked against a running Lexicon or a real Rekordbox library. Every
+  fixture in the repository is synthetic; real ones are gitignored.
+- `done` means "parity or better *on the behaviour the manual describes*". Several `done` rows
+  carry a divergence in their Notes — read the row, not the count.
+
+The `blocked` column is new: two rows cannot be built as specified (`Colors → nearest` has no
+`Track` colour field to map to; the Camelot/Open Key posture is a licensing decision, not code).
+They were previously miscounted as `partial` and `missing`.
 
 ---
 
@@ -42,8 +57,8 @@ of library *editing*, *automation*, or *set preparation*.
 | Full / Playlist / Modified sync | partial | Modes exist; no per-app modified watermark, no Full-Sync delete | 6 |
 | Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
-| Key conversion | partial | Camelot + Open Key done; no leading-zero option | 6 |
-| Colors → nearest | **missing** | Option plumbed through `SyncOptions` and **ignored** | 6 |
+| Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
+| Colors → nearest | **blocked** | `Track` has no colour field and no change kind writes `ColorID` — nothing to map. Not offered as a toggle rather than shipped inert | 6 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
 | Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
@@ -55,21 +70,22 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Virtualized track table | partial | Resizable, sortable, inline column search, multi-select | — |
-| Search operators (`None`, `>`, `<`, ranges, `!`) | **partial** | Implemented in the smartlist rule engine; the track-browser search box does not yet share the vocabulary | 1 |
-| Tag query language (`~`, `!`, comma) in the search box | **missing** | The rule engine expresses the same logic via `has_all`/`has_any`/`has_none`; the browser search syntax is separate | 5 |
-| Key-notation-aware search | **partial** | `canonical_key` handles Camelot / Open Key / musical spellings in smartlist rules; not yet wired into the browser search box | 1 |
+| Search operators (`None`, `>`, `<`, ranges, `!`) | **done** | `smartlists::search` parses the box into rules the same evaluator runs — one implementation, not two | 1 |
+| Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
+| Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
 | Spreadsheet keyboard navigation | **missing** | | 2 |
 | Inline per-row waveform preview | **missing** | | 2 |
-| Compatible-key indicator | **missing** | | 2 |
-| Track Timeline | **missing** | | 6 |
-| Playlists tree | partial | No folder-drop, no M3U import, no drag-between, no create-from-selection | 6 |
-| Favorite Playlists + hotkeys | **missing** | | 6 |
-| Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **missing** | 5 tools; Rewrite Order is high value for CDJ export | 6 |
-| Playlist Occurrence | partial | Only the N=0 case | 6 |
-| Custom Tags | partial | Strong already; missing category colours, drag-reorder, OR/AND selection on the Tags page, MyTag import, per-tag hotkeys | 5 |
+| Compatible-key indicator | **done** | A dot on keys that mix out of the selected track, following the global Key Mixing Mode. Positive mark only | 2 |
+| Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |
+| Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |
+| Playlists tree | partial | M3U import and create-from-selection done. Still no folder-drop and no drag-between | 6 |
+| Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
+| Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
+| Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
+| Custom Tags | partial | OR-within-category / AND-across-category selection now honoured. Still missing category colours, drag-reorder, MyTag import, per-tag hotkeys | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
-| Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk deliberately not offered | 5 |
+| Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |
 | Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Extra artist fields need a wider `Track` | 5 |
 
 ## Smartlists — `03-smartlists.md`
@@ -92,7 +108,8 @@ of library *editing*, *automation*, or *set preparation*.
 | Energy | partial | Cached + displayed; no defined scale, no deliberate fill | 4 |
 | Danceability / Popularity / Happiness | **missing** | | 4 |
 | Auto-analyze on add | **missing** | | 4 |
-| Mixable Tracks | partial | **`scoring::score_transition` + `suggest_next_tracks` exist with no UI caller** | 6 |
+| Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 9 of 13 rules, `Use as next track`, saveable templates. The 4 missing rules (colour, date added, Popularity/Danceability/Happiness) need fields `Track` does not carry | 6 |
+| Key Mixing Mode | **done** | Global setting; Harmonically Compatible and Fuzzy, shared with the compatible-key set the panel shows | 6 |
 | Beatshift Fixer | **missing** | | 4 |
 
 ## Player, cues, generator — `05-cues-player.md`
@@ -121,7 +138,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Watch folder | **done** | Debounced scan rather than a native watcher; settle rule; dismissals | **4** |
-| Incoming staging | partial | Watch queue, Selected done with auto-advance + D hotkey; no delete-from-disk | 4 |
+| Incoming staging | **done** | Watch queue, Selected done with auto-advance + D hotkey, archive, and delete-from-disk as the third triage outcome | 4 |
 | Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
@@ -129,6 +146,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
+| Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |
 | Automatic Actions settings group | partial | Group + auto-analyse work; other four disabled with reasons | 4 |
 
 ## Health — `07-health.md`
@@ -156,17 +174,21 @@ of library *editing*, *automation*, or *set preparation*.
 
 ## Streaming — `08-streaming.md`
 
-All **missing** except Track Matcher (partial: no `.m3u8`, no separator choice, no playlist
-creation, no onward search). Beatport / Beatsource / Tidal / SoundCloud sources, Beatport catalog +
-cart + purchase-replacement, Charts, Store Links, Track Discovery, Send To, Transfer Streaming To
-Local, Share/export (CSV/M3U/HTML/PDF). **Epic 7**, except Share/export → **Epic 6**.
+| Feature | Status | Notes | Epic |
+|---|---|---|---|
+| Share / export (CSV, M3U, HTML/PDF, quick copy) | **done** | `crates/share`, in Playlist Tools. CSV formula injection defused; M3U reports the pathless tracks it could not carry; HTML self-contained, PDF via the browser. Header drag-to-reorder not done — the picker orders by tick order | 6 |
+| Track Matcher | partial | No `.m3u8`, no separator choice, no playlist creation, no onward search | 7 |
+
+Everything else is **missing** and belongs to **Epic 7**: Beatport / Beatsource / Tidal /
+SoundCloud sources, Beatport catalog + cart + purchase-replacement, Charts, Store Links, Track
+Discovery, Send To, Transfer Streaming To Local.
 
 ## History & backup — `09-history-backup.md`
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | DJ app backup before write | **done** | `WriteGuard` — stricter than Lexicon | — |
-| History / sessions | **missing** | Snapshot semantics + deleted-set ledger | 6 |
+| History / sessions | **done** | Snapshot tables (migration **v17**), idempotent import, deleted-set ledger, rating + location, save-as-playlist with a labelled re-match | 6 |
 | Database backup / restore (ZIP) | **done** | JSON rather than ZIP: inspectable and schema-tolerant. Analysis caches excluded; nothing auto-deleted | 5 |
 | Cloud DB backup · Cloud Storage | deferred | Requires accounts + hosting; conflicts with local-first, no-telemetry | — |
 

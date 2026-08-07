@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeftIcon } from "lucide-react";
 import { usePlaylistDetail, usePlaylists } from "../hooks/usePlaylists";
 import { findDuplicates } from "../lib/playlist-dedupe";
+import { TrackTimeline } from "./TrackTimeline";
 import type { Playlist, Track } from "../types";
 
 function formatDuration(secs: number | null): string {
@@ -29,6 +30,9 @@ interface Props {
     anchor: { x: number; y: number },
     options?: { playlistId?: string },
   ) => void;
+  /** Jump to a playlist from outside — a favourite hotkey, for instance.
+   *  Each distinct value selects once; the panel owns the selection after. */
+  focusPlaylistId?: string | null;
 }
 
 interface TreeNode {
@@ -105,6 +109,7 @@ export function PlaylistPanel({
   selectedTrackId,
   onSelectTrack,
   onTrackContextMenu,
+  focusPlaylistId = null,
 }: Props) {
   const [filter, setFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -155,6 +160,26 @@ export function PlaylistPanel({
     const firstLeaf = visibleRows.find((r) => !isFolder(r.playlist));
     setSelectedId(firstLeaf ? firstLeaf.playlist.id : null);
   }, [selectableIds, selectedId, visibleRows]);
+
+  // Jump to a playlist asked for from outside. It also has to be *reachable*:
+  // a favourite inside a collapsed folder would otherwise select invisibly and
+  // then be reset by the fallback effect above.
+  useEffect(() => {
+    if (focusPlaylistId == null) return;
+    const target = playlists.find((p) => p.id === focusPlaylistId);
+    if (!target) return;
+    setFilter("");
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      let parent = target.parent_id;
+      while (parent != null) {
+        next.add(parent);
+        parent = playlists.find((p) => p.id === parent)?.parent_id ?? null;
+      }
+      return next;
+    });
+    setSelectedId(focusPlaylistId);
+  }, [focusPlaylistId, playlists]);
 
   const toggleFolder = (id: string) => {
     setExpanded((prev) => {
@@ -263,13 +288,23 @@ export function PlaylistPanel({
             <p className="mt-2 text-sm text-ink-muted">No tracks in this playlist.</p>
           </div>
         ) : (
-          <PlaylistTrackList
-            tracks={detail.tracks}
-            playlistId={detail.playlist.id}
-            selectedTrackId={selectedTrackId ?? null}
-            onSelectTrack={onSelectTrack}
-            onTrackContextMenu={onTrackContextMenu}
-          />
+          <>
+            <TrackTimeline
+              tracks={detail.tracks}
+              label={detail.playlist.name}
+              onSelectTrack={(id: string) => {
+                const found = detail.tracks.find((t) => t.id === id);
+                if (found) onSelectTrack?.(found);
+              }}
+            />
+            <PlaylistTrackList
+              tracks={detail.tracks}
+              playlistId={detail.playlist.id}
+              selectedTrackId={selectedTrackId ?? null}
+              onSelectTrack={onSelectTrack}
+              onTrackContextMenu={onTrackContextMenu}
+            />
+          </>
         )}
       </div>
     </div>
@@ -381,7 +416,7 @@ function PlaylistTrackList({
 }) {
   const dupes = findDuplicates(tracks);
   return (
-    <div>
+    <div data-testid="playlist-track-list">
       <div className="border-b border-edge bg-base px-4 py-2.5">
         <p className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-muted">
           <span>

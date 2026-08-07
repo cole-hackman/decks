@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlaylistPanel } from "./PlaylistPanel";
@@ -82,7 +82,10 @@ describe("PlaylistPanel", () => {
     render(<PlaylistPanel libraryPath="/db" onSelectTrack={onSelectTrack} />, {
       wrapper,
     });
-    fireEvent.click(await screen.findByRole("button", { name: /Dark Matter/ }));
+    // Scoped to the row list: the timeline above it also has a bar per track,
+    // and its label starts with the title too.
+    const list = await screen.findByTestId("playlist-track-list");
+    fireEvent.click(within(list).getByRole("button", { name: /Dark Matter/ }));
     expect(onSelectTrack).toHaveBeenCalledWith(
       expect.objectContaining({ id: "1", title: "Dark Matter" }),
     );

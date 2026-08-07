@@ -62,7 +62,23 @@ good idea for reading set flow at a glance.
 *Large playlists* — hidden by default beyond a size threshold, since it's a set-building tool, not
 a collection tool. Also appears for history sets.
 
-*decks status* — **missing.**
+*decks status* — **done**, minus the fields we do not model. A chart above the playlist tracks —
+and above a history set, per the spec — showing **BPM, Energy, Rating or Key**, with bars coloured
+by **key** or by **BPM change** (green rose, red fell, grey held).
+
+- **Heights scale within the set**, not against an absolute range: a warm-up running 118–124 shows
+  its shape rather than six flat bars near the bottom of a 60–200 axis.
+- **A missing tempo is `unknown`, not `same`.** "Unchanged" is a claim about two numbers; painting
+  an absence grey would read as information the chart does not have.
+- **A hover label carries the value and the direction**, so colour is never the only way to read
+  the chart.
+- **Hidden by default past 200 tracks**, per the spec's reasoning: a set-building tool, not a
+  collection tool. Still available on request.
+- It also counts **key changes that leave the wheel**, which is the fastest way to spot the one
+  transition that will not work.
+
+**Not offered:** Danceability, Popularity and Happiness — `Track` does not carry them (Epic 4).
+Absent beats a flat empty chart.
 
 *Epic* — **6**.
 
@@ -97,7 +113,24 @@ drag between playlists, create-from-selection.
 *What it does* — Star any playlist to pin it above the track browser as a drop target. **Hotkeys
 per favourite** jump to that playlist or add the selection to it. A fast filing system.
 
-*decks status* — **missing.**
+*decks status* — **done**, except the drop target. Star from **Playlist Tools → Favourites**; the
+bar pins above the track browser with a hotkey each — **`1`–`9` opens, `Shift+1`–`9` files the
+selection**. Cache migration **v16**.
+
+Notes:
+
+- **The hotkey is the position, and positions are stable.** Un-starring closes the gap rather than
+  leaving a hole — a key that quietly changes what it does between sessions is worse than one that
+  does nothing.
+- **Nine is the cap**, because that is where the hotkeys stop. A tenth star is refused with that
+  reason rather than stored where nobody could press it.
+- **A favourite whose playlist is gone is pruned on read**, from the table as well as the response,
+  so the stored order and the shown order never disagree.
+- Filing skips tracks the playlist already holds and reports how many, rather than staging
+  duplicates or silently doing less than asked.
+
+**Not done:** drag-and-drop onto a favourite. The hotkeys and the `+` button cover the same intent,
+and the track table has no drag source yet.
 
 *Epic* — **6**.
 
@@ -118,7 +151,25 @@ is that CDJs and Denon hardware can only sort by a few columns and know nothing 
 Danceability. Sort by Energy in Lexicon, rewrite the order, and the playlist arrives on the gear in
 that order. For a Rekordbox-first tool this is high-value and cheap.
 
-*decks status* — **missing**, all five.
+*decks status* — **done**, all five. **Playlist Tools** in the sidebar; every tool previews before
+it does anything, and everything it does is a staged change that goes through review and Sync.
+
+- **Merge** creates a new playlist and leaves the sources alone; the preview reports how many
+  duplicate rows were dropped, not just the final count.
+- **Sort** needed a new `ChangeKind::PlaylistReorder`, which writes `djmdPlaylist.Seq`. The parent
+  folder is part of the applier's `WHERE`, so a reorder cannot reparent a playlist by accident.
+- **Cross Reference** warns before the `in none` mode, per the spec, and an empty selection returns
+  nothing rather than the vacuous "in all zero playlists" answer.
+- **Prefix** numbers in the order playlists were ticked, and `replace existing number` stops
+  prefixes from stacking on a second run. A number that is part of the name (`7empest`) is not
+  stripped — the signal is the separator.
+- **Rewrite Order** stages a `PlaylistReorderTrack`. Tracks the sorted view left out are appended
+  rather than dropped: a filter being active must not remove tracks from the playlist.
+
+**Divergence on Rewrite Order.** Lexicon persists "the current visible sort" of the browser;
+`decks` sorts inside the tool, on a field you pick. The browser's column sort is transient UI state
+that is not plumbed to this view, and a button whose result depends on which column you last
+clicked elsewhere is worse than one that states its input.
 
 *Epic* — **6**.
 
@@ -235,11 +286,11 @@ selection.
 makes archiving safe to do on a whim. It stages the playlist removals *before* the track deletes,
 so the playlist rows are never left pointing at a track that no longer exists.
 
-**Delete-from-disk is deliberately not implemented**, on the same grounds as Find Broken Tracks: it
-is the one operation with no undo, and a program whose first rule is that the library is read-only
-should not be the thing that deletes a DJ's audio. The confirmation dialog says so in as many
-words. If this is wanted it should be an explicit decision with its own guard rails, not something
-that arrives as part of a cleanup button.
+**Delete-from-disk is a separate button, never a side effect of cleanup.** It was declined here at
+first on the grounds that it is the one operation with no undo; it now ships as its own action with
+its own guard rails, per `06-files.md §Delete from disk`. Cleanup's confirmation still says the
+audio files stay where they are, because they do — deleting them is the other button, and it has
+its own preview.
 
 *Epic* — **5**.
 

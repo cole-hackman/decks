@@ -56,6 +56,29 @@ pub fn track_ids_in_any_playlist(conn: &Connection) -> Result<Vec<String>> {
         .map_err(Into::into)
 }
 
+/// How many **distinct** playlists hold each track.
+///
+/// Tracks in no playlist are absent from the map rather than present with a
+/// zero — the query cannot see them, and inventing rows for them here would
+/// mean loading the whole library into a map that only two callers need.
+/// `occurrence_counts` is what turns that absence back into an N=0 answer.
+///
+/// Distinct because Rekordbox allows the same track twice in one playlist, and
+/// "appears in two playlists" must not be satisfied by appearing twice in one.
+pub fn playlist_occurrence(conn: &Connection) -> Result<std::collections::HashMap<String, usize>> {
+    let mut stmt = conn.prepare(
+        "SELECT ContentID, COUNT(DISTINCT PlaylistID)
+         FROM djmdSongPlaylist
+         WHERE ContentID IS NOT NULL
+         GROUP BY ContentID",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
+    })?;
+    rows.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()
+        .map_err(Into::into)
+}
+
 pub fn entries(conn: &Connection, playlist_id: &str) -> Result<Vec<PlaylistEntry>> {
     let mut stmt = conn.prepare(
         "SELECT PlaylistID, ContentID, TrackNo
@@ -155,5 +178,25 @@ mod tests {
         sorted.sort();
         sorted.dedup();
         assert_eq!(sorted.len(), ids.len(), "result must be distinct");
+    }
+
+    #[test]
+    fn playlist_occurrence_counts_distinct_playlists() {
+        let path = make_db();
+        let conn = create_test_db(&path).unwrap();
+        // Seed: track 1 in "Techno Set", track 2 in "Techno Set", track 3 in
+        // "House Vibes". Add track 1 to "House Vibes" twice — the duplicate
+        // row must not make it look like three playlists.
+        conn.execute_batch(
+            "INSERT INTO djmdSongPlaylist (ID, PlaylistID, ContentID, TrackNo)
+             VALUES ('x1', 3, '1', 2), ('x2', 3, '1', 3);",
+        )
+        .unwrap();
+
+        let counts = playlist_occurrence(&conn).unwrap();
+        assert_eq!(counts.get("1"), Some(&2));
+        assert_eq!(counts.get("2"), Some(&1));
+        // A track in no playlist is absent, not zero.
+        assert_eq!(counts.get("4"), None);
     }
 }

@@ -32,6 +32,7 @@ audio-tags = { path = "../../../crates/audio-tags" }
 audio-analysis = { path = "../../../crates/audio-analysis" }
 relocate = { version = "0.1.0", path = "../../../crates/relocate" }
 scoring = { path = "../../../crates/scoring" }
+share = { path = "../../../crates/share" }
 smart-fixes = { path = "../../../crates/smart-fixes" }
 smartlists = { path = "../../../crates/smartlists" }
 cue-generator = { path = "../../../crates/cue-generator" }

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Track } from "../types";
@@ -28,6 +28,14 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 vi.mock("../hooks/useLibrary");
 import { useLibrary } from "../hooks/useLibrary";
+
+// The operator-search path talks to the smartlist engine over IPC. Mocked so
+// the table's own tests do not depend on a Tauri host.
+vi.mock("../ipc", () => ({
+  searchHasOperators: vi.fn(),
+  searchTracks: vi.fn(),
+}));
+import { searchHasOperators, searchTracks } from "../ipc";
 
 import { TrackTable } from "./TrackTable";
 import { EMPTY_FILTERS, type Filters, type FilterContext } from "../lib/filters";
@@ -95,6 +103,8 @@ beforeEach(() => {
     isLoading: false,
     error: null,
   } as ReturnType<typeof useLibrary>);
+  vi.mocked(searchHasOperators).mockResolvedValue(false);
+  vi.mocked(searchTracks).mockResolvedValue([]);
 });
 
 describe("TrackTable", () => {
@@ -207,5 +217,107 @@ describe("TrackTable", () => {
     render(<TrackTable libraryPath="/tmp/master.db" filters={EMPTY_FILTERS} filterCtx={EMPTY_CTX} selectedTrackIds={new Set()} onSelectionChange={vi.fn()} onSelect={vi.fn()} />, { wrapper });
     const keyCell = screen.getByText("8A");
     expect(keyCell).toHaveStyle({ color: "#9F4FCA" });
+  });
+  it("marks only the keys that mix with the selected track", async () => {
+    // A positive mark only: an unmarked row means "not compatible or we cannot
+    // tell", and marking every non-match would drown the ones that are.
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+        compatibleWith={["8A"]}
+      />,
+      { wrapper },
+    );
+    // Fixture keys are 8A and 11B; only 8A mixes.
+    const marks = await screen.findAllByLabelText(
+      "mixes with the selected track",
+    );
+    expect(marks).toHaveLength(1);
+    expect(marks[0].parentElement?.textContent).toContain("8A");
+  });
+
+  it("marks nothing when there is no reference key", async () => {
+    // Better no indicator at all than one that marks the whole library.
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={EMPTY_FILTERS}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+        compatibleWith={[]}
+      />,
+      { wrapper },
+    );
+    await screen.findByText("Dark Matter");
+    expect(
+      screen.queryAllByLabelText("mixes with the selected track"),
+    ).toHaveLength(0);
+  });
+  it("keeps plain text local — no engine round-trip for a band name", async () => {
+    // Typing a name must not wait on IPC.
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={withQuery("dark")}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText("Dark Matter")).toBeInTheDocument();
+    await waitFor(() => expect(searchHasOperators).toHaveBeenCalledWith("dark"));
+    expect(searchTracks).not.toHaveBeenCalled();
+  });
+
+  it("sends an operator query to the engine and filters by what comes back", async () => {
+    vi.mocked(searchHasOperators).mockResolvedValue(true);
+    // Only the first fixture track matches.
+    vi.mocked(searchTracks).mockResolvedValue(["1"]);
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={withQuery("bpm>128")}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(searchTracks).toHaveBeenCalledWith("/tmp/master.db", "bpm>128"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Acid Rain")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Dark Matter")).toBeInTheDocument();
+  });
+
+  it("says so when an operator search fails, rather than looking like a narrow match", async () => {
+    vi.mocked(searchHasOperators).mockResolvedValue(true);
+    vi.mocked(searchTracks).mockRejectedValue(new Error("boom"));
+    render(
+      <TrackTable
+        libraryPath="/tmp/master.db"
+        filters={withQuery("bpm>128")}
+        filterCtx={EMPTY_CTX}
+        selectedTrackIds={new Set()}
+        onSelectionChange={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(await screen.findByTestId("search-error")).toHaveTextContent(
+      "showing a plain text match instead",
+    );
   });
 });

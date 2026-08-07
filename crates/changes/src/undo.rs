@@ -83,7 +83,8 @@ pub fn invert(change: &StagedChange) -> Reversal {
         | ChangeKind::CueMetadataEdit
         | ChangeKind::TrackRelocate
         | ChangeKind::PlaylistRename
-        | ChangeKind::PlaylistReorderTrack => match &change.old_value {
+        | ChangeKind::PlaylistReorderTrack
+        | ChangeKind::PlaylistReorder => match &change.old_value {
             None => Reversal::Blocked(NOT_RECORDED),
             Some(old) => Reversal::Reversible(Inverse {
                 kind: change.kind.clone(),
@@ -196,6 +197,7 @@ pub fn describe(change: &StagedChange) -> String {
             )
         }
         ChangeKind::PlaylistReorderTrack => "move the track back".to_string(),
+        ChangeKind::PlaylistReorder => "restore the previous playlist order".to_string(),
         ChangeKind::TrackDeleteCue => "restore the deleted cue".to_string(),
         _ => format!("{:?} on {target}", change.kind),
     }

@@ -2045,5 +2045,405 @@ non-deterministic, which is the one property it was chosen for.
 write, and it is not optional — so the honest note is "already covered, more strictly" rather than
 shipping a second backup mechanism nobody needs.
 
+## 2026-08-06 — Epic 6 (part 1): Mixable Tracks
+
+**A capability with no caller is not a feature.** `score_transition` and `suggest_next_tracks` had
+been in the tree since long before this initiative, fully tested and completely unreachable. The
+parity audit's most useful finding was not a gap — it was working code nobody could get to. Worth
+looking for more of those before writing anything new.
+
+**Dead code hides bugs, because nothing runs it.** The stranded scorer carried its own Camelot
+parser that only accepted `8A`-style input, so every library storing `C minor` scored as "Missing
+Key Data" on every comparison. It had unit tests. They all passed — they only ever fed it Camelot.
+Tests written alongside a parser test the inputs its author imagined, which is a different set from
+the inputs the field holds.
+
+**Filter versus rank is a product decision, not an implementation detail.** "Must have cue points"
+could plausibly be a scoring term. It must not be: a rule the user switched on has to remove
+things, or the switch is a lie. The corollary is that the UI owes them the count — "12 of 4,213"
+is the only thing that distinguishes "my library is small" from "my rules are too tight".
+
+**Omitted and zero are different values.** `bpm_tolerance_pct: 0` means "ignore tempo"; omitting it
+means "use the default". `unwrap_or(default)` collapses them and quietly reinstates a 6% window the
+caller explicitly removed. Anywhere an option's *absence* is meaningful, `Option<T>` has to survive
+all the way to the branch that reads it.
+
+**Percentages need a stated base.** A ±3% double-time match around 140 BPM: 3% of *what*? Taking it
+against the source gives ±4.2 and rejects everything; against the stretched target it gives ±8.4
+and works. Neither is wrong in the abstract — the bug is not writing down which one you meant.
+
+**One definition of the defaults, served across the wire.** The panel originally had a
+`BASIC_OPTIONS` literal mirroring `MixableOptions::basic()`, with a comment claiming a test kept
+them in sync. There was no such test and no way to write a cheap one. Replaced with a
+`mixable_default_options` command and a panel that does not search until it has the answer; the
+duplicate is gone rather than documented.
+
+**A global setting must win over stored state.** Templates carry the whole option set, including
+the key mixing mode — so loading a six-month-old template would silently flip a global preference.
+The backend overwrites that field with the stored value on every search. Persisted structures that
+contain a copy of a global need one authoritative reader, or the global drifts.
+
+**Unknown is not a wildcard.** An unparseable key could compare as "compatible with everything" or
+"compatible with nothing". Wildcard floods the results with exactly the un-analysed tracks the
+user is least able to mix; nothing is the honest answer, and matches how `must_have_cues` treats an
+un-cued track.
+
+**Deterministic ties, for the third time this initiative.** Duplicates needed it, the cue recipes
+needed it, and a mixable list needs it most of all: it is read live, mid-set, and a list that
+reorders between two identical searches reads as a bug in the tool at the worst possible moment.
+Sorting by score then by id costs nothing and should probably be the default reflex.
+
+**Playwright `getByRole`/`getByLabel` match as substrings — fourth time.** "Mixable tracks" also
+matched "Hide mixable tracks" and "Close mixable tracks". `{ exact: true }` on any accessible name
+that is a prefix of another one, from now on, without waiting for the failure.
+
+**Next in Epic 6:** the playlist tools (Merge, Sort, Cross Reference, Prefix, Rewrite Order) are
+the most self-contained remaining slice; Track Timeline and the sidepanel are the largest.
+
+## 2026-08-06 — Epic 6 (part 2): playlist tools
+
+**A vacuous truth is still a wrong answer.** "Tracks in all of the zero playlists you selected" is,
+formally, the entire library. Every set-intersection implementation gets this for free and every
+one of them is wrong to ship it: the user who selected nothing wants nothing back. Worth checking
+the empty case of any fold that starts from an identity element.
+
+**Negating a comparator negates more than the direction.** The descending sort flipped the null
+handling along with everything else, so un-analysed tracks led the set. The fix is to put the
+direction *inside* the comparison, after the null branches. Any comparator with a "these sort last
+regardless" rule cannot be reversed from outside.
+
+**Tick order is data.** Prefix numbers playlists in the order they were ticked and Merge
+concatenates in it, so the selection had to be an ordered list rather than a `Set` — the obvious
+data structure would have silently substituted database order for the user's intent. The UI shows
+the index next to each ticked row, so the ordering is visible rather than implied.
+
+**The separator is what makes a number a prefix.** `01 - House` has one; `7empest` and `2 Bad Mice`
+do not. Stripping leading digits unconditionally mangles real titles, and not stripping them at all
+makes a second Prefix run produce `02 - 01 - House`. One character of context decides.
+
+**A tool that only reorders should only be able to reorder.** The playlist reorder puts the parent
+folder in its `WHERE` clause, so a malformed change fails instead of reparenting a playlist as a
+side effect. Cheap to add at write time, impossible to detect afterwards.
+
+**State the input rather than inheriting it invisibly.** Lexicon's Rewrite Order uses "the current
+visible sort", which is fine in an app where the browser and the tool are the same surface. Here it
+would mean a button whose result depends on which column you last clicked in a different view.
+Picking the field in the tool is less magic and more honest, and it is written down as a
+divergence rather than left to be discovered.
+
+**Playwright and Testing Library disagree about accessible names.** Playwright's `getByRole` name
+matches as a case-insensitive substring — the "Cross Reference" tab swallowed the "Cross reference"
+button. Testing Library's matches in full and has no `exact` option at all, so copying the
+Playwright idiom across fails typecheck. Two libraries, two defaults, one habit that does not
+transfer.
+
+**Nothing to do should produce nothing.** An order that already matches and a rename set that is
+already right both return empty rather than staging no-ops. A review list full of changes that
+change nothing trains people to approve without reading.
+
+**Next in Epic 6:** Track Timeline, Playlist Occurrence for arbitrary N, favourite playlists with
+hotkeys, the sidepanel, History snapshots, and share/export.
+
+## 2026-08-06 — Epic 6 (part 3): playlist occurrence
+
+**A `GROUP BY` cannot count what it cannot see.** "In exactly 0 playlists" is the case people ask
+for most, and it is precisely the one a count-per-track query returns nothing for — the rows do not
+exist. The zero has to be supplied from the other side, by walking the library and treating absence
+as zero. Any aggregate used as a *filter* has this shape: check what the empty bucket does before
+shipping it.
+
+**`DISTINCT` is not a detail when the schema allows duplicates.** Rekordbox lets the same track sit
+twice in one playlist, so a plain `COUNT(PlaylistID)` reports it as "in two playlists" — the exact
+wrong answer for a feature whose only job is that number. The test adds a duplicate row on purpose,
+because without one the naive query passes.
+
+**Answer the question the number box implies.** "How many playlists?" asks the user to guess. The
+distribution — 1 track in zero, 4 in one, 2 in two — makes the guess unnecessary and turns a
+one-shot query into something explorable. Cheap: the count map was already built.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, History
+snapshots, and share/export.
+
+## 2026-08-06 — Epic 6 (part 4): share / export
+
+**An export is an attack surface.** CSV is the obvious one — a leading `=` in a free-text comment
+becomes an executable formula the moment the file opens in Excel — but the same shape shows up in
+the HTML (escape everything) and in the filename (a playlist called `../..` is a path). Three
+different escapes, one habit: whenever library data crosses into a *format*, ask what that format
+executes.
+
+**Say what the export could not include.** An M3U cannot hold a track with no file path. Silently
+dropping it produces a playlist that is quietly short, and the DJ finds out on the night. The
+skipped titles ride back with the content, and the UI names them — same principle as the undo
+entries carrying their blocked reasons.
+
+**Do not reimplement a print dialog.** The spec says HTML/PDF; Lexicon's PDF is the browser's Save
+to PDF, and copying that is not a shortcut but the right answer. A PDF writer would be a large
+dependency to duplicate something every OS already ships.
+
+**Self-contained means it works on the night.** The exported HTML has inline CSS and no external
+references, because the realistic reading environment is a laptop on a USB stick with no network.
+Worth asking of any artefact that leaves the app.
+
+**One decimal on BPM.** `128.0300003` is not a different fact about the track than `128.03`. Format
+at the boundary where a human reads it, not where the number is stored.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
+snapshots.
+
+## 2026-08-06 — Epic 6 (part 6): favourite playlists
+
+**A hotkey is a promise about muscle memory.** Which means the interesting question is not "what
+does key 2 do" but "does key 2 still do that tomorrow". Un-starring has to close the gap, a dead
+playlist has to be pruned from the *stored* order and not just the response, and the cap has to be
+where the keys stop. Every one of those is about the key meaning the same thing next session.
+
+**`e.key` lies when Shift is held.** `Shift+1` arrives as `"!"` on a US layout and something else
+entirely on others. `e.code` is `Digit1` regardless. Any digit shortcut with a Shift variant has
+this bug until someone presses the Shift variant — so the test does.
+
+**Global key handlers need two guards, always.** Not while typing (inputs, textareas, selects,
+contenteditable), and not when a modifier belongs to someone else. Cheap, and forgetting either one
+produces a bug that only shows up when a user does something perfectly ordinary.
+
+**Selecting something invisible does not select it.** Jumping to a favourite inside a collapsed
+folder set the id, and the panel's own "is the selection still reachable?" effect immediately reset
+it. The fix is to make the target reachable first — expand the ancestors — rather than to fight the
+fallback. When two effects disagree about state, the one enforcing an invariant is usually right.
+
+**Report the difference between "did nothing" and "did less".** Filing four tracks when three were
+already there is not the same as filing four, and the toast says which. Same instinct as the M3U
+skip list and the undo blocked reasons: the operation knows what it did not do, so it should say.
+
+**A docs script that fails halfway is a commit that lies.** One bad assert in the middle of a
+multi-file update left `STATUS.md` and `JOURNAL.md` unwritten while the code and the parity matrix
+went in — exactly the kind of partial state the definition of done exists to prevent. Amended, and
+worth doing the doc edits as one all-or-nothing pass in future.
+
+**Next in Epic 6:** Track Timeline, the sidepanel, and History snapshots.
+
+## 2026-08-06 — Epic 6 (part 7): play history
+
+**A snapshot is a different kind of table, and the schema should say so.** The temptation with
+history is to store ids and join at read time — less data, always "current". That is exactly the
+bug: a gig log that changes when you rename a track is not a log. Copying the columns in *is* the
+feature, and the comment on the table has to explain it or someone will optimise it back into a
+view.
+
+**Idempotency needs a stable external key.** `djmdHistory.ID` is what makes re-import safe, and
+`UNIQUE (library_path, source_id)` is what makes the guarantee structural rather than a matter of
+the import code being careful.
+
+**Deletion needs a ledger, not just a delete.** Removing the row means the next import brings it
+straight back — worse than not offering delete at all, because the user thinks it worked.
+Remembering the source id is three columns and it is the entire feature.
+
+**Report the skip, or the feature looks broken.** The import counts "skipped (deleted before)"
+separately from "already known". Without it, a user who deleted a set and re-imported sees nothing
+happen and reasonably concludes the import is broken.
+
+**Fuzzy matching must label its own confidence.** Re-matching by filename is a real fallback and a
+materially weaker claim than matching by id. Returning *which rule fired* costs one enum and lets
+the UI say "same filename — the file moved" instead of implying certainty. Same ADR-0008 instinct
+as the cue-generator confidences.
+
+**Ambiguity is not a tie to break.** Two library tracks with the same filename: picking one gives
+the user a playlist with the wrong track in it and no indication. Unmatched is the honest answer,
+and the one they can act on.
+
+**Do not renumber what records an order that happened.** Removing track 2 from a set leaves 1 and
+3. Closing the gap is right for a playlist and wrong for a log — the number is not a position in a
+list, it is what happened third.
+
+**The all-or-nothing docs pass worked.** Last time a mid-script assert left `STATUS.md` unwritten
+while the code went in. Building every edit in memory and only writing once they all resolve caught
+two stale anchors this time — including a `PARITY.md` row the *previous* commit had silently failed
+to update. Validate first, write last.
+
+**Next in Epic 6:** Track Timeline and the sidepanel.
+
+## 2026-08-06 — Epic 6 (part 8): track timeline
+
+**Scale to the data, not to the domain.** A BPM axis of 60–200 is "correct" and useless: a warm-up
+that moves 118→124 renders as six identical bars. Scaling within the set is what makes the chart
+show anything. The general form: a visualisation's range should come from what is in it.
+
+**Absence is not a value.** Three separate places wanted this: a missing tempo is `unknown` not
+`same`, an unreadable key is `null` not "does not mix", and a track with no metric gets a labelled
+stub rather than a zero-height bar. Every one of them would otherwise render as a confident claim
+the data does not support.
+
+**Round to what a human can perceive.** 128.00 → 128.04 is not a tempo change, and colouring it red
+teaches people to ignore the colour. Comparisons that drive a visual signal need a threshold set by
+perception, not by float equality.
+
+**Colour is never the only channel.** The bars carry their value and direction in the hover label,
+because a colour-only chart is unreadable to a chunk of users and unreadable to everyone in a dark
+booth.
+
+**I relearned an old lesson at the cost of a red check.** Three tests waited on
+`findByTestId("playlist-picker")` — the container `<ul>`, which renders before the data arrives.
+Locally the promise resolved first and they passed; CI is slower and they did not. The journal
+already says *wait on something only the thing you are asserting about renders*, from
+`FieldMappingsSection`. A container with a `data-testid` is exactly the shape that looks like a
+valid wait and is not: **if the element exists in the loading state, it is not a wait.**
+
+**A new component can break an old test by being correct.** Adding the timeline gave every track a
+second button whose label starts with the title, so `getByRole("button", {name: /Dark Matter/})`
+became ambiguous. Scoping the query to the row list was the fix — the ambiguity was real, and the
+old test had simply been relying on there being only one match.
+
+**Next in Epic 6:** the sidepanel.
+
+## 2026-08-06 — Epic 6 (part 9): sidepanel, and the epic closes
+
+**A second instance is not a second view unless it has its own state.** The whole temptation with a
+sidepanel is to share the selection — it feels consistent. It also makes the feature pointless: two
+panes showing the same thing is a mirror, and the reason to open a second browser is to look at
+something *else*. The independent selection is the feature, not an oversight.
+
+**Building the registry first keeps paying.** The sidepanel toggle was three lines in the actions
+array and arrived rebindable, searchable in the Action Center, and with its shortcut hint rendered
+for free. Epic 2's decision to make every capability a named action is still returning interest
+eight epics later.
+
+**Nine slices, one branch.** Epic 6 shipped as nine commits on one PR rather than nine PRs, which
+kept the stack from growing another eight deep. Worth remembering as the default: the epic is the
+review unit, the slice is the commit unit.
+
+**What Epic 6 taught, in one line each.** A capability with no caller is not a feature (Mixable
+Tracks). Filter and rank are different products (the rule set). A vacuous truth is still a wrong
+answer (Cross Reference over nothing). An export is an attack surface (CSV injection). A hotkey is
+a promise about muscle memory (favourites). A snapshot is a different kind of table (history).
+Absence is not a value (the timeline). Six of those are the same instinct wearing different
+clothes: **say what you actually know, and nothing more.**
+
+## 2026-08-06 — Custom Tags selection semantics
+
+**A flat list plus one combinator cannot express two levels.** `tagIds` + `tagMatchAll` can say "any
+of these" or "all of these" and nothing in between — but the page's actual meaning is OR inside each
+category and AND across them. The shape of the data has to match the shape of the rule; no amount of
+care at the call site fixes a model that cannot represent the answer.
+
+**An empty group is not a constraint.** A category the user has not touched must not exclude
+everything. That is the same empty-case instinct as Cross Reference over no selection, and it is
+worth checking every time a filter is built from a collection of collections.
+
+**Put the rule on screen.** "Any within a category, all across" is not guessable from results. One
+line next to the selection count is cheaper than a user reverse-engineering the semantics from a
+track count that surprised them.
+
+## 2026-08-06 — M3U import, and new playlist from selection
+
+**A format module should read what it writes.** Putting `parse_m3u` next to `m3u` means one place
+knows the format and a round-trip test can hold them together. Splitting reader and writer across
+crates is how the two stop agreeing.
+
+**Every M3U parser bug is invisible.** A BOM on line one, a label with a comma in it, an orphaned
+`#EXTINF` — none of them error, they just silently produce one wrong or missing entry in a hundred.
+That is exactly the shape that needs a test per case rather than a happy-path test.
+
+**Do not resolve a relative path you cannot resolve.** The parser has the string; the caller has the
+file's location. Resolving against the process's working directory would produce absolute-looking
+paths that point nowhere, which is worse than handing back what was written.
+
+**The right-clicked row is part of the selection.** "New playlist from selection" on a track outside
+the current selection should include it. Anything else means the user right-clicks a track, asks for
+a playlist, and does not get that track.
+
+**A component that gains a provider dependency breaks bare renders.** `App` started needing
+`DialogHost`, exactly as `SettingsPanel` did when Backup added a dialog. The test was rendering it
+without the providers `main.tsx` always supplies; wrapping it is the honest fix, not weakening the
+component.
+
+## 2026-08-06 — browser search shares the rule engine
+
+**Parse in one place, evaluate in another that already exists.** The search box needed operators the
+rule engine already had. Writing a matcher in the box would have been quicker and would have created
+a second definition of `bpm > 128` — the thing most likely to drift, because nothing fails when it
+does. Parsing to `Clause`s and handing them to the existing evaluator means the box cannot disagree
+with smartlists.
+
+**Route to the engine only when the engine is needed.** Plain text keeps the instant local match; a
+query with syntax goes over IPC, debounced. The alternative — everything through Rust — would have
+made typing a band's name wait on a database read for no benefit.
+
+**Ask the parser what counts as syntax.** The renderer could have checked for `>` or `:` itself.
+Then the two would disagree the first time the grammar grew. `has_operators` lives next to the
+parser and both callers use it.
+
+**Dropping a term beats guessing it.** `remixer:skrillex` names a real Lexicon field we do not
+model. Guessing the closest field would occasionally be right and would be unexplainable when it was
+not.
+
+**Widening on a parse failure is worse than matching nothing.** `bpm:fast` produces a rule that
+matches nothing rather than being discarded — a discarded term silently broadens the search, and the
+user reads the extra rows as a bug in the search rather than in their query.
+
+## 2026-08-06 — compatible-key indicator
+
+**Delete unreachable code, then bring it back when it has a caller.** I wrote `key_compatibility`
+during Mixable Tracks, found nothing called it, and removed it — the epic had just opened by fixing
+exactly that problem in `score_transition`, so shipping a fresh one would have been absurd. It
+returns now with a consumer. The rule holds in both directions: no unreachable commands, and no
+reimplementing something you deleted for the right reason.
+
+**An indicator should mark the signal, not the noise.** Marking incompatible keys too would be
+"more informative" and completely useless — most rows are incompatible. One dot on the ones that
+work is the whole feature.
+
+**Next:** Epic 7 — streaming. Beatport / Beatsource / Tidal / SoundCloud sources, the Beatport
+catalog and cart, Charts, Store Links, Track Discovery, Send To, Transfer Streaming To Local. All
+of it needs network access and accounts, so the first question is which parts can exist at all
+under the no-telemetry, local-first constraint.
+
+## 2026-08-06 — Epic 6 (part 5): key leading-zero option
+
+**Text sorting is a feature requirement, not a formatting detail.** `1A, 10A, 11A, 2A` is what a
+key column looks like on hardware that sorts as text, and it is unusable. A single leading zero is
+the entire fix. Worth asking of any field that lands in a column someone sorts.
+
+**Transformations that run repeatedly must be idempotent.** Sync runs more than once; `001A` on the
+second pass would be the tell. Cheap to test, and the test is the specification.
+
+**Only transform what you parsed.** Padding `C minor` would mean writing a value derived from
+something the function did not understand. The unchanged-passthrough branch is not a fallback, it
+is the correct answer.
+
+**A flag accepted and ignored is worse than a flag that is absent.** `change_to_nearest_color` has
+been in `SyncOptions` since it was added, doing nothing, because `Track` has no colour field and
+nothing writes `ColorID`. It is now recorded as *blocked with the reason* rather than left looking
+implemented — and deliberately not surfaced as a toggle. Anything plumbed-but-ignored is a
+half-finished promise; the honest states are done, or blocked with the blocker named.
+
+**Next in Epic 6:** Track Timeline, favourite playlists with hotkeys, the sidepanel, and History
+snapshots.
+
+---
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.
+
+## Session — 2026-08-06 (delete from disk)
+
+### Plan
+- Answer the user's parity question honestly, then build delete-from-disk with guard rails, as
+  explicitly authorised.
+
+### End of session
+- **Shipped:** `crates/file-organizer::trash` (quarantine + manifest + restore + purge, 30 tests),
+  nine Tauri commands, `DeleteFromDiskDialog`, `DeletedAudioSection` in Settings, and the three
+  call sites this was previously declined at — Archive, Find Broken Tracks, duplicate resolution.
+  E2E spec covers the fail-closed state, the delete/restore round trip and the permanent empty.
+- **Design note:** every earlier refusal of this feature is preserved as an argument, not deleted.
+  What changed is that the operation now has a reversible middle step, so "no undo" stopped being
+  true. The specs in `02-library.md` and `07-health.md` were rewritten to say that rather than
+  quietly dropping the objection.
+- **Correction to my own docs:** `PARITY.md`'s summary table did not match its body. Recounted
+  from the rows, added a `blocked` column, and wrote down what the numbers can and cannot support.
+- **Still unverified by CI.** GitHub stopped creating workflow runs after `e8a6120`; several
+  commits have no runs at all. Everything here passes locally: `cargo test --workspace`,
+  `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (624), `pnpm typecheck`,
+  `pnpm lint`, and the new Playwright spec.
+- **Next:** Epic 7 needs a scoping decision. Unblocked: spreadsheet keyboard navigation, inline
+  waveform preview, and the four remaining Custom Tags gaps.

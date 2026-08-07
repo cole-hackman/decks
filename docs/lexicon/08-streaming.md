@@ -126,8 +126,24 @@ produces a file, syncing updates a DJ app.
 *Column control* — right-click the header to choose exported columns and drag to reorder; sort by
 one column, or by several with `Cmd/Ctrl` held (e.g. Key then BPM). The export mirrors the view.
 
-*decks status* — **missing.** Worth noting this is exactly the export shape the user-level
-`dj-setlist-builder` skill expects as input (TSV/CSV with BPM and Key columns), so building CSV
-export connects `decks` to that tooling.
+*decks status* — **done.** `crates/share` renders all five outputs; **Playlist Tools → Share**.
+The default CSV columns are title / artist / BPM / key / duration — exactly what the user-level
+`dj-setlist-builder` skill reads, so an export drops straight into that tooling.
+
+Rendering lives in Rust rather than the renderer so the CLI and MCP server can reach the same
+export, and so CSV escaping has one implementation. Notes:
+
+- **CSV formula injection is defused.** A comment field starting `=`, `+`, `-` or `@` is quoted and
+  prefixed with `'`. Comments are free text a DJ pasted from somewhere, and Excel treats those as
+  executable.
+- **M3U reports what it could not carry.** A track with no file path cannot be in a list of paths;
+  handing back a quietly short playlist is how a set goes missing on the night.
+- **HTML is self-contained** — inline CSS, no external references — so it works off a USB stick.
+  PDF is the browser's Save to PDF over it, which is how Lexicon does it too; there is no PDF
+  writer here and there should not be one.
+- **A playlist name cannot become a path.** `Friday 8/6` exports as `Friday 8-6.csv`.
+
+**Not done:** dragging header columns to reorder them. The picker orders by the order columns were
+ticked, which covers the same intent for a list being built rather than rearranged.
 
 *Epic* — **6**.

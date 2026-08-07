@@ -76,6 +76,31 @@ pub enum ToolRequest {
         #[serde(default)]
         depth: Option<String>,
     },
+    /// Rank the library against one track: what mixes out of it, by BPM and
+    /// key, optionally narrowed by genre, cues and tempo relation.
+    ///
+    /// Read-only. Stages nothing.
+    MixableTracks {
+        library_path: String,
+        track_id: String,
+        /// Allowed BPM difference as a percentage of the source tempo.
+        /// Omit for the default; pass `0` to accept any tempo.
+        #[serde(default)]
+        bpm_tolerance_pct: Option<f64>,
+        /// `harmonically_compatible` (default) or `fuzzy`.
+        #[serde(default)]
+        key_mixing_mode: Option<String>,
+        #[serde(default)]
+        match_key: Option<bool>,
+        #[serde(default)]
+        include_half_double: Option<bool>,
+        #[serde(default)]
+        must_have_cues: Option<bool>,
+        #[serde(default)]
+        genres: Vec<String>,
+        #[serde(default)]
+        limit: Option<usize>,
+    },
     /// Sync runs recorded for a library, newest first, with how much of each
     /// can be put back.
     UndoList {

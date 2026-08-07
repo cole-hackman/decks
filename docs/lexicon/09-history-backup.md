@@ -24,8 +24,23 @@ or partial, and sets are never duplicated.
 remembers deletions** so a re-import doesn't resurrect them. This matters because DJ apps log
 practice sessions and false starts.
 
-*decks status* — **missing.** `Track.dj_play_count` is read from Rekordbox but no session data is
-touched.
+*decks status* — **done.** **History** in the sidebar. Sessions import from `djmdHistory` /
+`djmdSongHistory` into our own snapshot tables (cache migration **v17**), because the snapshot rule
+is the whole design: editing a track later does not rewrite what the log says was played, and a set
+survives its tracks being deleted from the library entirely.
+
+- **Import is idempotent** by `djmdHistory.ID`; sets are never duplicated, and the report says how
+  many were already known.
+- **The deleted-set ledger** remembers the source id, so re-importing does not resurrect practice
+  sessions and false starts. The report says how many it skipped for that reason — otherwise "why
+  is my deleted set not back?" is a mystery.
+- **Rekordbox's own tombstone is honoured**: a set deleted in Rekordbox is not imported at all.
+- **Rating and location** per set, both clearable.
+- **Save as playlist** re-matches by id → path → filename and **reports which rule matched**. "Same
+  filename" is a materially weaker claim than "same track" (ADR-0008). An ambiguous filename is no
+  match rather than a guess — picking one would silently put the wrong track in the set.
+- **Removing a track does not renumber the rest.** The number is the position in the set as
+  played; renumbering would make the log claim a different set happened.
 
 *Epic* — **6**.
 

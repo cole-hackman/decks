@@ -943,3 +943,335 @@ export interface RewritePreview {
   plan: RewritePlan;
   considered: number;
 }
+
+// ── Mixable Tracks (Epic 6) ──────────────────────────────────────────────────
+
+/** The global setting, shared with the browser's compatible-key indicator. */
+export type KeyMixingMode = "harmonically_compatible" | "fuzzy";
+
+export type KeyRelation =
+  | "same"
+  | "relative_major_minor"
+  | "adjacent_same_mode"
+  | "adjacent_opposite_mode";
+
+export type BpmRelation = "direct" | "half" | "double";
+
+/** A rule over Energy or Rating. `near_source` is the spec's "input ±1". */
+export type NumericRule =
+  | { kind: "off" }
+  | { kind: "near_source" }
+  | { kind: "range"; min: number; max: number };
+
+export type YearRule =
+  | { kind: "off" }
+  | { kind: "same_as_source" }
+  | { kind: "range"; min: number; max: number };
+
+export interface MixableOptions {
+  /** Percentage of the source tempo. `null` accepts any tempo. */
+  bpm_tolerance_pct: number | null;
+  match_key: boolean;
+  key_mixing_mode: KeyMixingMode;
+  include_half_double: boolean;
+  must_have_cues: boolean;
+  genres: string[];
+  year: YearRule;
+  energy: NumericRule;
+  rating: NumericRule;
+  /** Tag ids. */
+  must_have_tags: string[];
+  must_not_have_tags: string[];
+  limit: number;
+}
+
+export interface MixableMatch {
+  track: Track;
+  score: number;
+  reasons: string[];
+  bpm_relation: BpmRelation;
+  key_relation: KeyRelation | null;
+}
+
+export interface MixableResult {
+  source: Track;
+  matches: MixableMatch[];
+  /** Tracks weighed before the rules ran, so an empty list can say "0 of N". */
+  considered: number;
+  compatible_keys: string[];
+}
+
+export interface MixableTemplate {
+  id: string;
+  name: string;
+  options: MixableOptions;
+  created_at: number;
+}
+
+// ── Playlist Tools (Epic 6) ──────────────────────────────────────────────────
+
+export type PlaylistSortMode = "name_asc" | "name_desc" | "track_count_desc";
+export type CrossReferenceMode = "in_all" | "in_none";
+
+export interface MergePreview {
+  track_ids: string[];
+  /** Rows across the sources before duplicates were dropped. */
+  source_rows: number;
+}
+
+export interface SortPreview {
+  /** `[playlist_id, name]` in the new order. */
+  order: [string, string][];
+  unchanged: boolean;
+}
+
+export interface CrossReferencePreview {
+  track_ids: string[];
+  considered: number;
+}
+
+export interface Numbering {
+  start: number;
+  /** Zero-pad width. 2 gives 01, 02, … */
+  pad: number;
+  /** Strip a number already at the front, so prefixes do not stack. */
+  replace_existing: boolean;
+}
+
+export interface PrefixSpec {
+  text: string;
+  numbering: Numbering | null;
+}
+
+export interface PlaylistRenamePlan {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export interface OccurrenceReport {
+  tracks: Track[];
+  /** `[playlist_count, how_many_tracks]`, ascending. */
+  distribution: [number, number][];
+}
+
+export interface RewriteOrderPlan {
+  playlist_id: string;
+  order: string[];
+  /** Requested ids that are not in the playlist. */
+  unknown: string[];
+  /** Playlist members the visible order left out; appended, never dropped. */
+  appended: string[];
+  unchanged: boolean;
+}
+
+// ── Share / export (Epic 6) ──────────────────────────────────────────────────
+
+export type ShareFormat =
+  | "quick_copy"
+  | "quick_copy_numbered"
+  | "csv"
+  | "m3u"
+  | "html";
+
+/** Mirrors `share::Column`. A closed set: an unknown name fails to parse
+ *  rather than becoming a blank column that looks like missing data. */
+export type ShareColumn =
+  | "title"
+  | "artist"
+  | "album"
+  | "genre"
+  | "key"
+  | "bpm"
+  | "duration"
+  | "rating"
+  | "year"
+  | "comment"
+  | "bitrate"
+  | "play_count"
+  | "energy"
+  | "path";
+
+export interface ShareExport {
+  content: string;
+  /** Sanitised suggested filename. */
+  filename: string;
+  track_count: number;
+  /** Titles the format could not carry — M3U tracks with no file path. */
+  skipped: string[];
+}
+
+// ── Favourite playlists (Epic 6) ─────────────────────────────────────────────
+
+export interface FavouritePlaylist {
+  playlist_id: string;
+  name: string;
+  /** 1-based hotkey position. Favourite n is bound to key n. */
+  seq: number;
+  track_count: number;
+}
+
+/** Hotkeys stop at 9, so there is no point storing a tenth. */
+export const MAX_FAVOURITE_PLAYLISTS = 9;
+
+// ── Play history (Epic 6) ────────────────────────────────────────────────────
+
+export interface HistorySet {
+  id: string;
+  /** The `djmdHistory.ID` this came from — what makes re-import idempotent. */
+  source_id: string;
+  name: string;
+  played_at: string | null;
+  rating: number | null;
+  location: string | null;
+  track_count: number;
+}
+
+/** A track as it was at play time. A snapshot, not a join. */
+export interface HistoryTrack {
+  id: string;
+  seq: number;
+  content_id: string | null;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  genre: string | null;
+  musical_key: string | null;
+  bpm: number | null;
+  duration_secs: number | null;
+  folder_path: string | null;
+}
+
+export interface HistoryImportReport {
+  imported: number;
+  already_known: number;
+  previously_deleted: number;
+}
+
+/** How a snapshot row was matched back to a live track. */
+export type MatchKind = "content_id" | "path" | "filename" | "none";
+
+export interface HistoryMatch {
+  history_track_id: string;
+  title: string | null;
+  artist: string | null;
+  track_id: string | null;
+  kind: MatchKind;
+}
+
+export interface HistoryMatchReport {
+  matches: HistoryMatch[];
+  matched: number;
+  unmatched: number;
+}
+
+// ── M3U import ───────────────────────────────────────────────────────────────
+
+export interface M3uImportRow {
+  path: string;
+  /** The `#EXTINF` label — the only identifier left for an unmatched row. */
+  label: string | null;
+  track_id: string | null;
+}
+
+export interface M3uImportPreview {
+  rows: M3uImportRow[];
+  matched: number;
+  unmatched: number;
+  suggested_name: string;
+}
+
+// ── Delete from disk ─────────────────────────────────────────────────────────
+
+/** Why a track will not be deleted. Discriminated on `kind`; the backend
+ *  resolves the sentence into `Refused.message`, so the renderer never has to
+ *  reimplement the match. */
+export type Refusal =
+  | { kind: "no_path" }
+  | { kind: "missing" }
+  | { kind: "not_a_regular_file" }
+  | { kind: "symlink" }
+  | { kind: "outside_music_roots" }
+  | { kind: "shared_with_tracks"; track_ids: string[] }
+  | { kind: "still_in_playlists"; playlists: string[] }
+  | { kind: "already_quarantined" };
+
+export interface PlannedDelete {
+  track_id: string;
+  source: string;
+  bytes: number;
+}
+
+export interface RefusedDelete {
+  track_id: string;
+  path: string;
+  reason: Refusal;
+  message: string;
+}
+
+export interface DeletePlanView {
+  deletable: PlannedDelete[];
+  refused: RefusedDelete[];
+  /** Bytes the quarantine will hold — not bytes freed. */
+  total_bytes: number;
+  /** Track id → "Artist — Title". */
+  labels: Record<string, string>;
+  /** Everything was refused because Settings has no music folders yet. */
+  no_roots_configured: boolean;
+}
+
+export interface DeleteManifestEntry {
+  track_id: string;
+  original_path: string;
+  stored_as: string;
+  bytes: number;
+}
+
+export interface DeleteManifest {
+  batch_id: string;
+  created_at: number;
+  library_path: string;
+  reason: string;
+  entries: DeleteManifestEntry[];
+}
+
+export interface DeleteBatch {
+  manifest: DeleteManifest;
+  total_bytes: number;
+  file_count: number;
+}
+
+export interface MoveFailure {
+  track_id: string;
+  path: string;
+  error: string;
+}
+
+export interface DeleteReceipt {
+  manifest: DeleteManifest;
+  failed: MoveFailure[];
+}
+
+export type QuarantineRestoreOutcome =
+  | { outcome: "restored"; path: string }
+  | { outcome: "occupied"; path: string }
+  | { outcome: "missing_from_quarantine" }
+  | { outcome: "failed"; error: string };
+
+export interface QuarantineRestoreResult {
+  track_id: string;
+  original_path: string;
+  outcome: QuarantineRestoreOutcome;
+}
+
+export interface QuarantineRestoreReport {
+  batch_id: string;
+  results: QuarantineRestoreResult[];
+  restored: number;
+  batch_emptied: boolean;
+}
+
+export interface MusicRootSuggestion {
+  path: string;
+  track_count: number;
+}

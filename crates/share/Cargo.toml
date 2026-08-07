@@ -1,0 +1,13 @@
+[package]
+name = "share"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Playlist share/export formats — CSV, M3U, HTML, quick copy"
+
+[dependencies]
+serde = { workspace = true }
+rekordbox-db = { path = "../rekordbox-db" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

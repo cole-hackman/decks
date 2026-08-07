@@ -68,3 +68,22 @@ CREATE TABLE IF NOT EXISTS djmdCue (
     Color     INTEGER DEFAULT -1,
     Commnt    TEXT
 );
+
+-- Play history. Rekordbox logs a "set" per session in djmdHistory, with its
+-- tracks in djmdSongHistory — the same shape as playlists, keyed by date.
+CREATE TABLE IF NOT EXISTS djmdHistory (
+    ID          TEXT PRIMARY KEY,
+    Seq         INTEGER,
+    Name        TEXT,
+    Attribute   INTEGER DEFAULT 0,
+    ParentID    TEXT,
+    DateCreated TEXT,
+    rb_local_deleted INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS djmdSongHistory (
+    ID        TEXT PRIMARY KEY,
+    HistoryID TEXT,
+    ContentID TEXT,
+    TrackNo   INTEGER
+);

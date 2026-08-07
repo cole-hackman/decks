@@ -431,3 +431,72 @@ describe("distinctValues", () => {
     expect(distinctValues(tracks, (t) => t.genre)).toEqual(["Acid", "Techno"]);
   });
 });
+
+describe("tag groups — OR within a category, AND across", () => {
+  const ctx: FilterContext = {
+    tracksWithCues: new Set(),
+    tracksInAnyPlaylist: new Set(),
+    tracksWithMissingFiles: new Set(),
+    tagsByTrack: new Map([
+      ["house-peak", new Set(["house", "peak"])],
+      ["techno-peak", new Set(["techno", "peak"])],
+      ["house-warm", new Set(["house", "warm"])],
+      ["untagged", new Set<string>()],
+    ]),
+  };
+  const tracks = ["house-peak", "techno-peak", "house-warm", "untagged"].map(
+    (id) => track({ id }),
+  );
+
+  const ids = (f: Partial<Filters>) =>
+    applyFilters(tracks, { ...EMPTY_FILTERS, ...f }, ctx).map((t) => t.id);
+
+  it("requires one tag from every group", () => {
+    // (house OR techno) AND peak
+    expect(
+      ids({ tagGroups: [["house", "techno"], ["peak"]] }).sort(),
+    ).toEqual(["house-peak", "techno-peak"]);
+  });
+
+  it("ORs within a single group", () => {
+    expect(ids({ tagGroups: [["house", "techno"]] }).sort()).toEqual([
+      "house-peak",
+      "house-warm",
+      "techno-peak",
+    ]);
+  });
+
+  it("excludes a track missing any group entirely", () => {
+    expect(ids({ tagGroups: [["house"], ["peak"]] })).toEqual(["house-peak"]);
+  });
+
+  it("never matches an untagged track", () => {
+    expect(ids({ tagGroups: [["house"]] })).not.toContain("untagged");
+  });
+
+  it("ignores empty groups rather than excluding everything", () => {
+    // A category with nothing selected is not a constraint.
+    expect(ids({ tagGroups: [["house"], []] })).toEqual([
+      "house-peak",
+      "house-warm",
+    ]);
+  });
+
+  it("falls back to the flat list when no groups are given", () => {
+    expect(ids({ tagIds: ["peak"], tagMatchAll: false }).sort()).toEqual([
+      "house-peak",
+      "techno-peak",
+    ]);
+  });
+
+  it("takes precedence over the flat list when both are set", () => {
+    // The grouped form is the more specific statement.
+    expect(
+      ids({
+        tagIds: ["warm"],
+        tagMatchAll: false,
+        tagGroups: [["house"], ["peak"]],
+      }),
+    ).toEqual(["house-peak"]);
+  });
+});

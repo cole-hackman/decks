@@ -4,6 +4,7 @@ import { useFilterContext } from "../hooks/useFilterContext";
 import { EMPTY_FILTERS } from "../lib/filters";
 import { useDialog } from "../hooks/useDialog";
 import { useToast } from "./Toast";
+import { DeleteFromDiskDialog } from "./DeleteFromDiskDialog";
 import {
   archiveTracks,
   clearIncoming,
@@ -31,6 +32,16 @@ export function IncomingView({
   const { toast } = useToast();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
+  /**
+   * Triage's third outcome.
+   *
+   * Incoming already has "keep" (Selected done) and "put away" (Archive
+   * selected). The spec's third is "this was a mistake, get rid of it", which
+   * is the case where a file has never been in a playlist and never been
+   * played — so the guards almost always pass and this is where it is least
+   * dangerous. It still goes through the same preview and the same quarantine.
+   */
+  const [deleting, setDeleting] = useState(false);
   const { ctx: filterCtx } = useFilterContext(libraryPath);
 
   const refresh = useCallback(async () => {
@@ -153,6 +164,13 @@ export function IncomingView({
             Archive selected ({selectedTrackIds.size})
           </button>
           <button
+            onClick={() => setDeleting(true)}
+            disabled={selectedTrackIds.size === 0}
+            className="rounded border border-red-500/40 px-3 py-1 text-sm font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+          >
+            Delete from disk
+          </button>
+          <button
             onClick={handleClear}
             disabled={tracks.length === 0}
             className="rounded bg-accent px-3 py-1 text-sm font-medium text-base hover:opacity-90 disabled:opacity-50"
@@ -172,6 +190,24 @@ export function IncomingView({
         onTrackContextMenu={onTrackContextMenu}
         tracksOverride={tracks}
       />
+
+      {deleting && (
+        <DeleteFromDiskDialog
+          libraryPath={libraryPath}
+          trackIds={[...selectedTrackIds]}
+          reason="Incoming triage"
+          onClose={() => setDeleting(false)}
+          onDeleted={async (receipt) => {
+            toast({
+              variant: "success",
+              message: `Moved ${receipt.manifest.entries.length} file(s) to the deleted-audio folder.`,
+              detail: "Restore or empty the batch in Settings.",
+            });
+            onSelectionChange(new Set());
+            await refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

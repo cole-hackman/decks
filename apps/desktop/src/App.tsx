@@ -2,6 +2,10 @@ import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { FirstRunWizard } from "./components/FirstRunWizard";
 import { TrackTable } from "./components/TrackTable";
 import { TrackDetailPanel } from "./components/TrackDetailPanel";
+import { MixableTracksPanel } from "./components/MixableTracksPanel";
+import { PlaylistToolsView } from "./components/PlaylistToolsView";
+import { FavouritePlaylistsBar } from "./components/FavouritePlaylistsBar";
+import { HistoryView } from "./components/HistoryView";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { PlaylistPanel } from "./components/PlaylistPanel";
@@ -51,7 +55,11 @@ import {
   getTheme,
   listTagCategories,
   listTags,
+  keyCompatibility,
+  applyPlaylistMerge,
 } from "./ipc";
+import { useToast } from "./components/Toast";
+import { useDialog } from "./hooks/useDialog";
 import { useQuery } from "@tanstack/react-query";
 import type { Track } from "./types";
 
@@ -83,7 +91,20 @@ export default function App() {
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [currentView, setCurrentView] = useState<WorkspaceView>("library");
-  const [inspector, setInspector] = useState<"details" | "agent" | null>(null);
+  const { toast } = useToast();
+  const dialog = useDialog();
+  const [inspector, setInspector] = useState<
+    "details" | "agent" | "mixable" | null
+  >(null);
+  /** Set when a favourite hotkey asks the playlist panel to jump. */
+  const [focusPlaylistId, setFocusPlaylistId] = useState<string | null>(null);
+  /** The Sidepanel: a second track browser, for building a set from two
+   *  playlists at once. Per docs/lexicon/00-overview.md §Sidepanel. */
+  const [sidepanelOpen, setSidepanelOpen] = useState(false);
+  /** Keys that mix out of the selected track, for the browser's indicator.
+   *  Follows the global Key Mixing Mode — the spec makes it one setting shared
+   *  between here and Mixable Tracks. */
+  const [compatibleWith, setCompatibleWith] = useState<string[]>([]);
   const [pendingAgentPrompt, setPendingAgentPrompt] = useState<string | null>(
     null,
   );
@@ -185,6 +206,38 @@ export default function App() {
         : new Set([track.id]);
       setTagPickerTrackIds(ids);
     },
+    onCreatePlaylist: (track) => {
+      // The right-clicked track joins the selection if it was not in it, so
+      // "new playlist from selection" never quietly excludes the row you
+      // actually clicked.
+      const ids = selectedTrackIds.has(track.id)
+        ? Array.from(selectedTrackIds)
+        : [track.id];
+      void (async () => {
+        const name = await dialog.prompt({
+          title: "New playlist",
+          body: `${ids.length} track(s) from the current selection.`,
+          defaultValue: "",
+          placeholder: "Playlist name",
+          confirmLabel: "Stage playlist",
+        });
+        if (name == null || name.trim() === "") return;
+        try {
+          await applyPlaylistMerge(libraryPath ?? "", name, null, ids);
+          toast({
+            variant: "success",
+            message: `Staged “${name}” with ${ids.length} track(s).`,
+          });
+        } catch (e) {
+          toast({ variant: "error", message: String(e) });
+        }
+      })();
+    },
+    onFindMixable: (track) => {
+      setSelectedTrack(track);
+      setSelectedTrackIds(new Set([track.id]));
+      setInspector("mixable");
+    },
     onSendToFiles: (track) => {
       // Scope the Files view to the current multi-selection when the
       // right-clicked track is part of it, so "send these twelve" works;
@@ -196,6 +249,26 @@ export default function App() {
       setCurrentView("organize");
     },
   });
+
+  useEffect(() => {
+    const key = selectedTrack?.musical_key;
+    if (!libraryPath || key == null || key === "") {
+      setCompatibleWith([]);
+      return;
+    }
+    let cancelled = false;
+    keyCompatibility(key)
+      .then((keys) => {
+        if (!cancelled) setCompatibleWith(Array.isArray(keys) ? keys : []);
+      })
+      // Best-effort: no indicator is better than a wrong one.
+      .catch(() => {
+        if (!cancelled) setCompatibleWith([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [libraryPath, selectedTrack?.musical_key]);
 
   const handleSelectionChange = (ids: Set<string>) => {
     setSelectedTrackIds(ids);
@@ -268,6 +341,13 @@ export default function App() {
           searchInputRef.current?.focus();
           searchInputRef.current?.select();
         },
+      },
+      {
+        id: "view.toggleSidepanel",
+        label: "Toggle Sidepanel",
+        group: "View",
+        defaultBinding: { key: "\\", meta: true },
+        run: () => setSidepanelOpen((v) => !v),
       },
       {
         id: "player.playPause",
@@ -441,6 +521,35 @@ export default function App() {
               </button>
             </>
           )}
+          <button
+            onClick={() => setSidepanelOpen((v) => !v)}
+            aria-label={sidepanelOpen ? "Close sidepanel" : "Open sidepanel"}
+            title="A second browser, so two playlists sit side by side"
+            className={`rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors duration-150 hover:bg-elevated ${
+              sidepanelOpen
+                ? "text-accent-hover"
+                : "text-ink-secondary hover:text-ink"
+            }`}
+          >
+            Sidepanel
+          </button>
+          {showInspectorToggles && (
+            <button
+              onClick={() =>
+                setInspector((v) => (v === "mixable" ? null : "mixable"))
+              }
+              aria-label={
+                inspector === "mixable" ? "Hide mixable tracks" : "Show mixable tracks"
+              }
+              className={`rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider transition-colors duration-150 hover:bg-elevated ${
+                inspector === "mixable"
+                  ? "text-accent-hover"
+                  : "text-ink-secondary hover:text-ink"
+              }`}
+            >
+              Mixable
+            </button>
+          )}
           {showInspectorToggles && (
             <button
               onClick={() =>
@@ -491,6 +600,14 @@ export default function App() {
           )}
           {currentView === "library" && (
             <>
+              <FavouritePlaylistsBar
+                libraryPath={libraryPath ?? ""}
+                selectedTrackIds={selectedTrackIds}
+                onOpenPlaylist={(playlistId) => {
+                  setFocusPlaylistId(playlistId);
+                  setCurrentView("playlists");
+                }}
+              />
               <FilterChips
                 filters={filters}
                 onChange={setFilters}
@@ -508,6 +625,7 @@ export default function App() {
                 onSelect={handleTrackSelect}
                 onTrackContextMenu={handleTrackContextMenu}
                 tagLabelById={tagLabelById}
+                compatibleWith={compatibleWith}
               />
             </>
           )}
@@ -536,14 +654,16 @@ export default function App() {
               selectedTrackId={selectedTrack?.id ?? null}
               onSelectTrack={handleTrackSelect}
               onTrackContextMenu={handleTrackContextMenu}
+              focusPlaylistId={focusPlaylistId}
             />
           )}
           {currentView === "tags" && (
             <CustomTagsPanel
-              onShowTracks={(tagIds) => {
+              onShowTracks={(tagIds, tagGroups) => {
                 setFilters((prev) => ({
                   ...prev,
                   tagIds,
+                  tagGroups,
                   tagMatchAll: false,
                 }));
                 setCurrentView("library");
@@ -581,6 +701,12 @@ export default function App() {
                 setInspector("details");
               }}
             />
+          )}
+          {currentView === "history" && (
+            <HistoryView libraryPath={libraryPath ?? ""} />
+          )}
+          {currentView === "playlist-tools" && (
+            <PlaylistToolsView libraryPath={libraryPath ?? ""} />
           )}
           {currentView === "duplicates" && (
             <DuplicatesView
@@ -635,6 +761,26 @@ export default function App() {
           {currentView === "settings" && <SettingsPanel />}
         </main>
 
+        {sidepanelOpen && (
+          <ResizablePanel
+            side="right"
+            className="border-l border-edge bg-base"
+            minWidth={280}
+            maxWidth={900}
+            defaultWidth={420}
+          >
+            {/* A second, independent browser. It keeps its own selection on
+                purpose: the point is comparing two playlists, and a shared
+                selection would make it a mirror rather than a second view. */}
+            <PlaylistPanel
+              libraryPath={libraryPath}
+              selectedTrackId={null}
+              onSelectTrack={handleTrackSelect}
+              onTrackContextMenu={handleTrackContextMenu}
+            />
+          </ResizablePanel>
+        )}
+
         {inspector !== null && (
           <ResizablePanel
             side="right"
@@ -664,6 +810,20 @@ export default function App() {
                     : 0
                 }
                 onSeek={audio.seek}
+              />
+            )}
+            {inspector === "mixable" && (
+              <MixableTracksPanel
+                libraryPath={libraryPath ?? ""}
+                track={selectedTrack}
+                onUseAsNextTrack={(next) => {
+                  // The spec's live workflow: the track you just picked becomes
+                  // the seed for the next search, so the panel can be driven
+                  // through a set without going back to the browser.
+                  setSelectedTrack(next);
+                  setSelectedTrackIds(new Set([next.id]));
+                }}
+                onClose={() => setInspector(null)}
               />
             )}
             {inspector === "agent" && (

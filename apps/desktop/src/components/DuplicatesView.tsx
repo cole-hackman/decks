@@ -8,6 +8,7 @@ import {
 import { useDialog } from "../hooks/useDialog";
 import type { DuplicateCandidate, PreferRule } from "../types";
 import { useToast } from "./Toast";
+import { DeleteFromDiskDialog } from "./DeleteFromDiskDialog";
 import type { DuplicateGroup, DuplicateKind, Track } from "../types";
 
 interface Props {
@@ -66,6 +67,15 @@ export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
   // Per-group "keep" selection (defaults to first track in each group).
   const [keepByGroup, setKeepByGroup] = useState<Record<string, string>>({});
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
+  /**
+   * The losing copies of one group, staged for a delete-from-disk.
+   *
+   * Deliberately separate from "archive rest": archiving is reversible in the
+   * library and leaves the audio alone, so it stays the default action and the
+   * one styled as primary. Deleting the file is the other button, and it goes
+   * through the preview dialog like every other irreversible step.
+   */
+  const [deletingIds, setDeletingIds] = useState<string[] | null>(null);
 
   const refresh = useCallback(async () => {
     if (!libraryPath) return;
@@ -298,14 +308,28 @@ export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
                       {confidencePct}%
                     </span>
                   </div>
-                  <button
-                    onClick={() => void handleArchiveRest(g, gid)}
-                    disabled={busy || g.tracks.length < 2}
-                    className="rounded bg-accent px-3 py-1 text-xs font-medium text-base hover:opacity-90 disabled:opacity-50"
-                    data-testid="archive-rest"
-                  >
-                    {busy ? "Archiving…" : "Keep one, archive rest"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        setDeletingIds(
+                          g.tracks.filter((t) => t.id !== keepId).map((t) => t.id),
+                        )
+                      }
+                      disabled={busy || g.tracks.length < 2}
+                      className="rounded border border-red-500/40 px-3 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+                      data-testid="delete-rest-from-disk"
+                    >
+                      Delete rest from disk
+                    </button>
+                    <button
+                      onClick={() => void handleArchiveRest(g, gid)}
+                      disabled={busy || g.tracks.length < 2}
+                      className="rounded bg-accent px-3 py-1 text-xs font-medium text-base hover:opacity-90 disabled:opacity-50"
+                      data-testid="archive-rest"
+                    >
+                      {busy ? "Archiving…" : "Keep one, archive rest"}
+                    </button>
+                  </div>
                 </header>
                 <ul className="divide-y divide-edge/40">
                   {g.tracks.map((t) => {
@@ -361,6 +385,22 @@ export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
             );
           })}
       </div>
+
+      {deletingIds && (
+        <DeleteFromDiskDialog
+          libraryPath={libraryPath}
+          trackIds={deletingIds}
+          reason="Duplicate resolution"
+          onClose={() => setDeletingIds(null)}
+          onDeleted={(receipt) =>
+            toast({
+              variant: "success",
+              message: `Moved ${receipt.manifest.entries.length} file(s) to the deleted-audio folder.`,
+              detail: "Restore or empty the batch in Settings.",
+            })
+          }
+        />
+      )}
     </div>
   );
 }

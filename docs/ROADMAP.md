@@ -103,7 +103,8 @@ Turns `decks` from a viewer into an editor, and is a hard prerequisite for Epic 
 - [ ] Cue Destination round-trip: hidden merged memory cues restored on sync
 - [x] Action Center (`Cmd/Ctrl+Space`)
 - [ ] Find Popup (`Cmd/Ctrl+F`)
-- [ ] Compatible-key indicator in the browser
+- [x] Compatible-key indicator in the browser — a dot on keys that mix out of the selected track,
+      reading the same global Key Mixing Mode as Mixable Tracks (Epic 6)
 
 **Acceptance:** load a track, place and colour cues by keyboard alone, turn one into an active loop,
 nudge the beatgrid and watch on-grid cues follow, sync to Rekordbox, verify in Rekordbox.
@@ -196,24 +197,43 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 
 ---
 
-## Epic 6 — Set preparation
+## Epic 6 — Set preparation (in progress)
 
 Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md),
 [`04-analysis.md`](lexicon/04-analysis.md#mixable-tracks).
 
-- [ ] Surface `scoring::score_transition` / `suggest_next_tracks` — **currently unreachable from the
-      UI** — with the full Mixable Tracks rule set and saveable templates
-- [ ] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing
-- [ ] Track Timeline (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
+- [x] Surface `scoring::score_transition` — was unreachable from the UI — as **Mixable Tracks**:
+      9 of 13 advanced rules, `Use as next track`, saveable templates (cache migration **v15**),
+      and a `mixable_tracks` agent tool. The 4 missing rules (colour, date added, Popularity /
+      Danceability / Happiness) need fields `Track` does not carry — same gap as label/mix/remixer
+- [x] Key Mixing Mode: Harmonically Compatible vs Fuzzy Key Mixing, global, with the
+      compatible-key set surfaced in the panel
+- [x] Track Timeline — BPM / Energy / Rating / Key, coloured by key or **BPM change**; hidden past
+      200 tracks; also renders for history sets. Danceability / Popularity / Happiness are not
+      modelled (Epic 4) (Key / BPM / Rating / Energy / Danceability / Popularity / Happiness; Key and
       BPM-change bar colouring)
-- [ ] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order**
-- [ ] Playlist Occurrence for arbitrary N
-- [ ] Favorite Playlists with hotkeys
-- [ ] Sidepanel (second track browser)
-- [ ] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist
-- [ ] Share/export: CSV, M3U, HTML/PDF with column selection — also the input format the
-      `dj-setlist-builder` skill expects
-- [ ] Colors → nearest on sync; key conversion leading-zero option
+- [x] Playlist tools: Merge, Sort, Cross Reference, Prefix, **Rewrite Order** — all five, in a
+      Playlist Tools view. Sort needed a new `ChangeKind::PlaylistReorder` (writes
+      `djmdPlaylist.Seq`). Rewrite Order sorts on a field picked in the tool rather than following
+      the browser's transient column sort — a documented divergence
+- [x] Playlist Occurrence for arbitrary N — in Playlist Tools, counting *distinct* playlists, with
+      the full distribution so N does not have to be guessed
+- [x] Favorite Playlists with hotkeys — star up to 9 (cache migration **v16**); the bar pins above
+      the browser, `1`–`9` opens and `Shift+1`–`9` files the selection. Drag-and-drop onto a
+      favourite is not done: the track table has no drag source yet
+- [x] Sidepanel (second track browser) — resizable, toggled from the header or `Cmd/Ctrl+\`, and
+      registered in the action registry so it is rebindable. Keeps its own selection: a second
+      view, not a mirror
+- [x] History: snapshot semantics, ratings, locations, deleted-set ledger, save-as-playlist —
+      cache migration **v17**; import is idempotent by `djmdHistory.ID`, and the re-match says
+      which rule matched rather than implying certainty
+- [x] Share/export: CSV, M3U, HTML/PDF with column selection — `crates/share`, in Playlist Tools.
+      Default CSV columns are exactly what the `dj-setlist-builder` skill reads. Header
+      drag-to-reorder not done; the picker orders by tick order
+- [x] Key conversion leading-zero option — a Sync setting, applied after conversion and
+      independently of it. **Colors → nearest is blocked**: `Track` has no colour field and no
+      change kind writes `ColorID`, so there is nothing to map; the flag stays accepted and
+      unexposed rather than shipping a switch that does nothing
 
 ---
 

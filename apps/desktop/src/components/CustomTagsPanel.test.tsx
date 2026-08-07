@@ -66,6 +66,43 @@ describe("CustomTagsPanel", () => {
 
     const showBtn = await screen.findByRole("button", { name: /show 1 tag/i });
     await userEvent.click(showBtn);
-    expect(onShowTracks).toHaveBeenCalledWith(["t1"]);
+    // The flat list, plus the same ids grouped by the category they came from.
+    expect(onShowTracks).toHaveBeenCalledWith(["t1"], [["t1"]]);
+  });
+
+  it("groups the selection by category, which is what makes the semantics work", async () => {
+    // Per the spec this page means "any within a category, all across". Two
+    // genres and one mood is (House OR Techno) AND Peak, and a flat list of
+    // three ids cannot say that.
+    vi.mocked(listTagCategories).mockResolvedValue([
+      { id: "genre", name: "Genre", seq: 0 },
+      { id: "mood", name: "Mood", seq: 1 },
+    ]);
+    // The panel fetches every tag at once and groups them itself.
+    vi.mocked(listTags).mockResolvedValue([
+      { id: "house", category_id: "genre", name: "House", seq: 0, usage_count: 1 },
+      { id: "techno", category_id: "genre", name: "Techno", seq: 1, usage_count: 1 },
+      { id: "peak", category_id: "mood", name: "Peak", seq: 0, usage_count: 1 },
+    ]);
+
+    const onShowTracks = vi.fn();
+    render_({ onShowTracks });
+
+    await userEvent.click(await screen.findByText("Genre"));
+    await userEvent.click(await screen.findByRole("button", { name: /^House/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /^Techno/ }));
+    await userEvent.click(await screen.findByText("Mood"));
+    await userEvent.click(await screen.findByRole("button", { name: /^Peak/ }));
+
+    // And the rule is stated, not hidden.
+    expect(screen.getByTestId("tag-selection-rule")).toHaveTextContent(
+      "any within a category, all across",
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /show 3 tags/i }),
+    );
+    const [, groups] = vi.mocked(onShowTracks).mock.calls[0];
+    expect(groups).toEqual([["house", "techno"], ["peak"]]);
   });
 });

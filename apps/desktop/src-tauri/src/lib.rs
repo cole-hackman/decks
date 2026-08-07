@@ -8,10 +8,15 @@ mod csv_import;
 mod cue_generator;
 mod cues;
 mod duplicates;
+mod history;
+mod mixable;
 mod multi_edit;
 mod organizer;
+mod playlist_tools;
 mod recipes;
+mod share;
 mod smartlists;
+mod trash;
 mod undo;
 mod watch;
 mod write_tags;
@@ -1665,6 +1670,8 @@ struct SyncOptions {
     #[serde(default)]
     convert_keys: changes::applier::KeyFormat,
     #[serde(default)]
+    add_leading_zero: bool,
+    #[serde(default)]
     change_to_nearest_color: bool,
     #[serde(default)]
     all_smartlists_to_playlists: bool,
@@ -1676,6 +1683,7 @@ impl SyncOptions {
             cue_destination: self.cue_destination,
             keep_grids: self.keep_grids,
             convert_keys: self.convert_keys,
+            add_leading_zero: self.add_leading_zero,
             change_to_nearest_color: self.change_to_nearest_color,
             all_smartlists_to_playlists: self.all_smartlists_to_playlists,
         }
@@ -2763,6 +2771,50 @@ pub fn run() {
             set_library_path,
             library_search,
             suggest_next_tracks,
+            playlist_tools::preview_m3u_import,
+            playlist_tools::preview_playlist_merge,
+            playlist_tools::apply_playlist_merge,
+            playlist_tools::preview_playlist_sort,
+            playlist_tools::apply_playlist_sort,
+            playlist_tools::preview_cross_reference,
+            playlist_tools::preview_playlist_prefix,
+            playlist_tools::apply_playlist_prefix,
+            share::share_playlist,
+            share::write_share_file,
+            playlist_tools::playlist_occurrence,
+            history::import_history,
+            history::list_history_sets,
+            history::history_set_tracks,
+            history::set_history_metadata,
+            history::delete_history_set,
+            history::remove_history_track,
+            history::preview_history_as_playlist,
+            history::save_history_as_playlist,
+            trash::music_roots,
+            trash::set_music_roots,
+            trash::suggest_music_roots,
+            trash::plan_delete_from_disk,
+            trash::delete_from_disk,
+            trash::list_deleted_batches,
+            trash::restore_deleted_batch,
+            trash::purge_deleted_batch,
+            trash::quarantined_track_ids,
+            playlist_tools::list_favourite_playlists,
+            playlist_tools::toggle_favourite_playlist,
+            playlist_tools::set_favourite_playlist_order,
+            playlist_tools::add_tracks_to_playlist,
+            playlist_tools::preview_rewrite_order,
+            playlist_tools::apply_rewrite_order,
+            mixable::find_mixable_tracks,
+            mixable::get_key_mixing_mode,
+            mixable::mixable_default_options,
+            mixable::key_compatibility,
+            smartlists::search_tracks,
+            smartlists::search_has_operators,
+            mixable::set_key_mixing_mode,
+            mixable::list_mixable_templates,
+            mixable::save_mixable_template,
+            mixable::delete_mixable_template,
             library_stage_intro_cues,
             library_stage_playlist_remove_track,
             list_playlists,

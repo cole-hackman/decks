@@ -212,6 +212,65 @@ deletion. Nothing is pre-selected, and deletion is behind an explicit second cli
 
 ---
 
+## Delete from disk
+
+*What it does* — Lexicon offers removing a track's audio file, not just its library row, from
+Incoming triage, from the broken-track report and from duplicate resolution. In Lexicon this is a
+confirm-then-`unlink`.
+
+*decks status* — **done, deliberately differently.** This was declined three times during Epic 5 —
+in Find Broken Tracks, in Archive cleanup and in duplicate resolution — on the grounds that it is
+the only operation in the program with no undo, and that a program whose first rule is "the library
+is read-only" should not be the thing that destroys a DJ's files. It ships now because the user
+asked for it explicitly, **with guard rails**, which is what the divergence below buys.
+
+**It is a quarantine, not an `unlink`.** `crates/file-organizer::trash` moves files into a
+timestamped batch folder under the app data directory and writes a `manifest.json` beside them
+recording each file's original absolute path. `restore` puts a batch back; `purge` is a separate
+call, invoked per batch by name, and is the only step that removes anything. There is no
+"skip the trash" option, and no "empty all" — both are the shape of a mistake.
+
+**The guards are refusals, not warnings.** `plan` runs before anything moves and drops a candidate
+outright when it is:
+
+| Refusal | Why |
+|---|---|
+| outside every configured music folder | a bad path mapping must not walk a bulk delete out of the collection |
+| a symlink | we would either delete the link or destroy a file at a path the user never saw |
+| not an ordinary file | directories and devices are not audio |
+| missing | there is nothing to delete; the library row is `stage_track_delete`'s problem |
+| pointed at by another track | deleting it would break a track the user did not select |
+| already in the quarantine | that is `purge`'s job, and has its own confirmation |
+| still in a playlist | overridable, once, in the open — see below |
+
+Only the last is overridable, by a single checkbox on the dialog that **re-plans** rather than
+waving the rule through per file. "Shared with another track" is not overridable at all.
+
+**The feature is off until the user says where their music is.** With no music folders configured,
+`plan` refuses every candidate — a fail-closed default, not a bug. Settings → Deleted audio is
+where the list gets filled, and `suggest_music_roots` reads the directories the library already
+draws from so filling it is one click. Nothing is stored until the user confirms a suggestion.
+
+**Preview-first, like everything else.** `plan_delete_from_disk` is a separate command from
+`delete_from_disk`; the dialog names every file it will move *and* every file it will refuse, with
+the reason, before the first click. The first click only arms the confirmation; the second does the
+move. `delete_from_disk` re-plans from scratch rather than trusting the plan the renderer sent
+back, because between preview and confirmation the disk can change and a guard that ran against
+stale state is not a guard.
+
+**Copy verification.** A move across filesystems falls back to copy-then-remove, and the copy is
+verified by length before the source is removed. A failed verification leaves *both* copies: a
+duplicate is something the user can clean up, a lost file is not.
+
+Reachable from Incoming triage (`Delete from disk` — the third outcome beside "keep" and "put
+away", and the case where the guards are least likely to bite since a just-arrived file is in no
+playlist), Archive, Find Broken Tracks (offered only for files that are present but do not decode)
+and duplicate resolution (alongside — never instead of — the reversible `Keep one, archive rest`).
+
+*Epic* — **6**.
+
+---
+
 ## Local Path Mappings *(Ultimate tier)*
 
 *What it does* — Per-computer mapping from a stored path prefix to a local one, so a database
@@ -243,7 +302,12 @@ delete list. `crates/relocate` still solves the adjacent problem of genuinely br
 *What it does* — "Which tracks appear in exactly N playlists?" Setting N to 0 finds orphans; N=2
 finds tracks in exactly two. Utility → Other.
 
-*decks status* — **partial.** A `list_tracks_in_any_playlist` IPC command and a
-`not-in-any-playlist` filter exist, which covers the N=0 case only.
+*decks status* — **done.** Playlist Tools → Occurrence, for any N. Counted with
+`COUNT(DISTINCT PlaylistID)`, because Rekordbox allows the same track twice in one playlist and
+"appears in two playlists" must not be satisfied by appearing twice in one.
+
+**Addition:** the report ships the whole distribution — how many tracks sit in 0, 1, 2 … playlists
+— and each row is clickable. A bare "how many playlists?" box asks the user to guess a number; the
+distribution is what makes the guess unnecessary.
 
 *Epic* — **6**.

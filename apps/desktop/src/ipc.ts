@@ -2,7 +2,34 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   Track,
+  DeletePlanView,
+  DeleteReceipt,
+  DeleteBatch,
+  QuarantineRestoreReport,
+  MusicRootSuggestion,
   HotCue,
+  KeyMixingMode,
+  MixableOptions,
+  MixableResult,
+  MixableTemplate,
+  MergePreview,
+  SortPreview,
+  CrossReferencePreview,
+  CrossReferenceMode,
+  PlaylistSortMode,
+  PrefixSpec,
+  PlaylistRenamePlan,
+  RewriteOrderPlan,
+  M3uImportPreview,
+  OccurrenceReport,
+  ShareColumn,
+  ShareExport,
+  ShareFormat,
+  FavouritePlaylist,
+  HistorySet,
+  HistoryTrack,
+  HistoryImportReport,
+  HistoryMatchReport,
   Playlist,
   PlaylistDetail,
   DuplicateGroup,
@@ -517,6 +544,8 @@ export interface SyncOptions {
   cue_destination?: CueDestination;
   keep_grids?: boolean;
   convert_keys?: KeyFormat;
+  /** Pad single-digit wheel positions so DJ apps sort keys correctly. */
+  add_leading_zero?: boolean;
   change_to_nearest_color?: boolean;
   all_smartlists_to_playlists?: boolean;
 }
@@ -1483,4 +1512,379 @@ export async function applyPathRewrite(
   rewrites: PathRewrite[],
 ): Promise<string[]> {
   return invoke<string[]>("apply_path_rewrite", { libraryPath, rewrites });
+}
+
+// ── Mixable Tracks (Epic 6) ──────────────────────────────────────────────────
+
+export async function findMixableTracks(
+  path: string,
+  trackId: string,
+  options: MixableOptions | null,
+): Promise<MixableResult> {
+  return invoke<MixableResult>("find_mixable_tracks", {
+    path,
+    trackId,
+    options,
+  });
+}
+
+export async function mixableDefaultOptions(): Promise<MixableOptions> {
+  return invoke<MixableOptions>("mixable_default_options");
+}
+
+/** The keys that mix out of `key`, under the global Key Mixing Mode. */
+export async function keyCompatibility(key: string): Promise<string[]> {
+  return invoke<string[]>("key_compatibility", { key });
+}
+
+export async function getKeyMixingMode(): Promise<KeyMixingMode> {
+  return invoke<KeyMixingMode>("get_key_mixing_mode");
+}
+
+export async function setKeyMixingMode(mode: KeyMixingMode): Promise<void> {
+  return invoke<void>("set_key_mixing_mode", { mode });
+}
+
+export async function listMixableTemplates(): Promise<MixableTemplate[]> {
+  return invoke<MixableTemplate[]>("list_mixable_templates");
+}
+
+export async function saveMixableTemplate(
+  name: string,
+  options: MixableOptions,
+): Promise<string> {
+  return invoke<string>("save_mixable_template", { name, options });
+}
+
+export async function deleteMixableTemplate(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_mixable_template", { id });
+}
+
+// ── Playlist Tools (Epic 6) ──────────────────────────────────────────────────
+
+export async function previewPlaylistMerge(
+  path: string,
+  playlistIds: string[],
+): Promise<MergePreview> {
+  return invoke<MergePreview>("preview_playlist_merge", { path, playlistIds });
+}
+
+export async function applyPlaylistMerge(
+  libraryPath: string,
+  name: string,
+  parentId: string | null,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_playlist_merge", {
+    libraryPath,
+    name,
+    parentId,
+    trackIds,
+  });
+}
+
+export async function previewPlaylistSort(
+  path: string,
+  parentId: string | null,
+  mode: PlaylistSortMode,
+): Promise<SortPreview> {
+  return invoke<SortPreview>("preview_playlist_sort", { path, parentId, mode });
+}
+
+export async function applyPlaylistSort(
+  libraryPath: string,
+  parentId: string | null,
+  order: string[],
+): Promise<string> {
+  return invoke<string>("apply_playlist_sort", { libraryPath, parentId, order });
+}
+
+export async function previewCrossReference(
+  path: string,
+  playlistIds: string[],
+  mode: CrossReferenceMode,
+): Promise<CrossReferencePreview> {
+  return invoke<CrossReferencePreview>("preview_cross_reference", {
+    path,
+    playlistIds,
+    mode,
+  });
+}
+
+export async function previewPlaylistPrefix(
+  path: string,
+  playlistIds: string[],
+  spec: PrefixSpec,
+): Promise<PlaylistRenamePlan[]> {
+  return invoke<PlaylistRenamePlan[]>("preview_playlist_prefix", {
+    path,
+    playlistIds,
+    spec,
+  });
+}
+
+export async function applyPlaylistPrefix(
+  libraryPath: string,
+  renames: PlaylistRenamePlan[],
+): Promise<string[]> {
+  return invoke<string[]>("apply_playlist_prefix", { libraryPath, renames });
+}
+
+export async function previewRewriteOrder(
+  path: string,
+  playlistId: string,
+  visibleOrder: string[],
+): Promise<RewriteOrderPlan> {
+  return invoke<RewriteOrderPlan>("preview_rewrite_order", {
+    path,
+    request: { playlist_id: playlistId, visible_order: visibleOrder },
+  });
+}
+
+export async function applyRewriteOrder(
+  libraryPath: string,
+  plan: RewriteOrderPlan,
+): Promise<string | null> {
+  return invoke<string | null>("apply_rewrite_order", { libraryPath, plan });
+}
+
+export async function playlistOccurrence(
+  path: string,
+  n: number,
+): Promise<OccurrenceReport> {
+  return invoke<OccurrenceReport>("playlist_occurrence", { path, n });
+}
+
+// ── Share / export (Epic 6) ──────────────────────────────────────────────────
+
+export async function sharePlaylist(
+  path: string,
+  playlistId: string,
+  format: ShareFormat,
+  columns: ShareColumn[],
+): Promise<ShareExport> {
+  return invoke<ShareExport>("share_playlist", {
+    path,
+    playlistId,
+    format,
+    columns,
+  });
+}
+
+const SHARE_FILTERS: Record<string, { name: string; extensions: string[] }> = {
+  csv: { name: "CSV", extensions: ["csv"] },
+  m3u: { name: "M3U playlist", extensions: ["m3u8", "m3u"] },
+  html: { name: "HTML", extensions: ["html"] },
+};
+
+/** Save an export. Returns the path written, or `null` if the user cancelled. */
+export async function saveShareFile(
+  format: ShareFormat,
+  defaultName: string,
+  contents: string,
+): Promise<string | null> {
+  const path = await save({
+    title: "Export playlist",
+    defaultPath: defaultName,
+    filters: [SHARE_FILTERS[format] ?? { name: "Text", extensions: ["txt"] }],
+  });
+  if (!path) return null;
+  await invoke<void>("write_share_file", { path, contents });
+  return path;
+}
+
+// ── Favourite playlists (Epic 6) ─────────────────────────────────────────────
+
+export async function listFavouritePlaylists(
+  libraryPath: string,
+): Promise<FavouritePlaylist[]> {
+  return invoke<FavouritePlaylist[]>("list_favourite_playlists", { libraryPath });
+}
+
+export async function toggleFavouritePlaylist(
+  libraryPath: string,
+  playlistId: string,
+): Promise<boolean> {
+  return invoke<boolean>("toggle_favourite_playlist", {
+    libraryPath,
+    playlistId,
+  });
+}
+
+export async function setFavouritePlaylistOrder(
+  libraryPath: string,
+  playlistIds: string[],
+): Promise<void> {
+  return invoke<void>("set_favourite_playlist_order", {
+    libraryPath,
+    playlistIds,
+  });
+}
+
+export async function addTracksToPlaylist(
+  libraryPath: string,
+  playlistId: string,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("add_tracks_to_playlist", {
+    libraryPath,
+    playlistId,
+    trackIds,
+  });
+}
+
+// ── Play history (Epic 6) ────────────────────────────────────────────────────
+
+export async function importHistory(
+  libraryPath: string,
+): Promise<HistoryImportReport> {
+  return invoke<HistoryImportReport>("import_history", { libraryPath });
+}
+
+export async function listHistorySets(
+  libraryPath: string,
+): Promise<HistorySet[]> {
+  return invoke<HistorySet[]>("list_history_sets", { libraryPath });
+}
+
+export async function historySetTracks(setId: string): Promise<HistoryTrack[]> {
+  return invoke<HistoryTrack[]>("history_set_tracks", { setId });
+}
+
+export async function setHistoryMetadata(
+  setId: string,
+  rating: number | null,
+  location: string | null,
+): Promise<void> {
+  return invoke<void>("set_history_metadata", { setId, rating, location });
+}
+
+export async function deleteHistorySet(
+  libraryPath: string,
+  setId: string,
+): Promise<boolean> {
+  return invoke<boolean>("delete_history_set", { libraryPath, setId });
+}
+
+export async function removeHistoryTrack(trackId: string): Promise<boolean> {
+  return invoke<boolean>("remove_history_track", { trackId });
+}
+
+export async function previewHistoryAsPlaylist(
+  libraryPath: string,
+  setId: string,
+): Promise<HistoryMatchReport> {
+  return invoke<HistoryMatchReport>("preview_history_as_playlist", {
+    libraryPath,
+    setId,
+  });
+}
+
+export async function saveHistoryAsPlaylist(
+  libraryPath: string,
+  name: string,
+  trackIds: string[],
+): Promise<string[]> {
+  return invoke<string[]>("save_history_as_playlist", {
+    libraryPath,
+    name,
+    trackIds,
+  });
+}
+
+// ── Browser search (Epic 6 loose end) ────────────────────────────────────────
+
+/** Whether a query uses operator syntax. Asked of the parser rather than
+ *  guessed in the renderer, so both agree on what counts. */
+export async function searchHasOperators(query: string): Promise<boolean> {
+  return invoke<boolean>("search_has_operators", { query });
+}
+
+/** Track ids matching an operator query, evaluated by the smartlist engine. */
+export async function searchTracks(
+  path: string,
+  query: string,
+): Promise<string[]> {
+  return invoke<string[]>("search_tracks", { path, query });
+}
+
+/** Match an M3U against the library before importing it as a playlist. */
+export async function previewM3uImport(
+  path: string,
+  fileName: string,
+  content: string,
+): Promise<M3uImportPreview> {
+  return invoke<M3uImportPreview>("preview_m3u_import", {
+    path,
+    fileName,
+    content,
+  });
+}
+
+// ── Delete from disk ─────────────────────────────────────────────────────────
+
+/** The folders the user has confirmed hold their music. Deleting from disk
+ *  refuses everything while this is empty — a fail-closed default, not a bug. */
+export async function musicRoots(): Promise<string[]> {
+  return invoke<string[]>("music_roots");
+}
+
+export async function setMusicRoots(roots: string[]): Promise<void> {
+  return invoke<void>("set_music_roots", { roots });
+}
+
+/** Folders the library actually draws audio from, for one-click setup. */
+export async function suggestMusicRoots(
+  libraryPath: string,
+): Promise<MusicRootSuggestion[]> {
+  return invoke<MusicRootSuggestion[]>("suggest_music_roots", { libraryPath });
+}
+
+/** What would happen, without doing it. */
+export async function planDeleteFromDisk(
+  libraryPath: string,
+  trackIds: string[],
+  reason: string,
+  allowPlaylistMembers = false,
+): Promise<DeletePlanView> {
+  return invoke<DeletePlanView>("plan_delete_from_disk", {
+    request: {
+      library_path: libraryPath,
+      track_ids: trackIds,
+      reason,
+      allow_playlist_members: allowPlaylistMembers,
+    },
+  });
+}
+
+/** Move the audio into the quarantine. Reversible until the batch is emptied. */
+export async function deleteFromDisk(
+  libraryPath: string,
+  trackIds: string[],
+  reason: string,
+  allowPlaylistMembers = false,
+): Promise<DeleteReceipt> {
+  return invoke<DeleteReceipt>("delete_from_disk", {
+    request: {
+      library_path: libraryPath,
+      track_ids: trackIds,
+      reason,
+      allow_playlist_members: allowPlaylistMembers,
+    },
+  });
+}
+
+export async function listDeletedBatches(): Promise<DeleteBatch[]> {
+  return invoke<DeleteBatch[]>("list_deleted_batches");
+}
+
+export async function restoreDeletedBatch(
+  batchId: string,
+): Promise<QuarantineRestoreReport> {
+  return invoke<QuarantineRestoreReport>("restore_deleted_batch", { batchId });
+}
+
+/** The irreversible one. Returns the bytes freed. */
+export async function purgeDeletedBatch(batchId: string): Promise<number> {
+  return invoke<number>("purge_deleted_batch", { batchId });
 }

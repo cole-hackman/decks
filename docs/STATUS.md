@@ -1,5 +1,496 @@
 # Status
 
+## 2026-08-06 — Delete from disk, with guard rails
+
+Delete-from-disk was declined three times during Epic 5 — Find Broken Tracks, Archive cleanup,
+duplicate resolution — on the grounds that it is the only operation in the program with no undo.
+The user asked for it explicitly, "with proper guardrails". This is that.
+
+**It is a quarantine, not an `unlink`.** `crates/file-organizer::trash` moves files into a
+timestamped batch under the app data dir and writes a plain-JSON `manifest.json` beside them with
+each file's original absolute path — readable by a human with a text editor if this program is
+ever uninstalled. `restore` puts a batch back; `purge` is a separate call, per batch, by name, and
+is the only step that removes anything. There is no "skip the trash" and no "empty all".
+
+**The guards are refusals, not warnings.** `plan` is pure — it takes a filesystem oracle — and
+drops a candidate outright when the path is outside every configured music folder, is a symlink,
+is not an ordinary file, is missing, is pointed at by another track, or is already quarantined.
+Only "still in a playlist" is overridable, by one checkbox that **re-plans** rather than waving the
+rule through per file.
+
+**Off until the user says where their music is.** With no music folders configured, `plan` refuses
+everything — fail-closed by construction, and the dialog says so rather than looking broken.
+Settings → Deleted audio owns the list; `suggest_music_roots` reads the directories the library
+already draws from so filling it is one click.
+
+Three things the tests caught that the design did not:
+
+- `purge` accepted `..`. `PathBuf::join` does not normalise, so `starts_with(quarantine_root)`
+  passed for a path that escaped it. Now it requires the batch id to be exactly one `Normal`
+  component.
+- Cross-filesystem moves need copy-then-remove, and the copy has to be **verified before** the
+  source goes. A failed verification now leaves both copies: a duplicate is cleanable, a lost file
+  is not.
+- Two tracks with the same basename would have overwritten each other *inside* the quarantine —
+  destroying the very file being preserved. `free_name` suffixes.
+
+Also: `PARITY.md`'s summary table had drifted from its own body (it claimed 48/31/13/16 against
+rows that actually said 46/27/20/16, and had no column for the two `blocked` rows). Recounted, and
+a "how to read these numbers" note added — the counts are self-reported against a matrix written
+from the manual, `lexicondj.com/features` is still 403 from this environment, and nothing has been
+checked against a running Lexicon or a real library.
+
+Reachable from all four places the spec puts it: Incoming triage, Archive, Find Broken Tracks and
+duplicate resolution.
+
+**Next:** Epic 7 (streaming) still needs a scoping decision from the user — it is all network and
+third-party accounts against the local-first, no-telemetry constraint, and this container's proxy
+403s outbound calls anyway. Unblocked frontend work remains in the browser (spreadsheet keyboard
+navigation, inline waveform preview) and Custom Tags (category colours, drag-reorder, MyTag
+import, per-tag hotkeys).
+
+## 2026-08-06 — Custom Tags selection semantics
+
+The Custom Tags page handed the library filter a flat list of tag ids with "match any". The spec's
+semantics for that page are **OR within a category, AND across categories** — picking House and
+Techno from Genre plus Peak from Mood means `(House OR Techno) AND Peak`, and a flat list with one
+combinator cannot say that.
+
+`Filters` gains `tagGroups: string[][]`, and the page groups its selection by the category each tag
+came from. Details:
+
+- **Groups take precedence over the flat list** when both are set — the grouped form is the more
+  specific statement.
+- **An empty group is not a constraint.** A category with nothing selected must not exclude
+  everything.
+- **The rule is on screen**, next to the selection count, rather than being a hidden behaviour the
+  user has to infer from results.
+
+This is the other half of the Epic 1 deferral I closed earlier today: the tag query language went
+into the browser search box, and this is the Tags page.
+
+**CI note:** the Actions queue is draining slowly — `e8a6120` took ~35 minutes to start. Several
+commits still have no scheduled runs. Local verification is complete and green.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 602, typecheck, lint, `pnpm e2e` 46 — all green locally.
+
+## 2026-08-06 — M3U import and new-playlist-from-selection
+
+Two playlist-tree gaps, both reusing primitives that were already there.
+
+**M3U import** — Playlist Tools → Import M3U. `crates/share` writes M3Us, so it now reads them:
+one module owns the format in both directions, and a round-trip test holds them together. Paths are
+matched against the library, filename as a fallback — the same priority as the history re-match, and
+for the same reason: an M3U written on another machine has paths that will not resolve here, but the
+filenames usually still do. **An ambiguous filename is no match**, because putting an arbitrary one
+of two same-named tracks into a set is worse than saying it was not found. Unmatched lines are
+listed by their `#EXTINF` label, which is the only identifier left for them.
+
+Parser details that each cost a real bug elsewhere: a **UTF-8 BOM** is stripped (Windows tools write
+them, and it otherwise makes line one unmatchable for a reason nobody can see); the `#EXTINF` label
+is everything after the *first* comma, since titles contain commas; an orphaned `#EXTINF` does not
+leak onto the next entry; and **relative paths come back as written**, because resolving them needs
+the file's own location, which the caller has and the parser does not.
+
+**New playlist from selection** — right-click a track. The right-clicked track joins the selection
+if it was not in it, so the action never quietly excludes the row you actually clicked. It reuses
+`apply_playlist_merge`, which was already the create-a-playlist-and-fill-it primitive.
+
+`App` now depends on `DialogHost` and `ToastProvider` — it always had them in `main.tsx`, and its
+test was rendering it bare. Wrapped, the same way `SettingsPanel`'s tests were when Backup
+introduced a dialog.
+
+**CI caveat:** GitHub has not scheduled check runs for the last several commits — `e8a6120` sat
+queued for half an hour and the pushes after it produced no runs at all. The workflow is unchanged
+and the previous run on it (`12988f5`) passed, so this is the Actions queue rather than the code.
+Local verification is complete and green; that is not the same as a green check.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 594, typecheck, lint, `pnpm e2e` 46 — all green locally.
+
+## 2026-08-06 — browser search shares the rule engine
+
+The track-browser search box was a plain substring match across six fields. Lexicon's accepts the
+same vocabulary its smartlists do, and `decks` had that vocabulary — in the rule engine, unreachable
+from the box. This connects them.
+
+**Parsed to rules, evaluated by the same evaluator.** `crates/smartlists::search` turns a query into
+`Clause`s; nothing in it matches anything. The evaluator already knows what `bpm > 128` means, what
+makes `4A` equal `Abm`, and how tags compare — a second implementation in the search box is exactly
+how the two drift apart. This is the same reasoning as serving basic mode from Rust in the Mixable
+Tracks slice.
+
+| Input | Meaning |
+|---|---|
+| `deadmau5` | any text field contains it |
+| `artist:deadmau5` | that field |
+| `bpm>128`, `bpm<=120` | numeric comparison |
+| `bpm:120-130` | inclusive range |
+| `key:4A` | notation-aware — finds `Abm` |
+| `genre:None` | the field is empty |
+| `!remix` | negated |
+| `~peak,vocal` | has **all** those tags |
+| `tag:peak,vocal` | has **any** |
+
+Decisions, each tested:
+
+- **Plain text never leaves the renderer.** Only a query with syntax goes to the engine, so typing a
+  band's name stays instant and works with no round-trip. The renderer asks the parser whether a
+  query counts as syntax rather than carrying its own idea of it.
+- **A negated comparison is the opposite comparison.** `!bpm>128` parses to `<=`, which keeps the
+  rule model free of a "not" wrapper it does not have.
+- **An unknown field is dropped, not guessed.** `remixer:` is a real Lexicon field we do not model;
+  guessing which one they meant is worse than ignoring the term.
+- **A non-numeric value on a numeric field matches nothing, not everything.** `bpm:fast` finds
+  nothing rather than being silently discarded and widening the search.
+- **A title with a dash is not a range.** `title:jump-off` is text.
+- **A failed operator search says so.** Falling back silently would look like the query simply
+  matched fewer tracks.
+- Terms are ANDed and a bare word ORs across text fields — each word you add narrows, which is what
+  a search box is for.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 594, typecheck, lint, `pnpm e2e` 46 — all green.
+
+## 2026-08-06 — compatible-key indicator (Epic 2 loose end)
+
+The spec describes the Key Mixing Mode as one global setting shared between Mixable Tracks and
+**the track browser's compatible-key indicator**. Epic 6 built the setting and the first half; this
+is the second. Select a track and the keys that mix out of it get a dot.
+
+Two decisions:
+
+- **A positive mark only.** An unmarked row means "not compatible *or* we cannot tell", and those
+  are not worth distinguishing at a glance — marking every non-match would drown the ones that are.
+- **No reference key means no marks**, not marks on everything. Better no indicator than one that
+  highlights the library.
+
+This also gives `mixable::key_compatibility` a caller. I wrote it during the Mixable Tracks slice,
+noticed nothing called it, and deleted it rather than ship an unreachable command — the same
+"stranded capability" problem the epic opened by fixing. It comes back now because there is
+something to reach it.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 591, typecheck, lint, `pnpm e2e` 46 — all green.
+
+## 2026-08-06 — Epic 6 (part 9): sidepanel — and Epic 6 closes
+
+A **second track browser** on the right, resizable, toggled from the header or by `Cmd/Ctrl+\`.
+Registered in the action registry rather than hard-wired, so it is rebindable like everything else
+(Epic 2's design earning its keep).
+
+**It keeps its own selection, deliberately.** The point of the spec's feature is comparing two
+playlists while building a set; a shared selection would make it a mirror rather than a second
+view. It is also available from every workspace view, not just the playlist browser — the reason to
+open it is usually something you are looking at in the main pane.
+
+That closes **Epic 6 — Set preparation**. Nine slices:
+
+1. Mixable Tracks — reached `score_transition`, which had been unreachable since before the epic
+2. Playlist tools — Merge, Sort, Cross Reference, Prefix, Rewrite Order
+3. Playlist Occurrence — any N, with its distribution
+4. Share / export — CSV, M3U, HTML, quick copy
+5. Key leading-zero option, and Colors-to-nearest recorded as blocked
+6. Favourite playlists with per-favourite hotkeys
+7. Play history — snapshots, deleted-set ledger, save-as-playlist
+8. Track Timeline
+9. Sidepanel
+
+Parity moved **34 done / 37 partial / 32 missing** at the start of the initiative to
+**44 / 34 / 14 / 16 deferred**.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 589, typecheck, lint, `pnpm e2e` 46 — all green.
+
+## 2026-08-06 — Epic 6 (part 8): track timeline
+
+A chart above the playlist tracks — and above a history set, per the spec — showing how a set
+flows: **BPM, Energy, Rating or Key**, with bars coloured by key or by **BPM change**. The
+BPM-change mode is the one the spec is right about: green rose, red fell, grey held, and you read
+the arc of a set in a second.
+
+Decisions, each tested:
+
+- **Heights scale within the set**, not against an absolute range. A warm-up running 118–124 should
+  show its shape, not six flat bars near the bottom of a 60–200 axis. An all-identical set gets
+  full-height bars rather than a divide-by-zero.
+- **A missing tempo is `unknown`, not `same`.** "Unchanged" is a claim about two numbers; painting
+  an absence grey would read as information the chart does not have.
+- **Differences a DJ would not hear are `same`.** Rounded to a tenth, so 128.00 → 128.04 is not a
+  red bar. A colour change for 0.04 BPM is noise dressed as signal.
+- **The hover label carries the value and the direction**, so colour is never the only way to read
+  the chart — and a track with no value says *which* value is missing rather than leaving a gap.
+- **Key compatibility is `null`, not `false`, when a key is unreadable.** "These do not mix" and
+  "we cannot tell" are different claims.
+- **Hidden by default past 200 tracks**, per the spec: it is a set-building tool, not a collection
+  tool. Still available on request.
+
+**Not offered:** Danceability, Popularity, Happiness — `Track` does not carry them (Epic 4).
+
+Also fixes a **CI-only test failure** on `7029a8d`: three `PlaylistToolsView` tests waited on
+`findByTestId("playlist-picker")`, but that `<ul>` renders *before* `listPlaylists` resolves. Local
+runs won the race; CI did not. They now wait on a playlist row, which only the loaded list can
+produce. This is the same lesson already in the journal from `FieldMappingsSection` — wait on
+something only the thing you are asserting about renders — and it cost a red check to relearn.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 589, typecheck, lint, `pnpm e2e` 43 — all green.
+
+## 2026-08-06 — Epic 6 (part 7): play history
+
+The gig log. **History** in the sidebar imports every session Rekordbox has logged, from
+`djmdHistory` / `djmdSongHistory` into our own snapshot tables (cache migration **v17**).
+
+**The snapshot rule is the whole design.** History is a historical record, not a view over current
+data: the track data is copied in at import time and never re-joined to the library, so editing a
+track later does not rewrite what the log says you played — and a set survives its tracks being
+deleted from the library entirely. The view says so in as many words, because otherwise a row
+differing from the library looks like a bug.
+
+Decisions, each tested:
+
+- **Import is idempotent** by `djmdHistory.ID`. Sets are never duplicated, and the report says how
+  many were already known.
+- **The deleted-set ledger remembers the source id**, so a re-import does not resurrect the
+  practice sessions and false starts you cleared out. The report counts those separately — "why is
+  my deleted set not back?" should never be a mystery.
+- **Rekordbox's own tombstone is honoured.** A set deleted in Rekordbox is not imported at all.
+- **Save as playlist re-matches id → path → filename, and names which rule hit.** "We found
+  something with the same filename" is a materially weaker claim than "this is the same track", and
+  the user sees the difference before anything is staged (ADR-0008).
+- **An ambiguous filename is no match rather than a guess.** Two library tracks called `a.mp3` and
+  the row comes back unmatched — picking one would silently put the wrong track in the set.
+- **Removing a track from a set does not renumber the rest.** The number is the position in the set
+  as played; renumbering would make the log claim a different set happened.
+- **The deletion confirmation says it sticks**, and that audio files and the library are untouched.
+
+Nothing here writes to `master.db`; saving a set as a playlist stages changes like everything else.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 558, typecheck, lint, `pnpm e2e` 43 — all green.
+
+## 2026-08-06 — Epic 6 (part 6): favourite playlists
+
+The spec calls it a fast filing system, and that is exactly the shape: star up to nine playlists,
+and each gets a hotkey. **`1`–`9` opens the playlist, `Shift+1`–`9` files the current selection
+into it.** Star from **Playlist Tools → Favourites**; the bar pins above the track browser.
+
+Decisions, each tested:
+
+- **The hotkey is the position, and positions are stable.** Un-starring closes the gap rather than
+  leaving a hole. A hole would either strand a key on nothing or renumber silently on the next
+  read — and a key that quietly changes what it does between sessions is worse than one that does
+  nothing at all.
+- **Nine is the cap, and the refusal says why.** A tenth favourite would be one nobody could press.
+- **A favourite whose playlist is gone is pruned on read** — from the table as well as the
+  response, so the stored order and the shown order can never disagree.
+- **`e.code`, not `e.key`.** With Shift held, `key` is `"!"`, not `"1"`. The test presses
+  `Shift+1` specifically to catch that.
+- **Digits are never stolen from a text field**, and modified chords are left to whatever owns
+  them.
+- **Filing reports what it skipped.** Tracks already in the playlist are not staged twice, and the
+  toast says how many were already there rather than quietly doing less than asked.
+- **The bar renders nothing when nothing is starred**, and survives a null list — it sits above the
+  browser and must never take the view down with it.
+- **Jumping to a favourite expands the folders on the way to it.** A playlist inside a collapsed
+  folder would otherwise be selected invisibly and then reset by the panel's own fallback.
+
+Cache migration **v16** (`favourite_playlists`), scoped by `library_path` — unlike the cleanup
+locks and mixable templates, a playlist id only means anything inside the database it came from.
+
+**Not done:** drag-and-drop onto a favourite. The hotkeys and the `+` button cover the same intent,
+and the track table has no drag source yet.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 546, typecheck, lint, `pnpm e2e` 39 — all green.
+
+## 2026-08-06 — Epic 6 (part 5): key leading-zero option
+
+Small and entirely about one thing: sorted as text, an unpadded key column reads
+`1A, 10A, 11A, 12A, 2A, …`. The wheel positions come out interleaved, which is exactly what a DJ
+scanning that column on a CDJ cannot use. `01A` fixes it.
+
+`SyncOptions.add_leading_zero`, off by default, with a Sync toggle whose label says *why* — an
+option that reads as cosmetics gets left off.
+
+Two decisions:
+
+- **Applied after conversion and independently of it.** The sort problem is just as real in a
+  library left in its original notation as in one converted to Open Key, so the option does not
+  require `convert_keys`.
+- **A value with no wheel position is returned unchanged.** `C minor` is not padded. Padding is not
+  a licence to rewrite something we did not understand — and the operation is idempotent, which
+  matters because Sync runs more than once and `001A` would be the tell that it is not.
+
+**Colors → nearest is blocked, and now says so.** `SyncOptions.change_to_nearest_color` has been
+accepted and ignored since it was added. The reason is real: `Track` has no colour field and no
+change kind writes `ColorID`, so there is nothing to map to anything. It stays unexposed rather
+than becoming a switch that does nothing — recorded in `PARITY.md` and `01-interop.md` with the
+blocker named, per ADR-0008.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 530, typecheck, lint, `pnpm e2e` 38 — all green.
+
+## 2026-08-06 — Epic 6 (part 4): share / export
+
+`crates/share` renders five outputs — quick copy, quick copy numbered, CSV, M3U and
+printer-friendly HTML — reachable from **Playlist Tools → Share**.
+
+The spec draws a line and so does the UI: **sharing produces a file, syncing updates Rekordbox.**
+Nothing here stages a change or touches `master.db`.
+
+Rendering lives in Rust rather than the renderer, so the CLI and MCP server can reach the same
+export and CSV escaping has exactly one implementation.
+
+Decisions, each tested:
+
+- **CSV formula injection is defused.** A field starting `=`, `+`, `-` or `@` is quoted *and*
+  prefixed with `'`. Comments are free text a DJ pasted from somewhere, and a comment reading
+  `=cmd|...` is a live payload the moment the export is opened in Excel. The prefix is visible
+  deliberately — silently mangling the value would be worse.
+- **M3U says what it could not carry.** An M3U is a list of paths; a track without one cannot be in
+  it. Handing back a quietly short playlist is how a set goes missing on the night, so the pathless
+  titles come back with the export and the UI names them.
+- **HTML is self-contained** — inline CSS, no external references, no scripts — so it works off a
+  USB stick with no network. PDF is the browser's Save to PDF over it, which is how Lexicon does it
+  too. A PDF writer here would be a large dependency reimplementing a print dialog.
+- **A playlist name cannot become a path.** `Friday 8/6` exports as `Friday 8-6.csv`, and a name
+  that sanitises to nothing falls back to `playlist` rather than `.` or `""`.
+- **The default CSV columns are title / artist / BPM / key / duration** — exactly what the
+  user-level `dj-setlist-builder` skill reads, so an export drops straight into that tooling.
+- **A missing artist does not leave a dangling dash.** `- Title` reads as a field the reader is
+  meant to notice; a bare title reads as a bootleg, which is what it is.
+- **Hours are spelled out**, so a 90-minute live set does not read as `30:00`.
+
+Not done: dragging header columns to reorder them. The picker orders by the order columns were
+ticked, which covers the same intent for a list being built rather than rearranged.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 529, typecheck, lint, `pnpm e2e` 38 — all green.
+
+## 2026-08-06 — Epic 6 (part 3): playlist occurrence
+
+"Which tracks appear in exactly N playlists?" — **Playlist Tools → Occurrence**. `decks` had the
+N=0 case only, through the `not-in-any-playlist` filter. This is any N.
+
+Counted with `COUNT(DISTINCT PlaylistID)`. Rekordbox allows the same track twice in one playlist,
+and "appears in two playlists" must not be satisfied by appearing twice in one — the distinct is
+the whole correctness of the feature, and it has a test that adds a duplicate row specifically to
+catch its absence.
+
+**A track in no playlist is absent from the query, not zero in it.** The `GROUP BY` cannot see it.
+The zero has to come from the library side, which is why the command walks the track list rather
+than the count map — the N=0 case is exactly the one people ask for most, and it is the one a naive
+implementation silently returns nothing for.
+
+**Addition beyond the spec:** the report ships the whole distribution — how many tracks sit in 0,
+1, 2 … playlists — and each row re-runs the report for that N. A bare "how many playlists?" box
+asks the user to guess a number they have no way to know; the distribution answers it first.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 519, typecheck, lint, `pnpm e2e` 36 — all green.
+
+## 2026-08-06 — Epic 6 (part 2): playlist tools
+
+All five, in a **Playlist Tools** view: Merge, Sort, Cross Reference, Prefix, Rewrite Order. Every
+one previews first, and everything they do is a staged change that goes through review and Sync.
+
+**Rewrite Order is the one that earns the epic.** It has no visible effect inside `decks`, exactly
+as it has none inside Lexicon — its entire purpose is that a CDJ can only sort by a handful of
+columns and knows nothing about Energy. Sort by Energy here, rewrite the order, and the playlist
+arrives on the gear that way.
+
+Decisions, each tested:
+
+- **Merge creates; it does not consume.** The sources are left alone. A tool that quietly deleted
+  four playlists to make a fifth would be a different and much worse tool. The preview says
+  "3 tracks from 5 rows — 2 duplicates dropped", because the final count alone hides the work.
+- **Sort needed a new change kind.** `ChangeKind::PlaylistReorder` writes `djmdPlaylist.Seq`. The
+  parent folder is part of the applier's `WHERE`, so naming a playlist that lives elsewhere fails
+  loudly rather than silently reparenting it — a reorder should only ever reorder.
+- **Cross Reference over an empty selection returns nothing, not everything.** "In all zero
+  playlists" is vacuously the whole library: technically right, and a terrible thing to hand
+  someone who has selected nothing. The `in none` mode warns before it runs, per the spec.
+- **Prefix numbers in tick order**, which is why the selection is a list and not a `Set`. `Replace
+  an existing number` stops prefixes stacking on a second run, and a number that is *part* of the
+  name — `7empest`, `2 Bad Mice` — is not stripped. The signal is the separator: digits running
+  straight into a letter stay.
+- **Rewrite Order appends rather than drops.** If a filter was active, the sorted view holds fewer
+  rows than the playlist; storing only those would silently remove the rest. They go to the end,
+  and the UI says how many.
+- **A no-op stages nothing.** An order that already matches, or a rename set that is already
+  right, produces zero changes rather than rows in the review list that change nothing.
+
+**Divergence, stated rather than hidden:** Lexicon persists "the current visible sort" of the
+browser. `decks` sorts inside the tool, on a field you pick. The browser's column sort is transient
+UI state not plumbed to this view, and a button whose result depends on which column you last
+clicked somewhere else is worse than one that states its input.
+
+One real bug caught by its own test: the Rewrite Order sort negated the whole comparator for
+descending, which flipped the null handling too — an un-analysed track led the set purely because
+`null` compares low. Direction now lives inside the comparator, so tracks with no value sort last
+in **either** direction.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 516, typecheck, lint, `pnpm e2e` 35 — all green.
+
+## 2026-08-06 — Epic 6 (part 1): Mixable Tracks
+
+`scoring::score_transition` has existed since long before the parity initiative with **no UI
+caller** — the spec called it "partial, and stranded". This reaches it. **Right-click a track →
+Find mixable tracks**, or the `Mixable` toggle in the header; the panel opens as a right-hand
+inspector and stays open, because the spec's workflow is driving it live through a set.
+
+**The rules filter; the score orders.** A candidate that fails an enabled rule is not in the list
+at all. That is why the header says "12 of 4,213" rather than just listing twelve — a rule that
+merely demoted would make "must have cue points" a suggestion, and the count is what tells you the
+rules are too tight.
+
+Nine of the spec's thirteen advanced options are here: BPM range, Match key, half/double BPM,
+must-have-cues, genres, year, energy, rating, and the tag include/exclude lists. **Four are
+deliberately absent** — `Match color` and `Recently added` need colour and date-added columns
+`Track` does not carry, and Popularity / Danceability / Happiness are the Lexicon-only fields from
+Epic 4. The panel says so in as many words rather than showing controls that match everything.
+
+Decisions, each tested:
+
+- **`Use as next track`** re-seeds the panel from the row just picked. It is the difference between
+  a report and a tool you can play a set with.
+- **Key Mixing Mode is global**, per the spec, and the backend overwrites whatever a template
+  carried with the stored value — otherwise loading an old template would silently change a setting
+  the user made in the panel.
+- **Basic mode is served by the backend**, not hardcoded in the renderer. A second definition of
+  "basic mode" in TypeScript would drift the first time a default changed and nothing would fail.
+  The panel simply does not search until it has the rules.
+- **Templates are keyed by name and overwrite**, because the workflow is "tweak, save as *Peak
+  time* again". Not scoped by library: it is a statement about how someone mixes.
+- **Ties break by track id**, so two identical searches give the same order. A list that reshuffles
+  between previews is not usable live.
+- **Half/double tolerance is a percentage of the *stretched* tempo**, so a ±3% double-time search
+  round 140 accepts 286 and refuses 290, rather than applying 3% of 140 to a 280 target.
+- **An unparseable key is never compatible.** Treating unknown as a wildcard floods the list with
+  exactly the tracks nobody has analysed yet.
+- **Archived tracks are never suggested.** Archiving says "out of rotation", and "what do I play
+  next" is where that should be honoured.
+
+Two latent bugs fixed on the way. `score_transition` carried its own Camelot-only parser, so every
+spelled-out key (`C minor`, `Cm`) scored as **"Missing Key Data"** — it now routes through
+`changes::key_format`, the one place that knows the 24-key table. And `key_format` itself could not
+read **Open Key** input (`10m`, `8d`), which is what a library edited in Lexicon stores; it can now,
+without stealing `Dm` from the musical-key parser.
+
+Cache migration **v15** (`mixable_templates`). Agent tool `mixable_tracks`, so the chat panel, MCP
+server and CLI gain it too — its `bpm_tolerance_pct` keeps "omitted" and "0" apart, since one means
+"use the default 6%" and the other means "ignore tempo".
+
+Still missing from Epic 6: the Track Timeline, playlist tools (Merge / Sort / Cross Reference /
+Prefix / Rewrite Order), Playlist Occurrence, favourite playlists, the sidepanel, History
+snapshots, and share/export.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 502, typecheck, lint, `pnpm e2e` 30 — all green.
+
 ## 2026-08-06 — Epic 5 (part 10): prefix rewriting
 
 The fuzzy relocate answers "where did this one file go?". `relocate::rewrite` answers a different

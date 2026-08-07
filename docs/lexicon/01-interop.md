@@ -52,7 +52,7 @@ modified-sync watermark and no delete semantics for Full Sync.
 | **Cue Destination** | See below | partial — governs `Kind` on newly inserted cue rows only |
 | **Key Conversion** | Original / Open Key / musical notation | done (`key_format.rs`), plus Camelot |
 | **Don't Touch My Grids** | Never modify existing beatgrids in the app. **New tracks still receive Lexicon's grid.** | partial — only skips BPM `TrackMetadataEdit`; no grid writes exist to skip |
-| **Colors → nearest** | Map Lexicon's larger palette to the app's nearest supported colour. **Off means no colour is written when there's no exact match** | **plumbed but ignored** |
+| **Colors → nearest** | Map Lexicon's larger palette to the app's nearest supported colour. **Off means no colour is written when there's no exact match** | **blocked** — `Track` has no colour field and no change kind writes `ColorID`, so there is nothing to map. The flag is accepted and not exposed as a toggle, rather than offered as a switch that does nothing |
 | **Field Mappings** | See below | missing |
 | **All smartlists to playlists** | Materialise smartlists | **plumbed but ignored** |
 
@@ -149,8 +149,15 @@ exists purely so DJ apps sort correctly (`01A, 02A … 10A` rather than `1A, 10A
 > [`04-analysis.md`](04-analysis.md#key-detection); `decks` currently leans on Camelot everywhere.
 
 *decks status* — **done and then some.** `crates/changes/src/key_format.rs` converts to both
-Camelot and Open Key with a 24-key table plus enharmonics and parse-failure passthrough. Missing:
-the leading-zero option, and the notation posture.
+Camelot and Open Key with a 24-key table plus enharmonics and parse-failure passthrough. It also
+reads **Open Key input** (`10m`, `8d`), which a library edited in Lexicon stores.
+
+The **add leading zero** option is a Sync setting (`SyncOptions.add_leading_zero`), applied after
+conversion and **independently of it** — the sort problem is just as real in a library left in its
+original notation. A value with no wheel position (`C minor`) is returned unchanged: padding is not
+a licence to rewrite something we did not understand.
+
+Still open: the notation posture (Camelot is Mixed In Key's mark; Lexicon ships Open Key by design).
 
 *Epic* — **6**.
 
