@@ -17,6 +17,11 @@ import type {
   ArtistCount,
   TagCategory,
   Tag,
+  Smartlist,
+  SmartlistClause,
+  SmartlistCombinator,
+  SmartlistCompatibility,
+  SmartlistGeneratorSpec,
 } from "./types";
 import type {
   ChatMessage,
@@ -756,3 +761,81 @@ export async function listTrackTagsMap(libraryPath: string): Promise<Record<stri
   return invoke<Record<string, string[]>>("list_track_tags_map", { libraryPath });
 }
 
+
+// ── Smartlists (Epic 1) ──────────────────────────────────────────────────────
+
+export async function listSmartlists(libraryPath: string): Promise<Smartlist[]> {
+  return invoke<Smartlist[]>("list_smartlists", { libraryPath });
+}
+
+export async function createSmartlist(
+  libraryPath: string,
+  name: string,
+  combinator: SmartlistCombinator,
+  clauses: SmartlistClause[],
+  parentFolderId: string | null = null,
+): Promise<Smartlist> {
+  return invoke<Smartlist>("create_smartlist", {
+    libraryPath,
+    name,
+    parentFolderId,
+    combinator,
+    clauses,
+  });
+}
+
+export async function updateSmartlist(
+  libraryPath: string,
+  id: string,
+  name: string,
+  combinator: SmartlistCombinator,
+  clauses: SmartlistClause[],
+  parentFolderId: string | null = null,
+): Promise<Smartlist> {
+  return invoke<Smartlist>("update_smartlist", {
+    libraryPath,
+    id,
+    name,
+    parentFolderId,
+    combinator,
+    clauses,
+  });
+}
+
+export async function deleteSmartlist(libraryPath: string, id: string): Promise<void> {
+  return invoke<void>("delete_smartlist", { libraryPath, id });
+}
+
+export async function evaluateSmartlist(libraryPath: string, id: string): Promise<Track[]> {
+  return invoke<Track[]>("evaluate_smartlist", { libraryPath, id });
+}
+
+/** Evaluate an unsaved rule set — powers the editor's live match count. */
+export async function previewSmartlist(
+  libraryPath: string,
+  combinator: SmartlistCombinator,
+  clauses: SmartlistClause[],
+): Promise<Track[]> {
+  return invoke<Track[]>("preview_smartlist", { libraryPath, combinator, clauses });
+}
+
+export async function smartlistCounts(
+  libraryPath: string,
+): Promise<Record<string, number>> {
+  return invoke<Record<string, number>>("smartlist_counts", { libraryPath });
+}
+
+export async function smartlistCompatibility(
+  libraryPath: string,
+): Promise<Record<string, SmartlistCompatibility>> {
+  return invoke<Record<string, SmartlistCompatibility>>("smartlist_compatibility", {
+    libraryPath,
+  });
+}
+
+export async function generateSmartlists(
+  libraryPath: string,
+  spec: SmartlistGeneratorSpec,
+): Promise<Smartlist[]> {
+  return invoke<Smartlist[]>("generate_smartlists", { libraryPath, spec });
+}

@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use changes::{ChangeKind, ChangeStatus};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use smartlists::{Clause, Combinator, Smartlist};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -626,6 +627,14 @@ fn parse_string_enum<T: for<'de> Deserialize<'de>>(
     })
 }
 
+/// Current wall-clock time in whole seconds since the epoch.
+fn now_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or_default()
+}
+
 fn new_id(prefix: &str) -> String {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1013,9 +1022,179 @@ impl CacheDb {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Smartlists (Epic 1)
+// ---------------------------------------------------------------------------
+
+impl CacheDb {
+    /// Every smartlist for a library, ordered for display in the playlist tree.
+    pub fn list_smartlists(&self, library_path: &str) -> Result<Vec<Smartlist>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, parent_folder_id, combinator, clauses_json, created_at, updated_at
+             FROM smartlists WHERE library_path = ?1 ORDER BY seq, name",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![library_path])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(row_to_smartlist(r)?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_smartlist(&self, library_path: &str, id: &str) -> Result<Option<Smartlist>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, parent_folder_id, combinator, clauses_json, created_at, updated_at
+             FROM smartlists WHERE library_path = ?1 AND id = ?2",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![library_path, id])?;
+        match rows.next()? {
+            Some(r) => Ok(Some(row_to_smartlist(r)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Persist a new smartlist. Validates the rule model first so malformed
+    /// rules never reach storage.
+    pub fn create_smartlist(
+        &self,
+        library_path: &str,
+        name: &str,
+        parent_folder_id: Option<&str>,
+        combinator: Combinator,
+        clauses: &[Clause],
+    ) -> Result<Smartlist> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = now_secs();
+        let list = Smartlist {
+            id: id.clone(),
+            name: name.to_owned(),
+            parent_folder_id: parent_folder_id.map(str::to_owned),
+            combinator,
+            clauses: clauses.to_vec(),
+            created_at: now,
+            updated_at: now,
+        };
+        list.validate().map_err(anyhow::Error::msg)?;
+
+        let seq: i64 = self.conn.query_row(
+            "SELECT COALESCE(MAX(seq), -1) + 1 FROM smartlists WHERE library_path = ?1",
+            rusqlite::params![library_path],
+            |r| r.get(0),
+        )?;
+        self.conn.execute(
+            "INSERT INTO smartlists
+                (id, library_path, name, parent_folder_id, combinator, clauses_json, seq, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            rusqlite::params![
+                id,
+                library_path,
+                name,
+                parent_folder_id,
+                combinator_to_str(combinator),
+                serde_json::to_string(clauses)?,
+                seq,
+                now,
+            ],
+        )?;
+        Ok(list)
+    }
+
+    /// Replace a smartlist's name, folder and rules.
+    pub fn update_smartlist(
+        &self,
+        library_path: &str,
+        id: &str,
+        name: &str,
+        parent_folder_id: Option<&str>,
+        combinator: Combinator,
+        clauses: &[Clause],
+    ) -> Result<Smartlist> {
+        let existing = self
+            .get_smartlist(library_path, id)?
+            .ok_or_else(|| anyhow::anyhow!("smartlist {id} not found"))?;
+        let now = now_secs();
+        let updated = Smartlist {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            parent_folder_id: parent_folder_id.map(str::to_owned),
+            combinator,
+            clauses: clauses.to_vec(),
+            created_at: existing.created_at,
+            updated_at: now,
+        };
+        updated.validate().map_err(anyhow::Error::msg)?;
+
+        self.conn.execute(
+            "UPDATE smartlists
+             SET name = ?1, parent_folder_id = ?2, combinator = ?3, clauses_json = ?4, updated_at = ?5
+             WHERE library_path = ?6 AND id = ?7",
+            rusqlite::params![
+                name,
+                parent_folder_id,
+                combinator_to_str(combinator),
+                serde_json::to_string(clauses)?,
+                now,
+                library_path,
+                id,
+            ],
+        )?;
+        Ok(updated)
+    }
+
+    pub fn delete_smartlist(&self, library_path: &str, id: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM smartlists WHERE library_path = ?1 AND id = ?2",
+            rusqlite::params![library_path, id],
+        )?;
+        Ok(())
+    }
+
+    /// Smartlists currently sitting in the reserved generator folder. This is
+    /// the generator's idempotency ledger — see `smartlists::generator`.
+    pub fn list_generated_smartlists(&self, library_path: &str) -> Result<Vec<Smartlist>> {
+        Ok(self
+            .list_smartlists(library_path)?
+            .into_iter()
+            .filter(|s| s.parent_folder_id.as_deref() == Some(smartlists::LEXICON_FOLDER))
+            .collect())
+    }
+}
+
+fn combinator_to_str(c: Combinator) -> &'static str {
+    match c {
+        Combinator::All => "all",
+        Combinator::Any => "any",
+    }
+}
+
+fn combinator_from_str(s: &str) -> Combinator {
+    // Unknown values fall back to `All`, which is the stricter reading — a
+    // corrupted row yields fewer tracks rather than the whole library.
+    match s {
+        "any" => Combinator::Any,
+        _ => Combinator::All,
+    }
+}
+
+fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
+    let clauses_json: String = r.get(4)?;
+    let clauses: Vec<Clause> = serde_json::from_str(&clauses_json).unwrap_or_default();
+    let combinator_raw: String = r.get(3)?;
+    Ok(Smartlist {
+        id: r.get(0)?,
+        name: r.get(1)?,
+        parent_folder_id: r.get(2)?,
+        combinator: combinator_from_str(&combinator_raw),
+        clauses,
+        created_at: r.get(5)?,
+        updated_at: r.get(6)?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use smartlists::{Field, Operator, Rule, Value};
 
     #[test]
     fn open_in_memory_succeeds() {
@@ -1373,5 +1552,155 @@ mod tests {
         assert_eq!(t2, vec![b.id.clone()]);
         // /other.db rows must be excluded — t1 in /lib.db should only have two tags.
         assert_eq!(map.get("t1").map(|v| v.len()), Some(2));
+    }
+
+    // -- smartlists ------------------------------------------------------
+
+    fn house_clause() -> Vec<Clause> {
+        vec![Clause::single(Rule::new(
+            Field::Genre,
+            Operator::Equals,
+            Value::Text("House".into()),
+        ))]
+    }
+
+    #[test]
+    fn smartlist_crud_roundtrip() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let created = db
+            .create_smartlist(
+                "/lib.db",
+                "Peak time",
+                None,
+                Combinator::All,
+                &house_clause(),
+            )
+            .unwrap();
+        assert_eq!(created.name, "Peak time");
+
+        let listed = db.list_smartlists("/lib.db").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].clauses, house_clause());
+
+        let fetched = db.get_smartlist("/lib.db", &created.id).unwrap().unwrap();
+        assert_eq!(fetched, created);
+
+        db.delete_smartlist("/lib.db", &created.id).unwrap();
+        assert!(db.list_smartlists("/lib.db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn smartlists_are_scoped_by_library() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_smartlist("/a.db", "A", None, Combinator::All, &house_clause())
+            .unwrap();
+        db.create_smartlist("/b.db", "B", None, Combinator::All, &house_clause())
+            .unwrap();
+        assert_eq!(db.list_smartlists("/a.db").unwrap().len(), 1);
+        assert_eq!(db.list_smartlists("/b.db").unwrap()[0].name, "B");
+    }
+
+    #[test]
+    fn update_smartlist_replaces_rules_and_preserves_created_at() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let created = db
+            .create_smartlist("/lib.db", "Old", None, Combinator::All, &house_clause())
+            .unwrap();
+        let new_clauses = vec![Clause::single(Rule::new(
+            Field::Bpm,
+            Operator::Between,
+            Value::Range(120.0, 130.0),
+        ))];
+        let updated = db
+            .update_smartlist(
+                "/lib.db",
+                &created.id,
+                "New",
+                Some("Lexicon"),
+                Combinator::Any,
+                &new_clauses,
+            )
+            .unwrap();
+        assert_eq!(updated.name, "New");
+        assert_eq!(updated.combinator, Combinator::Any);
+        assert_eq!(updated.clauses, new_clauses);
+        assert_eq!(updated.created_at, created.created_at);
+
+        let reloaded = db.get_smartlist("/lib.db", &created.id).unwrap().unwrap();
+        assert_eq!(reloaded.clauses, new_clauses);
+        assert_eq!(reloaded.parent_folder_id.as_deref(), Some("Lexicon"));
+    }
+
+    #[test]
+    fn update_missing_smartlist_errors() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let err = db.update_smartlist(
+            "/lib.db",
+            "nope",
+            "X",
+            None,
+            Combinator::All,
+            &house_clause(),
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn create_rejects_invalid_rules() {
+        let db = CacheDb::open_in_memory().unwrap();
+        // `Between` on a text field is not a valid combination.
+        let bad = vec![Clause::single(Rule::new(
+            Field::Title,
+            Operator::Between,
+            Value::Range(1.0, 2.0),
+        ))];
+        assert!(db
+            .create_smartlist("/lib.db", "Bad", None, Combinator::All, &bad)
+            .is_err());
+        assert!(db.list_smartlists("/lib.db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn create_rejects_empty_name() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db
+            .create_smartlist("/lib.db", "   ", None, Combinator::All, &house_clause())
+            .is_err());
+    }
+
+    #[test]
+    fn list_generated_returns_only_the_lexicon_folder() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.create_smartlist("/lib.db", "Mine", None, Combinator::All, &house_clause())
+            .unwrap();
+        db.create_smartlist(
+            "/lib.db",
+            "House",
+            Some(smartlists::LEXICON_FOLDER),
+            Combinator::All,
+            &house_clause(),
+        )
+        .unwrap();
+        let generated = db.list_generated_smartlists("/lib.db").unwrap();
+        assert_eq!(generated.len(), 1);
+        assert_eq!(generated[0].name, "House");
+    }
+
+    #[test]
+    fn corrupt_clauses_json_degrades_to_empty_rather_than_erroring() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let created = db
+            .create_smartlist("/lib.db", "X", None, Combinator::All, &house_clause())
+            .unwrap();
+        db.conn
+            .execute(
+                "UPDATE smartlists SET clauses_json = 'not json' WHERE id = ?1",
+                rusqlite::params![created.id],
+            )
+            .unwrap();
+        let reloaded = db.get_smartlist("/lib.db", &created.id).unwrap().unwrap();
+        // An empty rule set matches nothing, so a corrupt row is inert rather
+        // than accidentally selecting the entire library.
+        assert!(reloaded.clauses.is_empty());
     }
 }

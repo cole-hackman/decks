@@ -45,7 +45,7 @@ Branch `claude/lexicon-spec-docs`.
 
 ---
 
-## Epic 1 — Smartlists engine
+## Epic 1 — Smartlists engine ✅
 
 Branch `claude/lexicon-smartlists`. Spec: [`03-smartlists.md`](lexicon/03-smartlists.md).
 
@@ -53,20 +53,27 @@ Highest structural leverage: it replaces the ad-hoc filter system with a real qu
 several later epics consume it (`Is file missing` as a rule rather than a bespoke view; smartlists
 materialised on sync; the tag OR/AND selection semantics).
 
-- [ ] `crates/smartlists` — rule model per ADR-0013, evaluator, generator
-- [ ] `crates/cache` migration **v7** — `smartlists`, `smartlist_clauses`, `smartlist_rules`
-- [ ] Operator vocabulary (`None`, `>`, `<`, `>=`, `<=`, ranges, `!`) shared with track-browser search
-- [ ] Key-notation-aware equality via `changes::key_format`
-- [ ] Tag query language (`~` requires all, `!` negates) and the OR-within-category /
-      AND-across-category selection semantics on the Custom Tags page
-- [ ] 30-second recompute throttle with a visible loading state
-- [ ] Archived-tracks-excluded-unless-asked
-- [ ] Smartlist Generator — by field, by tag category, Decade / BPM range / play count; idempotent
+- [x] `crates/smartlists` — rule model per ADR-0013, evaluator, generator
+- [x] `crates/cache` migration **v7** — single `smartlists` table with a JSON rule document
+      (normalised clause/rule tables were dropped: evaluation is in-memory, so nothing queries
+      individual rules)
+- [x] Operator vocabulary (`None`, `>`, `<`, `>=`, `<=`, ranges, `!`) — implemented in the rule
+      engine; sharing it with the track-browser search box is deferred to Epic 6
+- [x] Key-notation-aware equality via `changes::key_format`
+- [ ] Tag query language (`~` requires all, `!` negates) in the track-browser search box, and the
+      OR-within-category / AND-across-category selection semantics on the Custom Tags page —
+      **deferred to Epic 5**. The rule engine already expresses both through
+      `has_all` / `has_any` / `has_none`; what remains is the search-box syntax and the Tags page.
+- [x] 30-second recompute throttle with a visible loading state
+- [x] Archived-tracks-excluded-unless-asked
+- [x] Smartlist Generator — by field, by tag category, Decade / BPM range / play count; idempotent
       into a reserved `Lexicon` folder
-- [ ] Rekordbox compatibility indicator (MyTag: 4 categories, 2 rules)
-- [ ] Honor `SyncOptions.all_smartlists_to_playlists`
-- [ ] `Excluded From Sync` name-prefix and tag conventions
-- [ ] `SmartlistEditor.tsx` + generator modal in `SidebarNav`
+- [x] Rekordbox compatibility indicator (MyTag: 4 categories, 2 rules)
+- [x] Honor `SyncOptions.all_smartlists_to_playlists`
+- [x] `Excluded From Sync` name-prefix and tag conventions
+- [x] `SmartlistsView.tsx` (editor + generator) wired into `SidebarNav`. Ships as a dedicated
+      view rather than inside the playlist tree — Rekordbox playlists come from `master.db` and
+      smartlists from the cache DB, so merging the trees is a larger refactor, deferred to Epic 6
 
 **Acceptance:** create a smartlist with a nested OR clause, watch it populate, sync it to Rekordbox
 as a materialised playlist, and confirm the tag rules land as MyTag rules where expressible.

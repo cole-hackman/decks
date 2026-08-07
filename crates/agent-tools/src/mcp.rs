@@ -254,6 +254,31 @@ pub fn tool_definitions() -> Vec<Value> {
             ),
         ),
         tool_definition(
+            "smartlist_list",
+            "List saved smartlists (rules-driven dynamic playlists) for a library.",
+            object_schema(
+                &[(
+                    "library_path",
+                    string_schema("Path to the Rekordbox master.db file."),
+                )],
+                &["library_path"],
+            ),
+        ),
+        tool_definition(
+            "smartlist_evaluate",
+            "Evaluate a saved smartlist and return the tracks that currently match its rules.",
+            object_schema(
+                &[
+                    (
+                        "library_path",
+                        string_schema("Path to the Rekordbox master.db file."),
+                    ),
+                    ("id", string_schema("Smartlist ID.")),
+                ],
+                &["library_path", "id"],
+            ),
+        ),
+        tool_definition(
             "relocate_scan",
             "Find relocation candidates for broken/missing files by scanning root directories.",
             object_schema(
@@ -380,6 +405,13 @@ pub fn tool_request_from_name_and_arguments(name: &str, arguments: Value) -> Res
                 limit: optional_usize(arguments, "limit")?,
             })
         }
+        "smartlist_list" | "smartlists.list" => Ok(ToolRequest::SmartlistList {
+            library_path: required_string(arguments, "library_path")?,
+        }),
+        "smartlist_evaluate" | "smartlists.evaluate" => Ok(ToolRequest::SmartlistEvaluate {
+            library_path: required_string(arguments, "library_path")?,
+            id: required_string(arguments, "id")?,
+        }),
         "relocate_scan" | "relocate.scan" => Ok(ToolRequest::RelocateScan {
             library_path: required_string(arguments, "library_path")?,
             search_roots: arguments

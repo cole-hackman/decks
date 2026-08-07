@@ -190,3 +190,97 @@ export interface TransitionScore {
   score: number;
   reasons: string[];
 }
+
+// ── Smartlists (Epic 1) ──────────────────────────────────────────────────────
+// Mirrors `crates/smartlists`. See docs/lexicon/03-smartlists.md.
+
+export type SmartlistCombinator = "all" | "any";
+
+export type SmartlistField =
+  | "title"
+  | "artist"
+  | "album"
+  | "genre"
+  | "comment"
+  | "file_path"
+  | "musical_key"
+  | "bpm"
+  | "rating"
+  | "year"
+  | "duration_secs"
+  | "bit_rate"
+  | "sample_rate"
+  | "play_count"
+  | "energy"
+  | "has_cues"
+  | "in_any_playlist"
+  | "is_file_missing"
+  | "is_archived"
+  | "tags";
+
+export type SmartlistFieldKind = "text" | "key" | "number" | "bool" | "tags";
+
+export type SmartlistOperator =
+  | "contains"
+  | "not_contains"
+  | "equals"
+  | "not_equals"
+  | "is_none"
+  | "is_not_none"
+  | "greater_than"
+  | "less_than"
+  | "greater_or_equal"
+  | "less_or_equal"
+  | "between"
+  | "is_true"
+  | "is_false"
+  | "has_all"
+  | "has_any"
+  | "has_none";
+
+/** Serde-tagged union — matches `smartlists::Value`. */
+export type SmartlistValue =
+  | { type: "text"; value: string }
+  | { type: "number"; value: number }
+  | { type: "range"; value: [number, number] }
+  | { type: "tags"; value: string[] }
+  | { type: "none" };
+
+export interface SmartlistRule {
+  field: SmartlistField;
+  op: SmartlistOperator;
+  value: SmartlistValue;
+}
+
+/** Rules within a clause are OR-ed. Clauses are AND-ed when combinator is
+ *  "all" — the two-level structure from ADR-0013. */
+export interface SmartlistClause {
+  rules: SmartlistRule[];
+}
+
+export interface Smartlist {
+  id: string;
+  name: string;
+  parent_folder_id: string | null;
+  combinator: SmartlistCombinator;
+  clauses: SmartlistClause[];
+  created_at: number;
+  updated_at: number;
+}
+
+export type SmartlistCompatibility =
+  | { native: Record<string, never> }
+  | "native"
+  | { materialised: { reason: string } };
+
+export type SmartlistGeneratorSpec =
+  | { kind: "by_field"; field: SmartlistField }
+  | {
+      kind: "by_tag_category";
+      category_id: string;
+      category_name: string;
+      tags: [string, string][];
+    }
+  | { kind: "by_decade" }
+  | { kind: "by_bpm_range"; width: number }
+  | { kind: "by_play_count"; threshold: number };

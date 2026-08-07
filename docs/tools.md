@@ -312,6 +312,29 @@ Generate a Rekordbox-importable XML file with all accepted changes overlaid on t
 | Side effects | writes XML file to disk; marks accepted changes exported |
 | Cost | free |
 
+### `smartlist_list`
+List saved smartlists (rules-driven dynamic playlists) for a library.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string` |
+| Returns | `Smartlist[]` |
+| Idempotent | yes |
+| Side effects | none |
+| Cost | free |
+
+### `smartlist_evaluate`
+Evaluate a saved smartlist and return the tracks that currently match its rules. Archived tracks
+are excluded unless a rule explicitly selects them.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string`, `id: string` |
+| Returns | `Track[]` |
+| Idempotent | yes |
+| Side effects | none |
+| Cost | free |
+
 ---
 
 ## Phase 3+ — Not yet implemented

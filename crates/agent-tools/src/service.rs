@@ -356,6 +356,70 @@ impl AgentToolService {
                 }))
             }
 
+            ToolRequest::SmartlistList { library_path } => {
+                let cache_path = self
+                    .cache_path
+                    .as_deref()
+                    .context("cache_path is required for smartlist tools")?;
+                let db = cache::CacheDb::open(cache_path)?;
+                to_value(db.list_smartlists(&library_path)?)
+            }
+            ToolRequest::SmartlistEvaluate { library_path, id } => {
+                let cache_path = self
+                    .cache_path
+                    .as_deref()
+                    .context("cache_path is required for smartlist tools")?;
+                let cache = cache::CacheDb::open(cache_path)?;
+                let list = cache
+                    .get_smartlist(&library_path, &id)?
+                    .with_context(|| format!("smartlist {id} not found"))?;
+
+                let db = open_library(&library_path)?;
+                let tracks = db.tracks()?;
+
+                let needs_missing = list
+                    .clauses
+                    .iter()
+                    .flat_map(|c| c.rules.iter())
+                    .any(|r| r.field == smartlists::Field::IsFileMissing);
+
+                let mut ctx = smartlists::EvalContext {
+                    tracks_with_cues: db.track_ids_with_cues()?.into_iter().collect(),
+                    tracks_in_any_playlist: db.track_ids_in_any_playlist()?.into_iter().collect(),
+                    ..Default::default()
+                };
+                if needs_missing {
+                    ctx.tracks_with_missing_files = tracks
+                        .iter()
+                        .filter(|t| {
+                            t.folder_path
+                                .as_deref()
+                                .map(|p| !Path::new(p).exists())
+                                .unwrap_or(false)
+                        })
+                        .map(|t| t.id.clone())
+                        .collect();
+                }
+                if let Ok(ids) = cache.list_archived(&library_path) {
+                    ctx.archived_tracks = ids.into_iter().collect();
+                }
+                if let Ok(map) = cache.list_track_tags_map(&library_path) {
+                    ctx.tags_by_track = map
+                        .into_iter()
+                        .map(|(k, v)| (k, v.into_iter().collect()))
+                        .collect();
+                }
+
+                let matched: std::collections::HashSet<String> =
+                    smartlists::evaluate(&list, &tracks, &ctx)
+                        .into_iter()
+                        .collect();
+                let out: Vec<Track> = tracks
+                    .into_iter()
+                    .filter(|t| matched.contains(&t.id))
+                    .collect();
+                to_value(out)
+            }
             ToolRequest::RelocateScan {
                 library_path,
                 search_roots,
@@ -816,5 +880,108 @@ mod tests {
             found,
             "expected a relocate candidate for track 1; got {value}"
         );
+    }
+
+    #[test]
+    fn smartlist_evaluate_returns_only_matching_tracks() {
+        // Seed: tracks 1 and 3 are Techno, track 2 is House, track 4 is deleted.
+        let library_path = make_fixture_db();
+        let cache_file = NamedTempFile::new().expect("cache tempfile");
+        let service = AgentToolService {
+            cache_path: Some(cache_file.path().to_path_buf()),
+        };
+        let lib = library_path.display().to_string();
+
+        let cache = cache::CacheDb::open(cache_file.path()).expect("cache");
+        let created = cache
+            .create_smartlist(
+                &lib,
+                "Techno",
+                None,
+                smartlists::Combinator::All,
+                &[smartlists::Clause::single(smartlists::Rule::new(
+                    smartlists::Field::Genre,
+                    smartlists::Operator::Equals,
+                    smartlists::Value::Text("Techno".into()),
+                ))],
+            )
+            .expect("create smartlist");
+
+        let value = service
+            .execute(ToolRequest::SmartlistEvaluate {
+                library_path: lib.clone(),
+                id: created.id.clone(),
+            })
+            .expect("evaluate");
+
+        let ids: Vec<String> = value
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|t| t["id"].as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(ids, vec!["1".to_string(), "3".to_string()]);
+
+        // And the smartlist is discoverable through the list tool.
+        let listed = service
+            .execute(ToolRequest::SmartlistList { library_path: lib })
+            .expect("list");
+        assert_eq!(listed.as_array().expect("array").len(), 1);
+    }
+
+    #[test]
+    fn smartlist_evaluate_errors_for_unknown_id() {
+        let library_path = make_fixture_db();
+        let cache_file = NamedTempFile::new().expect("cache tempfile");
+        let service = AgentToolService {
+            cache_path: Some(cache_file.path().to_path_buf()),
+        };
+        let err = service.execute(ToolRequest::SmartlistEvaluate {
+            library_path: library_path.display().to_string(),
+            id: "nope".into(),
+        });
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn smartlist_evaluate_excludes_archived_tracks_by_default() {
+        let library_path = make_fixture_db();
+        let cache_file = NamedTempFile::new().expect("cache tempfile");
+        let service = AgentToolService {
+            cache_path: Some(cache_file.path().to_path_buf()),
+        };
+        let lib = library_path.display().to_string();
+
+        let cache = cache::CacheDb::open(cache_file.path()).expect("cache");
+        let created = cache
+            .create_smartlist(
+                &lib,
+                "Techno",
+                None,
+                smartlists::Combinator::All,
+                &[smartlists::Clause::single(smartlists::Rule::new(
+                    smartlists::Field::Genre,
+                    smartlists::Operator::Equals,
+                    smartlists::Value::Text("Techno".into()),
+                ))],
+            )
+            .expect("create smartlist");
+        cache
+            .archive_tracks(&lib, &["3".to_string()])
+            .expect("archive");
+
+        let value = service
+            .execute(ToolRequest::SmartlistEvaluate {
+                library_path: lib,
+                id: created.id,
+            })
+            .expect("evaluate");
+        let ids: Vec<String> = value
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|t| t["id"].as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(ids, vec!["1".to_string()]);
     }
 }

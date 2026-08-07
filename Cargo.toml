@@ -22,6 +22,7 @@ members = [
     "apps/desktop/src-tauri", "crates/relocate",
     "crates/smart-fixes",
     "crates/track-matcher",
+    "crates/smartlists",
 ]
 
 [workspace.package]

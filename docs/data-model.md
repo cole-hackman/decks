@@ -59,7 +59,7 @@ The user's Rekordbox 7 `master.db` (SQLCipher-encrypted SQLite) is the primary s
 
 ## Cache types (`crates/cache`)
 
-The cache is a local SQLite WAL database whose schema is versioned via `PRAGMA user_version`. Migrations live in `crates/cache/src/migrations.rs`. Current schema version: **v4**.
+The cache is a local SQLite WAL database whose schema is versioned via `PRAGMA user_version`. Migrations live in `crates/cache/src/migrations.rs`. Current schema version: **v7**.
 
 ### v1 — `audio_features`
 Derived from audio analysis; cached per `(track_uri, analyzer_version)`.
@@ -93,6 +93,42 @@ audio_fingerprints (
     created_at  INTEGER
 )
 ```
+
+### v5 — `tag_categories`, `tags`, `track_tags`, `incoming_watermark`, `archived_tracks`, `common_text_blocklist`, `field_mappings`, `sync_runs`
+Custom Tags, Incoming/Archive, and Smart Fixes / Sync config.
+
+> `field_mappings` and `sync_runs` were created here but are **not read or written by any code**.
+> `field_mappings` is also the wrong shape for real field mappings — its primary key is
+> `(library_path, source_field)`, so it cannot express Lexicon's multi-source combining or
+> per-DJ-app mappings. Epic 4 should replace it rather than build on it.
+
+### v6 — `waveform_peaks`
+Decoded peak data cached per track URI so waveforms survive restarts.
+
+### v7 — `smartlists`
+Rules-driven dynamic playlists (Epic 1).
+
+```
+smartlists (
+    id               TEXT PRIMARY KEY,
+    library_path     TEXT NOT NULL,
+    name             TEXT NOT NULL,
+    parent_folder_id TEXT,
+    combinator       TEXT NOT NULL,   -- "all" | "any"
+    clauses_json     TEXT NOT NULL,
+    seq              INTEGER NOT NULL DEFAULT 0,
+    created_at       INTEGER,
+    updated_at       INTEGER
+)
+```
+
+Rules are a JSON document rather than normalised clause/rule tables: evaluation is in-memory
+(ADR-0013) so no query ever filters on an individual rule, and `staged_changes` already stores
+JSON payloads in this database. A corrupt `clauses_json` degrades to an empty rule set, which
+matches nothing.
+
+`parent_folder_id` doubles as the Smartlist Generator's ledger — generated smartlists sit in the
+reserved `Lexicon` folder, and moving one out is what makes the generator recreate it.
 
 ### Planned
 
