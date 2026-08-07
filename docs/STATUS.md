@@ -1,5 +1,73 @@
 # Status
 
+## Blockers — verified, not assumed (2026-08-06)
+
+The three Epic 4 items still open cannot be built *in this environment*, for reasons that are about
+the environment rather than the design:
+
+| Item | Blocker | Evidence |
+|---|---|---|
+| Enrichment (Find Tags, album art) | Outbound egress to metadata APIs is blocked. | `curl https://musicbrainz.org/ws/2/...` returns `CONNECT tunnel failed, response 403`. Writing response parsers against invented JSON shapes would be untestable code in a production path. |
+| Energy / Danceability | No audio to calibrate against. `fixtures/audio/` holds only `.gitkeep`; real fixtures are gitignored. | An uncalibrated 1–10 scale would be a number we could not defend, which is exactly what ADR-0008 exists to prevent. |
+| Beatshift Fixer | Both of the above, plus a re-encoding dependency. | Detecting beatshift needs real encoder-padded MP3s; fixing it needs a re-encoder. |
+
+None of these is deferred by preference. Each needs either network access or a real (gitignored)
+fixture library, both of which are available on a developer machine and not here. The design work
+for all three is recorded in `docs/lexicon/` and `docs/ROADMAP.md`.
+
+## 2026-08-06 — Epic 4 (part 2): Field Mappings
+
+`crates/changes::field_mappings` — the projection engine for fields the target does not have.
+Energy, Danceability and Custom Tags have no Rekordbox column and no standard ID3 frame; a mapping
+writes them somewhere that does. It lives in `changes` rather than beside Write Tags because the
+same `Energy → Comment` rule must produce the same string whether it lands in `master.db` or in an
+ID3 frame — one implementation, two call sites.
+
+Spec semantics: source → target, overwrite replaces while off appends, several sources on one
+target combine with `, `, custom tags write hashtag form, and a colour source writes the colour
+*name* since a text target cannot use a hex value.
+
+Three rules the spec leaves open, decided and tested:
+
+- A track with no value for a source contributes **nothing** — not `Energy` with no number after
+  it, and not a blanked target.
+- Numbers are zero-padded to two digits, so a text target sorts them correctly. Same reason Key
+  Conversion has a leading-zero option.
+- Where several mappings share a target, the **first** decides overwrite-vs-append. Mixing the two
+  on one target is a configuration mistake; first-wins is predictable and matches reading order.
+
+**Cache migration v11 drops the dead `field_mappings` table from v5.** Nothing ever read or wrote
+it, and its `(library_path, source_field)` primary key allowed exactly one target per source —
+which cannot express combining, the feature's most useful half. The replacement is scoped by
+*profile* rather than library path, because mappings are configured per destination.
+
+Write Tags honours them, with two guards: mappings only fill targets the per-field selection did
+**not** claim (quietly replacing a field the user explicitly ticked would be a nasty surprise), and
+a mapping onto a field audio files do not have produces a warning rather than silently vanishing.
+
+`FieldMappingsSection` in Settings configures the ID3 profile. Per-DJ-app profiles and applying
+mappings during sync are outstanding; the schema is ready for both.
+
+**Incoming `Selected done`** ships alongside (cache migration **v12**). The manual is right that
+auto-advance is the detail that makes triage fast: marking the selection reviewed immediately
+selects the next track, so an inbox clears with one repeated `D` instead of a click-and-reach cycle
+per track. Two details that had to be got right — the next track is chosen from the list as it stood
+*before* removal, so it is the one that visually followed what the user was looking at; and
+advancing is skipped entirely when marking failed, because advancing past a track that is still in
+the inbox would lose it.
+
+The existing `incoming_watermark` could not express this: it answers "what arrived since I last
+cleared", which is all-or-nothing. Per-track review state is a separate table, filtered out
+alongside archived tracks.
+
+**Send to → Move files…** is now on the track context menu, scoped to the current multi-selection
+when the right-clicked track is part of it, so "send these twelve" works as well as "send this one".
+It carries a `Moves on disk` hint — it is the only context-menu entry that touches the filesystem,
+and that should not be a surprise.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 354, typecheck, lint, `pnpm e2e` 17 — all green.
+
 ## 2026-08-06 — Epic 4 (part 1): Move & Rename
 
 New `crates/file-organizer`, three pure layers with no filesystem access anywhere in the crate:

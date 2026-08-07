@@ -45,10 +45,22 @@ button is bindable to a hotkey. That turns triage into a single repeated keystro
 *Deleting* — `Delete selected` removes tracks from the library **and from disk**. Destructive, and
 labelled as such.
 
-*decks status* — **partial.** `IncomingView` exists with `Mark all reviewed` and `Archive selected`
-header actions, backed by a `last_incoming_cleared_at` watermark, and the Files view now has a
-watch-folder queue with per-file and bulk import/ignore. Missing: auto-advance on `Selected done`,
-its hotkey binding, and delete-from-disk.
+*decks status* — **partial.** `IncomingView` has `Selected done`, `Archive selected` and
+`Mark all reviewed`, and the Files view has a watch-folder queue with per-file and bulk
+import/ignore.
+
+**`Selected done` auto-advances**, which the manual is right to call out as the detail that makes
+triage fast: it marks the selection reviewed and immediately selects the next track, so an inbox
+clears with one repeated keystroke (`D`) instead of a click-and-reach cycle per track. The next
+track is chosen from the list as it stood *before* removal, so it is the one that visually followed
+what the user was looking at, and advancing is skipped entirely if marking failed — advancing past a
+track still in the inbox would lose it.
+
+This needed cache migration **v12**: the existing watermark answers "what arrived since I last
+cleared" and cannot express "I have dealt with these three", so per-track review state is recorded
+separately and filtered out alongside archived tracks.
+
+Missing: delete-from-disk.
 
 *Epic* — **4**.
 
@@ -130,8 +142,12 @@ field has focus so typing a path does not fire a move on every digit. Moving reu
 Rename planner, so collisions and `TrackRelocate` staging behave identically, and the success
 message repeats the full-sync warning.
 
-Not done: opening the picker itself from a hotkey, and the right-click → Send to entry point —
-this lives in the Files view rather than the track context menu for now.
+The right-click → **Send to → Move files…** entry exists: it opens the Files view scoped to the
+right-clicked track, or to the current multi-selection when the right-clicked track is part of it,
+so "send these twelve" works as well as "send this one".
+
+Not done: opening a dedicated picker popup from a hotkey — the entry navigates to the Files view
+rather than showing a modal.
 
 *Epic* — **4**.
 

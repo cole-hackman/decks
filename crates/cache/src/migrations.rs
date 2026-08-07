@@ -229,6 +229,49 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        11,
+        "
+        -- Field Mappings (Epic 4). Replaces the `field_mappings` table from v5,
+        -- which was never read or written by anything and could not express the
+        -- feature: its (library_path, source_field) primary key allows one
+        -- target per source, while the spec requires *several sources per
+        -- target* combining into one value.
+        --
+        -- Scoped by `profile` rather than library_path: mappings are configured
+        -- separately per DJ app and again for ID3 tag writing, which is a
+        -- property of the destination, not of one database.
+        CREATE TABLE field_mapping_rules (
+          id         TEXT PRIMARY KEY,
+          profile    TEXT NOT NULL,
+          source_json TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          overwrite  INTEGER NOT NULL DEFAULT 0,
+          seq        INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX idx_field_mapping_profile ON field_mapping_rules(profile, seq);
+
+        DROP TABLE IF EXISTS field_mappings;
+        ",
+    ),
+    (
+        12,
+        "
+        -- Per-track incoming review state (Epic 4).
+        --
+        -- The existing `incoming_watermark` is all-or-nothing: it answers 'what
+        -- arrived since I last cleared', which cannot express 'I have dealt
+        -- with these three'. Marking one track done must not hide the rest, so
+        -- reviewed tracks are recorded individually and filtered out alongside
+        -- archived ones.
+        CREATE TABLE incoming_reviewed (
+          library_path TEXT NOT NULL,
+          track_id     TEXT NOT NULL,
+          reviewed_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+          PRIMARY KEY (library_path, track_id)
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -346,6 +389,48 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn incoming_reviewed_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO incoming_reviewed (library_path, track_id) VALUES ('/db', 't1')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM incoming_reviewed", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn field_mapping_rules_replace_the_dead_v5_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO field_mapping_rules (id, profile, source_json, target, overwrite, seq)
+             VALUES ('r1', 'id3', '{\"kind\":\"energy\"}', 'Comment', 1, 0)",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM field_mapping_rules", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // The v5 table is gone: nothing ever read or wrote it, and its
+        // one-target-per-source key cannot express combining.
+        let dead: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='field_mappings'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(dead, 0);
     }
 
     #[test]

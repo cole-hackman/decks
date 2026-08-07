@@ -22,6 +22,8 @@ interface Options {
   playlistId?: string;
   /** Opens the tag picker for the right-clicked track. */
   onEditTags?: (track: Track) => void;
+  /** Opens the Files view scoped to this track — the spec's "Send to". */
+  onSendToFiles?: (track: Track) => void;
 }
 
 /** Builds the right-click action set for a Track. Memoised so the menu
@@ -31,6 +33,7 @@ export function useTrackContextActions({
   onShowDetails,
   playlistId,
   onEditTags,
+  onSendToFiles,
 }: Options): TrackContextMenuAction[] {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -221,6 +224,21 @@ export function useTrackContextActions({
             } as TrackContextMenuAction,
           ]
         : []),
+      ...(onSendToFiles
+        ? [
+            {
+              id: "send-to-files",
+              label: "Send to → Move files…",
+              hint: "Moves on disk",
+              icon: (
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path d="M1.5 3A1.5 1.5 0 013 1.5h3.586a1.5 1.5 0 011.06.44L8.708 3h4.792A1.5 1.5 0 0115 4.5v8A1.5 1.5 0 0113.5 14h-11A1.5 1.5 0 011 12.5v-9c0-.27.05-.526.14-.76L1.5 3zM7 8.5h3.5l-1.2-1.2.7-.7L12.7 9l-2.7 2.4-.7-.7L10.5 9.5H7v-1z" />
+                </svg>
+              ),
+              onSelect: (track: Track) => onSendToFiles(track),
+            } as TrackContextMenuAction,
+          ]
+        : []),
       {
         id: "stage-intro-cue",
         label: "Stage intro cue",
@@ -293,5 +311,6 @@ export function useTrackContextActions({
     doRemoveFromPlaylist,
     playlistId,
     onEditTags,
+    onSendToFiles,
   ]);
 }

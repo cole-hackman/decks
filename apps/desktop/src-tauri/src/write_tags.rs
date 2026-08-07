@@ -10,6 +10,7 @@
 use std::path::Path;
 
 use audio_tags::TagWriteFields;
+use changes::field_mappings::{FieldMappings, MappingInput};
 use serde::{Deserialize, Serialize};
 
 /// Which fields to write. Everything unselected is left untouched in the file —
@@ -54,6 +55,10 @@ impl TagFieldSelection {
 
 #[derive(Debug, Default, Serialize)]
 pub struct WriteTagsResult {
+    /// Non-fatal notes — e.g. a mapping onto a field audio files do not have.
+    /// Surfaced rather than swallowed, so a mapping that never applies is
+    /// visible instead of mysteriously absent.
+    pub warnings: Vec<String>,
     pub written: Vec<String>,
     /// `(track_id, reason)`. One unwritable file must not abandon the batch.
     pub failed: Vec<(String, String)>,
@@ -98,6 +103,52 @@ fn payload(
     }
 }
 
+/// Targets a field mapping can write to when the destination is an audio file.
+///
+/// Limited to what `audio_tags` can actually write — a mapping onto a frame we
+/// cannot set would silently do nothing, which is worse than refusing it.
+const MAPPABLE_TAG_TARGETS: &[&str] = &["Title", "Artist", "Album", "Genre", "Key", "Comment"];
+
+/// Apply field mappings on top of the payload.
+///
+/// Mappings project fields Rekordbox has no frame for — energy, custom tags —
+/// into ones it does. They run *after* the per-field selection, and only on
+/// targets that selection did not already claim: a mapping quietly overwriting
+/// a field the user explicitly ticked would be a nasty surprise.
+fn apply_mappings(
+    fields: &mut TagWriteFields,
+    mappings: &FieldMappings,
+    input: &MappingInput,
+    existing: &std::collections::BTreeMap<String, String>,
+    warnings: &mut Vec<String>,
+) {
+    if mappings.is_empty() {
+        return;
+    }
+    for target in mappings.targets() {
+        if !MAPPABLE_TAG_TARGETS.contains(&target) {
+            warnings.push(format!(
+                "'{target}' cannot be written to an audio file; mapping skipped"
+            ));
+        }
+    }
+
+    for (target, value) in mappings.project(input, existing) {
+        let slot = match target.as_str() {
+            "Title" => &mut fields.title,
+            "Artist" => &mut fields.artist,
+            "Album" => &mut fields.album,
+            "Genre" => &mut fields.genre,
+            "Key" => &mut fields.musical_key,
+            "Comment" => &mut fields.comment,
+            _ => continue,
+        };
+        if slot.is_none() {
+            *slot = Some(value);
+        }
+    }
+}
+
 fn is_empty(fields: &TagWriteFields) -> bool {
     fields.title.is_none()
         && fields.artist.is_none()
@@ -128,6 +179,29 @@ pub async fn write_tags_bulk(
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
             .map_err(|e| e.to_string())?;
+        let cache = crate::cache_db(&app)?;
+        let field_mappings = cache
+            .list_field_mappings(cache::store::ID3_PROFILE)
+            .unwrap_or_default();
+        // `list_track_tags_map` returns tag *ids*; mappings write names and
+        // filter by category name, so resolve both once for the whole batch
+        // rather than per track.
+        let tags_by_track = cache.list_track_tags_map(&library_path).unwrap_or_default();
+        let categories: std::collections::HashMap<String, String> = cache
+            .list_tag_categories()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| (c.id, c.name))
+            .collect();
+        let tag_index: std::collections::HashMap<String, (String, String)> = cache
+            .list_tags(None)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| {
+                let category = categories.get(&t.category_id).cloned().unwrap_or_default();
+                (t.id, (category, t.name))
+            })
+            .collect();
 
         let mut result = WriteTagsResult::default();
         for id in track_ids {
@@ -147,7 +221,37 @@ pub async fn write_tags_bulk(
                 continue;
             };
 
-            let fields = payload(&track, &selection);
+            let mut fields = payload(&track, &selection);
+
+            // Mappings project fields the file format has no frame for, and
+            // run only on targets the per-field selection did not claim.
+            let existing: std::collections::BTreeMap<String, String> = [
+                ("Comment", track.comment.clone()),
+                ("Genre", track.genre.clone()),
+            ]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+            .collect();
+            let input = MappingInput {
+                energy: track.energy.map(|e| (e * 10.0).round() as u8),
+                tags: tags_by_track
+                    .get(&id)
+                    .map(|ids| {
+                        ids.iter()
+                            .filter_map(|tag_id| tag_index.get(tag_id).cloned())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                ..Default::default()
+            };
+            apply_mappings(
+                &mut fields,
+                &field_mappings,
+                &input,
+                &existing,
+                &mut result.warnings,
+            );
+
             if is_empty(&fields) {
                 result.skipped.push(id);
                 continue;
@@ -162,6 +266,63 @@ pub async fn write_tags_bulk(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// ── Field mappings ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct FieldMappingRow {
+    pub id: String,
+    pub source: changes::field_mappings::MappingSource,
+    pub target: String,
+    pub overwrite: bool,
+}
+
+/// The targets a mapping can write to when the destination is an audio file.
+#[tauri::command]
+pub fn mappable_tag_targets() -> Vec<String> {
+    MAPPABLE_TAG_TARGETS.iter().map(|s| s.to_string()).collect()
+}
+
+#[tauri::command]
+pub fn list_field_mappings(app: tauri::AppHandle) -> Result<Vec<FieldMappingRow>, String> {
+    Ok(crate::cache_db(&app)?
+        .list_field_mapping_rows(cache::store::ID3_PROFILE)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|(id, m)| FieldMappingRow {
+            id,
+            source: m.source,
+            target: m.target,
+            overwrite: m.overwrite,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub fn create_field_mapping(
+    app: tauri::AppHandle,
+    source: changes::field_mappings::MappingSource,
+    target: String,
+    overwrite: bool,
+) -> Result<String, String> {
+    crate::cache_db(&app)?
+        .create_field_mapping(
+            cache::store::ID3_PROFILE,
+            &changes::field_mappings::FieldMapping {
+                source,
+                target,
+                overwrite,
+            },
+        )
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_field_mapping(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    crate::cache_db(&app)?
+        .delete_field_mapping(&id)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -202,6 +363,121 @@ mod tests {
             comment: true,
             year: true,
         }
+    }
+
+    use changes::field_mappings::{FieldMapping, MappingSource};
+    use std::collections::BTreeMap;
+
+    fn mappings(rules: Vec<FieldMapping>) -> FieldMappings {
+        FieldMappings::new(rules)
+    }
+
+    fn mapping_input() -> MappingInput {
+        MappingInput {
+            energy: Some(8),
+            tags: vec![("Genre".into(), "Techno".into())],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_mapping_fills_a_field_the_selection_did_not_claim() {
+        let mut fields = payload(
+            &track(),
+            &TagFieldSelection {
+                title: true,
+                ..Default::default()
+            },
+        );
+        let mut warnings = Vec::new();
+        apply_mappings(
+            &mut fields,
+            &mappings(vec![FieldMapping {
+                source: MappingSource::Energy,
+                target: "Comment".into(),
+                overwrite: true,
+            }]),
+            &mapping_input(),
+            &BTreeMap::new(),
+            &mut warnings,
+        );
+        assert_eq!(fields.comment.as_deref(), Some("Energy 08"));
+        assert_eq!(fields.title.as_deref(), Some("Get Lucky"));
+    }
+
+    #[test]
+    fn a_mapping_never_overwrites_a_field_the_user_explicitly_ticked() {
+        // Quietly replacing a ticked field would be a nasty surprise.
+        let mut fields = payload(&track(), &all());
+        let before = fields.comment.clone();
+        assert!(before.is_none(), "fixture has no comment");
+        fields.comment = Some("user chose this".into());
+
+        let mut warnings = Vec::new();
+        apply_mappings(
+            &mut fields,
+            &mappings(vec![FieldMapping {
+                source: MappingSource::Energy,
+                target: "Comment".into(),
+                overwrite: true,
+            }]),
+            &mapping_input(),
+            &BTreeMap::new(),
+            &mut warnings,
+        );
+        assert_eq!(fields.comment.as_deref(), Some("user chose this"));
+    }
+
+    #[test]
+    fn a_mapping_onto_a_field_audio_files_lack_warns_rather_than_vanishing() {
+        let mut fields = payload(&track(), &TagFieldSelection::default());
+        let mut warnings = Vec::new();
+        apply_mappings(
+            &mut fields,
+            &mappings(vec![FieldMapping {
+                source: MappingSource::Energy,
+                target: "Rating".into(),
+                overwrite: true,
+            }]),
+            &mapping_input(),
+            &BTreeMap::new(),
+            &mut warnings,
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Rating"), "got: {}", warnings[0]);
+    }
+
+    #[test]
+    fn custom_tags_map_into_a_writable_field() {
+        let mut fields = payload(&track(), &TagFieldSelection::default());
+        let mut warnings = Vec::new();
+        apply_mappings(
+            &mut fields,
+            &mappings(vec![FieldMapping {
+                source: MappingSource::AllCustomTags,
+                target: "Comment".into(),
+                overwrite: true,
+            }]),
+            &mapping_input(),
+            &BTreeMap::new(),
+            &mut warnings,
+        );
+        assert_eq!(fields.comment.as_deref(), Some("#Techno"));
+    }
+
+    #[test]
+    fn no_mappings_changes_nothing() {
+        let mut fields = payload(&track(), &TagFieldSelection::default());
+        let mut warnings = Vec::new();
+        apply_mappings(
+            &mut fields,
+            &FieldMappings::default(),
+            &mapping_input(),
+            &BTreeMap::new(),
+            &mut warnings,
+        );
+        assert!(is_empty(&fields));
+        assert!(warnings.is_empty());
     }
 
     #[test]

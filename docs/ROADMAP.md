@@ -138,14 +138,14 @@ hand-placed cues; never present a low-confidence anchor as certain.
 Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.md),
 [`07-health.md`](lexicon/07-health.md#find-tags--album-art).
 
-- [x] Watch folder → arrivals queue (scan-based). Auto-advance + hotkey still outstanding
+- [x] Watch folder → arrivals queue (scan-based), plus `Selected done` auto-advance on the D hotkey
 - [x] Rename pattern language: `%field%`, literals, `{}` optional segments
 - [x] Up to three nested subfolder patterns, incl. special patterns (bitrate buckets, first tag,
       current year/month/decade)
 - [x] Move & Rename over a selection, preview-then-apply, staging `TrackRelocate` per moved file
 - [x] Quick move with favourited folders on hotkeys 1–9
 - [x] Bulk Write Tags (ID3) with per-field selection
-- [ ] **Field Mappings** — per-target, overwrite vs append, multi-source combining
+- [x] **Field Mappings** — per-target, overwrite vs append, multi-source combining (ID3 profile; per-DJ-app profiles and sync-time application outstanding)
 - [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
 - [ ] Album art: fetch, embed, replace, remove, reload
 - [ ] Energy / Danceability / Popularity / Happiness from our own analysis (**not** Spotify — see

@@ -1620,3 +1620,51 @@ stored `true` must not silently take effect.
 **Next:** what remains in Epic 4 is field mappings, the enrichment revival (Find Tags & album art),
 Energy/Danceability, and the Beatshift Fixer — the last two are analysis work closer in character
 to Epic 3 part 2 than to the file management this PR covers. Epic 5 onward is untouched.
+
+## 2026-08-06 — Session: Epic 4 part 2 (Field Mappings)
+
+**Where this lives mattered more than what it does.** The obvious home was next to Write Tags, in
+the desktop crate. But sync needs the same projection, and two implementations of "what string does
+Energy 8 become" would drift within a release. So it went into `crates/changes` — the crate that
+already owns "how does a value reach a target" — and Write Tags calls into it. Sync will too.
+
+**The dead table was the interesting find.** Migration v5 created `field_mappings` with a
+`(library_path, source_field)` primary key. Nothing has ever read or written it. Worse, that key
+allows one target per source, and the feature's most useful half is the *inverse* — several sources
+combining into one target. It could not have been extended into the feature; v11 drops it. Worth
+noticing that a table sitting unused for several migrations is evidence the design was never
+exercised, not evidence it was ready.
+
+**Two guards on the Write Tags integration**, both from asking "what would annoy me if the app did
+this?": a mapping must not overwrite a field the user explicitly ticked, and a mapping onto a field
+audio files do not have has to say so rather than doing nothing. Silent no-ops in a settings screen
+are how people conclude a feature is broken.
+
+**The same async-assertion mistake, twice in one session.** Earlier I fixed `PlaylistPanel.test.tsx`
+for waiting on a folder row and then asserting synchronously on its children, which auto-expand one
+render later. Then I wrote `waitFor(() => expect(mappableTagTargets).toHaveBeenCalled())` and
+asserted on the select's options — waiting on the *call* rather than on the state it produces.
+Green locally, red on CI, exactly as before. The rule that generalises: **wait on the thing you are
+about to assert about**, not on the thing that triggers it. `findByRole("option", …)` is the right
+shape here.
+
+**A jsdom lesson worth keeping.** `mappableTagTargets().catch(...)` looks safe and is not: when the
+mocked module has no such export at all, the *call* throws synchronously and `.catch` never runs,
+taking the whole settings panel down. Wrapping in `try/await` inside an async IIFE covers both the
+throw and the rejection. The SettingsPanel tests caught it because they mock `../ipc` wholesale —
+which is exactly the "host returns something unexpected" case the mocked-IPC specs are good for.
+
+**`Selected done` was three lines of UI and one migration**, and the migration was the interesting
+part: the incoming watermark is a single timestamp, which can say "everything before now is dealt
+with" but not "these three are". Reaching for the existing mechanism would have meant marking one
+track done hides the rest — a bug that looks like data loss. Per-track state, filtered next to
+archived.
+
+The two details worth the tests: pick the next track from the list as it stood *before* removal (so
+it is the one that visually followed what the user was looking at), and do not advance at all if
+marking failed. The second matters more than it sounds — advancing past a track that is still in the
+inbox is how a track silently gets skipped.
+
+**Next:** enrichment (Find Tags & album art) is the remaining large Epic 4 item, and it needs
+network providers plus a local cache. Energy/Danceability and the Beatshift Fixer are analysis work,
+closer in character to Epic 3 part 2 than to file management. Epics 5–7 untouched.

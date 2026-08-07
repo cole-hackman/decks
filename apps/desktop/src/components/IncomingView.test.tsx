@@ -6,6 +6,7 @@ import {
   archiveTracks,
   clearIncoming,
   listIncomingTracks,
+  markIncomingReviewed,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 
@@ -13,6 +14,7 @@ vi.mock("../ipc", () => ({
   listIncomingTracks: vi.fn(),
   clearIncoming: vi.fn(),
   archiveTracks: vi.fn(),
+  markIncomingReviewed: vi.fn(),
   // Touched transitively via useFilterContext / TrackTable:
   listTracksWithCues: vi.fn().mockResolvedValue([]),
   listTracksInAnyPlaylist: vi.fn().mockResolvedValue([]),
@@ -84,5 +86,92 @@ describe("IncomingView", () => {
     // Dialog opens — click its Clear button
     await userEvent.click(await screen.findByRole("button", { name: "Clear" }));
     expect(clearIncoming).toHaveBeenCalledWith("/db");
+  });
+});
+
+const SECOND = { ...TRACK, id: "t2", title: "Next Track" };
+const THIRD = { ...TRACK, id: "t3", title: "Third Track" };
+
+describe("IncomingView — Selected done", () => {
+  function renderWith(
+    selected: string[],
+    onSelectionChange = vi.fn(),
+    onSelect = vi.fn(),
+  ) {
+    render(
+      <WithProviders>
+        <IncomingView
+          libraryPath="/db"
+          selectedTrackIds={new Set(selected)}
+          onSelectionChange={onSelectionChange}
+          onSelect={onSelect}
+        />
+      </WithProviders>,
+    );
+    return { onSelectionChange, onSelect };
+  }
+
+  beforeEach(() => {
+    vi.mocked(listIncomingTracks).mockResolvedValue([TRACK, SECOND, THIRD]);
+    vi.mocked(markIncomingReviewed).mockResolvedValue(1);
+  });
+
+  it("is unavailable with nothing selected", async () => {
+    renderWith([]);
+    expect(
+      await screen.findByRole("button", { name: /Selected done \(0\)/ }),
+    ).toBeDisabled();
+  });
+
+  it("marks the selection reviewed and advances to the next track", async () => {
+    const user = userEvent.setup();
+    const { onSelectionChange, onSelect } = renderWith(["t1"]);
+    await user.click(
+      await screen.findByRole("button", { name: /Selected done \(1\)/ }),
+    );
+
+    expect(markIncomingReviewed).toHaveBeenCalledWith("/db", ["t1"]);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(["t2"]));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "t2" }));
+  });
+
+  it("advances past the whole selection, not just the first of it", async () => {
+    const user = userEvent.setup();
+    const { onSelectionChange } = renderWith(["t1", "t2"]);
+    await user.click(
+      await screen.findByRole("button", { name: /Selected done \(2\)/ }),
+    );
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(["t3"]));
+  });
+
+  it("clears the selection when there is nothing after it", async () => {
+    const user = userEvent.setup();
+    const { onSelectionChange, onSelect } = renderWith(["t3"]);
+    await user.click(
+      await screen.findByRole("button", { name: /Selected done \(1\)/ }),
+    );
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("the D key does the same thing, so triage is one keystroke per track", async () => {
+    const user = userEvent.setup();
+    const { onSelectionChange } = renderWith(["t1"]);
+    await screen.findByRole("button", { name: /Selected done \(1\)/ });
+    await user.keyboard("d");
+    expect(markIncomingReviewed).toHaveBeenCalledWith("/db", ["t1"]);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(["t2"]));
+  });
+
+  it("does not advance when marking reviewed failed", async () => {
+    // Advancing past a track that is still in the inbox would lose it.
+    const user = userEvent.setup();
+    vi.mocked(markIncomingReviewed).mockRejectedValue(new Error("cache locked"));
+    const { onSelectionChange } = renderWith(["t1"]);
+    await user.click(
+      await screen.findByRole("button", { name: /Selected done \(1\)/ }),
+    );
+    expect(await screen.findByText(/cache locked/)).toBeInTheDocument();
+    expect(onSelectionChange).not.toHaveBeenCalled();
   });
 });

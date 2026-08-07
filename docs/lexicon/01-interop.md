@@ -111,7 +111,28 @@ ID3 tag writing.
 - Engine DJ has no track colours, so a colour → text mapping writes the colour *name*
   (`Red_Dark`).
 
-*decks status* — **missing.** `SyncOptions` has no mapping concept at all.
+*decks status* — **partial.** `crates/changes::field_mappings` implements the projection engine —
+source → target, overwrite-replaces / off-appends, several sources combining with `, `, hashtag
+form for custom tags, colour by name. Cache migration v11 stores rules per *profile*, and
+`FieldMappingsSection` (Settings) configures the ID3 profile, which Write Tags honours.
+
+Three rules the manual leaves open, decided and tested: a track with no value for a source
+contributes nothing (not `Energy` with no number, and not a blanked target); numbers are zero-padded
+to two digits so a text target sorts them correctly — the same reason Key Conversion has a
+leading-zero option; and where several mappings share a target, the **first** decides
+overwrite-vs-append, since mixing the two on one target is a configuration mistake and first-wins is
+predictable.
+
+For tag writing, mappings only apply to targets the per-field selection did not claim — a mapping
+quietly replacing a field the user explicitly ticked would be a nasty surprise — and a mapping onto
+a field audio files do not have produces a warning rather than vanishing.
+
+Migration v11 also **drops the dead `field_mappings` table from v5**: nothing ever read or wrote it,
+and its `(library_path, source_field)` primary key allowed one target per source, which cannot
+express combining.
+
+Missing: per-DJ-app profiles (only ID3 is configurable, though the schema is ready) and applying
+mappings during sync.
 
 *Epic* — **4** (shares machinery with Write Tags).
 
