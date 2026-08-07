@@ -194,3 +194,96 @@
 - Future contributors must remember that a Sync code path runs against the real database. Synthetic-fixture tests catch most regressions, but anything that depends on real-library quirks (column variants, ANLZ presence, FK collation) needs the disposable-DB smoke before shipping.
 - The `keep_grids` and `cue_destination` semantics are intentionally narrow in this first cut: `keep_grids` only skips `TrackMetadataEdit{field: "BPM"}` (beat-grid ANLZ edits are not staged anywhere today, so there's nothing else to skip); `cue_destination` only controls the `djmdCue.Kind` value of newly inserted hot/memory cue rows (it does not retroactively re-slot existing cues). Both are documented inline in `crates/changes/src/applier.rs`.
 - `convert_keys` writes the converted string through the existing `djmdKey` FK path (`get_or_create_fk`). If the user later switches between Camelot and Open Key formats, that creates additional `djmdKey` rows. Acceptable: `djmdKey` is small and Rekordbox tolerates orphan keys.
+
+## ADR-0011 — Relicense from MIT to GPL-3.0-or-later
+
+**Date:** 2026-08-05
+**Status:** Accepted
+
+**Context:** The Lexicon parity initiative (`docs/ROADMAP.md`) needs analysis components that do not exist under permissive licences. The strongest available key detector (`libKeyFinder`, GPL-3.0), the reference tempo/onset library (`aubio`, GPL-3.0), the BBC waveform tool (`audiowaveform`, GPL-3.0), and the single best cross-app reference implementation (`Mixxx`, GPL-2.0-or-later) are all copyleft. Under MIT we could only subprocess unmodified GPL binaries — a defensible but uncertain position — and could never read Mixxx's importers except through an expensive clean-room process.
+
+The project owner has confirmed there is no commercial or proprietary path for `decks` and that GPL is acceptable.
+
+**Decision:** Relicense the repository as **GPL-3.0-or-later**.
+
+1. `LICENSE` becomes GPL-3.0. `Cargo.toml` `[workspace.package] license` becomes `GPL-3.0-or-later`. `package.json` and `README.md` follow.
+2. The vendored reklawdbox code (MIT) and `stratum-dsp` carry over cleanly — MIT is GPL-compatible — and `NOTICE` keeps the attribution unchanged. Their original MIT grant is unaffected for anyone taking that code from upstream.
+3. GPL-3 lets us link `libKeyFinder`, bundle `aubio` and `audiowaveform`, and use `mutagen` if ever needed. It also makes Mixxx code legally readable and reusable, though ADR-0012 still prefers spec-driven implementation.
+
+**Reasons:**
+1. Analysis quality is the product. Key detection that disagrees with what DJs see in Mixed In Key or Rekordbox is worse than useless, and the best available detectors are GPL.
+2. The alternative — separate-process invocation of unmodified GPL binaries — is a legal *position*, not a certainty. Removing the question entirely is cheaper than defending it.
+3. Nothing is lost: there is no commercial plan, and copyleft is well matched to a tool whose whole premise is that users own their own library data.
+
+**Trade-offs accepted:**
+- A proprietary or dual-licensed future is foreclosed without relicensing consent from every contributor. Acceptable today (effectively single-author); it will get harder.
+- Distributed binaries must ship source or a written offer. The GitHub release process satisfies this as long as tags remain public.
+- **Relicensing does not unlock non-free model weights.** `madmom`'s models are CC-BY-NC-SA and Essentia's TensorFlow models are CC-BY-NC-ND. Those are *non-free*, not merely incompatible — no licence choice on our side makes them redistributable, and the ND term additionally forbids fine-tuning. They remain excluded. See ADR-0012.
+
+## ADR-0012 — Third-Party Analysis and Format Stack
+
+**Date:** 2026-08-05
+**Status:** Accepted
+
+**Context:** The parity roadmap needs beat/downbeat tracking good enough to drive cue generation (Epic 3), key detection users trust (Epic 6), an energy metric with a defensible definition (Epic 4), and cross-format duplicate detection (Epic 5). The open-source landscape here is unusually treacherous: the pattern across music information retrieval is **permissive code, restrictive model weights**.
+
+**Decision:** Adopt the following, and record what is deliberately excluded.
+
+Adopt:
+- **`beat_this_cpp`** (MIT, a port of CPJKU's `beat_this`) for beat and **downbeat** tracking. Downbeats are what the Cue Point Generator needs to place cues on bar boundaries; MIT means no licence question at all.
+- **`libKeyFinder`** (GPL-3.0, maintained by the Mixxx team) for key detection. The DJ-industry reference implementation, now legal for us to link under ADR-0011. Keep the existing `stratum-dsp` chroma detector as the zero-setup fallback.
+- **`libebur128`** (MIT) for ITU-R BS.1770 loudness. This becomes the honest, documented basis for the Energy field — an absolute, reproducible measurement rather than an opaque score.
+- **Chromaprint** for cross-format audio fingerprinting, upgrading the current 128-byte chromagram hash so an MP3 and a WAV of the same recording match. **Must be built against KissFFT or FFmpeg's FFT, never FFTW3** — FFTW3 makes the result GPL-2-incompatible in ways that would bite even us.
+- Keep **`lofty`** (Rust, permissive) for tag I/O. It already covers MP3/FLAC/M4A/WAV read and write; swapping to TagLib buys nothing.
+
+Reference-only, never linked or copied:
+- **`pyrekordbox`** (MIT) — the best available documentation of `master.db` write semantics and ANLZ structure. MIT, so we *may* copy; we prefer to read and reimplement in Rust.
+- **Mixxx** (GPL-2.0-or-later) — now legally usable under ADR-0011, but still preferred as a spec source. Its *wiki* format documentation is the genuinely valuable part.
+- **Deep Symmetry's Kaitai `.ksy` specs** for PDB/ANLZ, if USB export is ever revived from `deferred`.
+
+**Excluded, and why:**
+- **`madmom`** — code is BSD but the models are CC-BY-NC-SA. Non-free.
+- **Essentia** (AGPL-3.0) and especially its **TensorFlow models** (CC-BY-NC-ND) — the models are non-free and no-derivatives, so even fine-tuning is prohibited. Essentia's AGPL code could combine with GPL-3, but without the models it offers little we need.
+- **Spotify audio features** — the `audio-features` and `audio-analysis` endpoints were deprecated on 2024-11-27 and return 403 for applications registered after that date. Lexicon populates Danceability/Popularity/Happiness from Spotify; **we cannot follow them there.** Our equivalents must come from our own analysis, or not exist. Recorded in `docs/lexicon/07-health.md`.
+- **YouTube audio extraction** — explicit ToS violation. Not built.
+
+**Trade-offs accepted:**
+- Danceability, Popularity and Happiness have no good open source. Popularity is inherently a catalog metric we cannot compute locally; it may simply never ship. Danceability we can approximate from onset density and rhythmic regularity, but it will not match Spotify's numbers and we should not pretend otherwise.
+- Chromaprint's LGPL is a non-issue under GPL-3, but the FFTW3 build trap is easy to fall into via a distro package. Pin the build.
+
+## ADR-0013 — Smartlist Rule Model
+
+**Date:** 2026-08-05
+**Status:** Accepted
+
+**Context:** Epic 1 introduces smartlists. The obvious implementation is a general boolean expression tree. Lexicon's actual model is narrower, and the narrowness is deliberate.
+
+**Decision:** Model a smartlist as a **two-level structure**, not a recursive tree.
+
+```
+Smartlist { combinator: Any | All, clauses: Vec<Clause> }
+Clause    { rules: Vec<Rule> }          // rules within a clause are OR'd
+Rule      { field, operator, value }
+```
+
+- `combinator: All` — clauses are AND'd; rules inside a clause are OR'd. This is exactly Lexicon's "OR clauses only work in All Rules mode", and expresses `(Genre = House OR Genre = Techno) AND (Rating = 3)`.
+- `combinator: Any` — a flat union; every clause holds exactly one rule.
+
+Evaluation:
+1. Compile to SQL against `master.db` for fields that live there.
+2. Fall back to in-memory filtering for cache-backed fields (energy, custom tags), reusing the existing batched `CacheDb::get_energy_by_uris` and `list_track_tags_map` paths so we do not reintroduce N+1 queries.
+3. Exclude archived tracks unless a rule explicitly selects them.
+4. Cache results with a **30-second minimum recompute interval**, surfacing a loading state when a recompute occurs.
+5. Key equality routes through `changes::key_format` so `4M` matches `Am`.
+6. Custom tag matching is **exact-label only** — a deliberate performance decision, not an oversight.
+
+Degradation on sync: when a target cannot express a rule, materialise the smartlist as a normal playlist containing the current matches. For Rekordbox 6/7, tag rules map to MyTag rules (`Has all these tags` → `contains`, `Has none of these tags` → `does not contain`), limited to **4 MyTag categories and 2 rules**; anything beyond that materialises.
+
+**Reasons:**
+1. A general boolean tree is more code, a harder editor UI, and does not match the product we are cloning. Users do not ask for arbitrary nesting; they ask for "these genres, at this rating".
+2. The same two-level shape already appears in Lexicon's Custom Tags page selection semantics (OR within a category, AND across categories). One model, two surfaces.
+3. The 30-second throttle is a documented product behaviour, not an optimisation to add later — building it in from the start avoids a rewrite when libraries get large.
+
+**Trade-offs accepted:**
+- Expressions like `(A AND B) OR (C AND D)` are inexpressible. Lexicon has the same limitation. If it ever bites, the escape hatch is a saved smartlist referenced as a rule by another smartlist, which composes without a general tree.
+- Materialising on sync means the DJ app's copy goes stale until the next sync. This is inherent to any app lacking the rule, and is what Lexicon does.

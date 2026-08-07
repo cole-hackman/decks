@@ -1370,3 +1370,31 @@ guessing on murky paths (cue `Kind` semantics, ANLZ writes,
 `change_to_nearest_color` semantics). Three rate-limit hits during the
 session — handled by re-dispatching once limits cleared, or doing the
 review inline when straightforward.
+
+
+## 2026-08-05 — Session: Lexicon parity initiative kickoff (Epic 0)
+
+**Plan:** Establish the foundation for cloning Lexicon DJ's feature surface over a multi-epic
+initiative. Produce the reference spec, the parity matrix, the roadmap, and the licence change that
+unblocks the analysis stack.
+
+**Context gathered:** The repo already had a first parity pass (`docs/lexiconparityfeatures.md`,
+7 features) and eight Lexicon screenshots. Research established the full surface is far larger —
+roughly 60 manual sections. The project owner then supplied the official manual as markdown, which
+replaced a search-derived reconstruction as the source of record. Worth noting for future sessions:
+`lexicondj.com` is **unreachable from this environment** (egress proxy returns 403 on CONNECT), and
+`WebFetch` 403s universally here; GitHub raw and web search work.
+
+**Decisions taken with the owner:** Rekordbox-deep before multi-app. Epic per draft PR with review
+between. GPL relicense accepted. Smartlists first.
+
+**Shipped:** `docs/lexicon/` (13 files), `docs/ROADMAP.md`, `CLAUDE.md`, ADR-0011/0012/0013,
+GPL-3.0-or-later relicense across LICENSE/NOTICE/Cargo.toml/package.json/README.
+
+**Next:** Epic 1 — `crates/smartlists` per ADR-0013, cache migration v7, the shared operator
+vocabulary, the Smartlist Generator, and honouring `SyncOptions.all_smartlists_to_playlists` which
+is currently accepted and ignored.
+
+**Blockers:** None for Epic 1. Two open questions for the owner are logged in
+`docs/lexicon/GAPS.md` — the Camelot/Open Key posture, and how Energy should be defined now that
+Spotify's audio-features endpoint is unavailable to new applications.

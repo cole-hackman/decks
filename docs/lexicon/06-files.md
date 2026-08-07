@@ -1,0 +1,166 @@
+# 06 — Files: Watch Folder, Move/Rename, Tag Writing
+
+Owned by **Epic 4**. This is the domain where Lexicon stops being a database editor and starts
+managing the filesystem.
+
+---
+
+## Watch Folder
+
+*What it does* — A folder under continuous observation. Any music file dropped in is imported
+automatically. Default location `Music/Lexicon/Watch Folder`.
+
+*decks status* — **missing.** `decks` has an Incoming view, but ingest is a manual filesystem pick
+with fuzzy matching, not a watcher.
+
+*Epic* — **4**.
+
+---
+
+## Incoming Tracks
+
+*What it does* — The staging area for watch-folder arrivals (Sidebar → Tracks → Incoming). A place
+to clean tags, add cues, and assign playlists *before* the track joins the library proper.
+
+*Workflow, and the detail that makes it fast* — `Selected done` / `All done` mark tracks processed.
+On `Selected done`, Lexicon **immediately loads and selects the next track in the list**, and the
+button is bindable to a hotkey. That turns triage into a single repeated keystroke. Copy this.
+
+*Deleting* — `Delete selected` removes tracks from the library **and from disk**. Destructive, and
+labelled as such.
+
+*decks status* — **partial.** `IncomingView` exists with `Mark all reviewed` and `Archive selected`
+header actions, backed by a `last_incoming_cleared_at` watermark. Missing: auto-advance, hotkey
+binding, delete-from-disk, and the whole point of the page — that it is fed by a watcher.
+
+*Epic* — **4**.
+
+---
+
+## Auto Move & Rename
+
+*What it does* — When an incoming track is marked done, it is moved to a target folder. If no
+target folder is configured, nothing moves — but renaming still happens.
+
+*Subfolder patterns* — up to **three** nested levels, each independently optional, each driven by a
+field. `Genre` then `BPM` yields `…/Music/House/128/track.mp3`. **If a field is empty the track
+still moves to the target folder, just without that subfolder level** — no orphaning.
+
+*decks status* — **missing.**
+
+*Epic* — **4**.
+
+---
+
+## File rename patterns
+
+*What it does* — A small template language.
+
+- `%field%` interpolates a field.
+- Literal text passes through: `(Favorites) %artist% - %title%`.
+- `{ }` marks an **optional segment**: everything inside is emitted only if the fields inside it
+  have values. This is the whole trick — `%artist% - %title% (%key%)` yields
+  `Daft Punk - Get Lucky ()` on a keyless track, while `%artist% - %title% {(%key%)}` yields
+  `Daft Punk - Get Lucky`.
+- Optional segments compose: `%artist% - %title% {%key%}{|%bpm%}`.
+
+*Field vocabulary* (verbatim from the manual, and identical to the Lexicon field list):
+`artist, title, albumTitle, label, remixer, mix, composer, producer, grouping, lyricist, comment,
+key, genre, bpm, rating, color, year, durationSeconds, bitrate, playCount, sizeBytes, sampleRate,
+trackNumber, energy, danceability, popularity, extra1, extra2`
+
+*Special subfolder patterns* — computed values rather than raw fields:
+
+| Pattern | Yields |
+|---|---|
+| Bitrate | `320+` or `320-` — two buckets, not the raw number |
+| First tag | The first tag from the **first tag category**, ordered by category order on the Tags page |
+| Current year | e.g. `2026` |
+| Current month | Zero-padded `01`–`12` |
+| Current decade | A range, e.g. `1990 - 1999` |
+
+*decks status* — **missing.**
+
+*Epic* — **4**.
+
+---
+
+## Quick move
+
+*What it does* — Right-click → Send to → Move files. Pick a folder; Lexicon moves and optionally
+renames from tags. Recently used folders are remembered and can be favourited, and **favourited
+folders get hotkeys 1–9**. A hotkey opens the popup itself.
+
+*Critical follow-up* — after moving files you must **Full Sync** to the DJ app. A partial sync
+leaves the old locations behind; only a full sync clears them.
+
+*decks status* — **missing.**
+
+*Epic* — **4**.
+
+---
+
+## Write Tags (ID3)
+
+*What it does* — Writes the Lexicon database back into the audio files' own tags, so the files look
+right in any other program. Right-click → Write tags. **Per-field selection** — write only titles
+and leave everything else untouched. Honors field mappings, so Lexicon-only fields can be projected
+into real tag fields on the way out. Can be configured to run automatically whenever a change is
+detected.
+
+*Why it's separate from sync* — syncing updates the DJ app's database; this updates the files. A
+user whose music is also in a plain music player needs both.
+
+*decks status* — **partial.** `crates/audio-tags` (lofty) already reads *and writes* title, artist,
+album, genre, BPM, key, comment, year and duration for MP3/FLAC/M4A/WAV, and a `write_audio_tags`
+Tauri command exists. There is no bulk flow, no per-field selection, no field-mapping projection,
+and no auto-write.
+
+*Epic* — **4**.
+
+---
+
+## Find Unused Files
+
+*What it does* — Scans a folder tree and lists every file **not** in the library — the inverse of a
+missing-file scan. Aimed at reclaiming disk space.
+
+*Details worth copying*
+
+- Extension filter with `Include` / `Exclude` modes, e.g. include `PNG,JPG,JPEG,BMP` to sweep
+  stray images out of a music folder.
+- **Known DJ folders are skipped automatically**: `_Serato_`, `Traktor`, `PioneerDJ`, `iTunes`,
+  `Engine Library`, and `Lexicon` under Music — plus OS system folders.
+- Deletion is **irreversible and says so**; a text report of everything deleted is written to
+  `Documents/Lexicon`.
+- The scan results can be exported as a plain path list **without deleting**, so users can hand
+  them to their own scripts.
+
+*decks status* — **missing.**
+
+*Epic* — **4**.
+
+---
+
+## Local Path Mappings *(Ultimate tier)*
+
+*What it does* — Per-computer mapping from a stored path prefix to a local one, so a database
+restored on a second machine finds its music without a bulk relocate. The documented two-computer
+workflow is cloud database backup plus path mappings.
+
+*decks status* — **missing.** `crates/relocate` solves the adjacent problem (fuzzy filename + size
+matching for broken paths) but there is no prefix-mapping layer.
+
+*Epic* — **4**.
+
+---
+
+## Playlist Occurrence
+
+*What it does* — "Which tracks appear in exactly N playlists?" Setting N to 0 finds orphans; N=2
+finds tracks in exactly two. Utility → Other.
+
+*decks status* — **partial.** A `list_tracks_in_any_playlist` IPC command and a
+`not-in-any-playlist` filter exist, which covers the N=0 case only.
+
+*Epic* — **6**.

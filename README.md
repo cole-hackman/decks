@@ -148,6 +148,18 @@ See [docs/MANUAL_TEST_PLAN.md](docs/MANUAL_TEST_PLAN.md) for the human-in-the-lo
 
 Core Rust logic vendored and adapted from [reklawdbox](https://github.com/ryan-voitiskis/reklawdbox) (MIT, Ryan Voitiskis). See [NOTICE](NOTICE).
 
+## Roadmap
+
+`decks` is working toward feature parity with [Lexicon DJ](https://www.lexicondj.com) within
+Rekordbox. See [docs/ROADMAP.md](docs/ROADMAP.md) for the epic queue,
+[docs/lexicon/](docs/lexicon/) for the reference specification, and
+[docs/lexicon/PARITY.md](docs/lexicon/PARITY.md) for the current feature matrix.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+Relicensed from MIT in 2026 so the project can use copyleft analysis libraries
+(libKeyFinder, aubio, audiowaveform) that have no permissive equivalent. The
+vendored reklawdbox code was MIT, which is GPL-compatible; attribution is
+preserved in [NOTICE](NOTICE). See ADR-0011 in [docs/DECISIONS.md](docs/DECISIONS.md).

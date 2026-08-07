@@ -116,7 +116,7 @@ decks/
 ├── JOURNAL.md
 ├── DECISIONS.md
 ├── README.md
-├── LICENSE                       # MIT, attribution to reklawdbox
+├── LICENSE                       # GPL-3.0-or-later, attribution to reklawdbox
 ├── NOTICE                        # third-party attributions
 ├── Cargo.toml                    # workspace
 ├── pnpm-workspace.yaml
@@ -351,7 +351,7 @@ If you find yourself wanting to skip tests, take shortcuts, write a “TODO: cle
 
 If `STATUS.md` does not exist, you are in session 1. Do this:
 
-1. Initialize the repo: `git init`, add MIT LICENSE, NOTICE attributing reklawdbox.
+1. Initialize the repo: `git init`, add the LICENSE (GPL-3.0-or-later since ADR-0011; MIT at the time this was written), NOTICE attributing reklawdbox.
 1. Create the directory tree from §3 (empty crates/apps with placeholder Cargo.tomls).
 1. Set up `Cargo.toml` workspace, `pnpm-workspace.yaml`, `package.json` root.
 1. Set up `.github/workflows/ci.yml` running fmt, clippy, test on macOS + Windows.

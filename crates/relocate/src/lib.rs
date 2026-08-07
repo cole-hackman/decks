@@ -200,7 +200,13 @@ mod tests {
     use tempfile::TempDir;
 
     fn make_file(root: &Path, rel: &str, contents: &[u8]) -> PathBuf {
-        let full = root.join(rel);
+        // Join one component at a time so the result uses the platform's native
+        // separator. `Path::join("a/b")` keeps the embedded '/' verbatim, which on
+        // Windows yields "root\a/b" — that never compares equal to the "root\a\b"
+        // that walkdir produces, so path assertions here would fail on Windows only.
+        let full = rel
+            .split('/')
+            .fold(root.to_path_buf(), |acc, part| acc.join(part));
         if let Some(parent) = full.parent() {
             fs::create_dir_all(parent).unwrap();
         }
