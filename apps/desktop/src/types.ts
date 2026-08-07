@@ -307,3 +307,69 @@ export interface CueInput {
   color?: number | null;
   comment?: string | null;
 }
+
+// ── Cue Point Generator (Epic 3) ─────────────────────────────────────────────
+
+export type CueAnchor =
+  | { kind: "start" }
+  | { kind: "drop"; ordinal: number }
+  | { kind: "breakdown"; ordinal: number }
+  | { kind: "fade_out" }
+  | { kind: "end" };
+
+/** `Certain` for human-placed anchors; `Detected` carries a 0–1 score. */
+export type CueConfidence = "certain" | { detected: number };
+
+export interface ResolvedAnchor {
+  anchor: CueAnchor;
+  position_ms: number;
+  confidence: CueConfidence;
+}
+
+export interface CustomAnchorRule {
+  anchor: CueAnchor;
+  name?: string | null;
+  color?: number | null;
+}
+
+export type StartCueBehavior = "first_beat" | "existing_cue" | "zero";
+
+export interface CueTemplateEntry {
+  anchor: CueAnchor;
+  offset_beats: number;
+  name: string;
+  color?: number | null;
+  enabled: boolean;
+  memory_cue: boolean;
+  loop_beats?: number | null;
+}
+
+export interface CueTemplate {
+  name: string;
+  entries: CueTemplateEntry[];
+  start_behavior: StartCueBehavior;
+  keep_cue_position: boolean;
+}
+
+export interface GeneratedCue {
+  position_ms: number;
+  name: string;
+  color: number | null;
+  slot: number;
+  memory_cue: boolean;
+  loop_end_ms: number | null;
+  confidence: CueConfidence;
+  template_index: number;
+}
+
+export type SkippedCue =
+  | { reason: "anchor_missing"; name: string; anchor: CueAnchor }
+  | { reason: "out_of_range"; name: string; position_ms: number }
+  | { reason: "overflow"; name: string }
+  | { reason: "duplicate_memory_cue"; name: string; position_ms: number };
+
+export interface GeneratePreview {
+  cues: GeneratedCue[];
+  skipped: SkippedCue[];
+  anchors: ResolvedAnchor[];
+}
