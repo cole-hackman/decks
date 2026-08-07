@@ -182,7 +182,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
       (inspectable, schema-tolerant); analysis caches excluded; nothing auto-deleted
 - [x] Duplicates: duration bounds, preselection, bulk Prefer, review step, **playlist re-pointing
       to the keeper**. Interruptible scans and manual merge outstanding
-- [ ] Relocate: prefix rewriting, all-tracks mode, extension change, merge-with-existing, backup
+- [x] Relocate: prefix rewriting, all-tracks mode, extension change. Backup rides on `WriteGuard`.
+      **Merge-with-existing and the 5-minute re-check cadence outstanding**
 - [x] Find Broken Tracks — real decode check at two depths, with a per-playlist report. Deleting
       audio from disk is deliberately not offered; removing a track stays a staged change
 - [x] Archive: context-sensitive playlist rule, selection helper, staged cleanup.

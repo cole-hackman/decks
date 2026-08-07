@@ -1,5 +1,41 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 10): prefix rewriting
+
+The fuzzy relocate answers "where did this one file go?". `relocate::rewrite` answers a different
+question: "the drive letter changed, rewrite all four thousand of them." **Files → Rewrite Paths.**
+
+**Nothing is inferred.** The user states both prefixes. The spec calls this the deterministic path,
+and a tool that guessed the rewrite would eventually guess wrong across an entire library — so
+there is no "detect" button, deliberately.
+
+Decisions, each tested:
+
+- **Separators and case are ignored when matching** — a user typing `D:\Music` means the folder
+  stored as `D:/music/`. But **the remainder keeps its original case**: a rewrite that lower-cased
+  the rest of the path would break every file on a case-sensitive filesystem. That pair is the
+  whole subtlety of prefix matching.
+- **All-tracks mode is off by default** and warns when switched on. The common case is repairing
+  breakage; sweeping working paths into a rewrite is how a working library stops working.
+- **A path already in the library is refused**, per the spec's constraint — and so is a collision
+  between two rewrites in the *same plan*, which does not have to pre-exist to be a collision.
+- **An empty source prefix rewrites nothing**, since it would match every path in the library.
+- **Extension substitution** swaps only the last dot *after* the last separator, so
+  `/Music/v1.0/track` gains an extension rather than having `0` replaced.
+- The preview says **"1 of 3 would be rewritten"**, and lists collisions but not the thousands of
+  paths that simply did not match — that would be noise, not information.
+
+Missing-ness is judged **through local path mappings**, so a library opened on a second machine is
+not reported as entirely missing before the user has typed anything.
+
+Rewrites stage as `TrackRelocate`. The spec's "optional automatic backup before rewriting
+locations" is already there and not optional: `WriteGuard` takes one before Sync's first write.
+
+Still missing: the **single-track merge-with-existing** case and the **5-minute re-check cadence**.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 489, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 9): duplicate resolution
 
 Detection already existed. What did not was the part that makes it safe to use.
