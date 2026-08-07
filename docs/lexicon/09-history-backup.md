@@ -47,10 +47,34 @@ in the manual, and our UI should be at least as blunt.
 than one month**; anything worth keeping must be moved elsewhere. Sensible, and users need to be
 told.
 
-*decks status* — **missing.** `decks` takes a timestamped copy of `master.db` before the first
-write of a session under `WriteGuard`, which is a different thing: it protects the *source*, not
-`decks`'s own derived state (tags, archive, staged changes, smartlists — all in the cache DB, all
-currently unbackupable).
+*decks status* — **done**, at **Settings → Database Backup**. `WriteGuard`'s timestamped
+`master.db` copy protects the *source*; this protects everything `decks` knows that Rekordbox does
+not — custom tags, the archive, smartlists, staged changes, path mappings, watch folders,
+conversations — which lived only in the cache DB.
+
+Divergences, all deliberate:
+
+- **A JSON document, not a ZIP.** Lexicon ZIPs because it bundles several files; this is one
+  document, and compressing a few hundred kilobytes of text buys nothing a user can feel. What it
+  buys instead is worth more: the backup is *inspectable*, and it survives schema changes.
+  Restoring a copied SQLite file into a newer schema is a gamble; restoring named columns is not —
+  unknown columns are dropped and **named in the report**, and a table missing from the backup is
+  left alone rather than emptied.
+- **Analysis caches are excluded.** Waveform peaks, fingerprints and audio features derive from
+  files still on disk. Including them would multiply the backup's size to save CPU the user spends
+  once.
+- **Nothing is auto-deleted.** Lexicon removes its own backups after a month; `decks` saves where
+  the user chose and leaves them there. A tool that deletes the user's backups on a timer is doing
+  something they did not ask for, and the retention note says so plainly.
+- **A backup from a newer build is refused**, not partially applied.
+
+Restoring **replaces**, per the spec, in a single transaction — a failure part-way leaves the cache
+as it was rather than half-swapped. The file is inspected first and its contents shown *in the
+confirmation*, so the user sees what they are swapping in rather than only what they are losing.
+A file that is not a backup is caught on read, before anything is deleted.
+
+Table names on restore are checked against a fixed allowlist before they reach any SQL, with a test
+covering the case.
 
 *Epic* — **5**.
 

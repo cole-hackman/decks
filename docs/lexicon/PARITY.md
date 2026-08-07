@@ -23,9 +23,9 @@ regardless of how much of Lexicon they represent.
 | Health | 1 | 3 | 1 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
-| History & backup | 1 | 0 | 2 | 2 |
+| History & backup | 2 | 0 | 1 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **31** | **39** | **20** | **16** |
+| **Total** | **32** | **39** | **19** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -167,7 +167,7 @@ Local, Share/export (CSV/M3U/HTML/PDF). **Epic 7**, except Share/export → **Ep
 |---|---|---|---|
 | DJ app backup before write | **done** | `WriteGuard` — stricter than Lexicon | — |
 | History / sessions | **missing** | Snapshot semantics + deleted-set ledger | 6 |
-| Database backup / restore (ZIP) | **missing** | Our cache DB holds tags, archive, staged changes — currently unbackupable | 5 |
+| Database backup / restore (ZIP) | **done** | JSON rather than ZIP: inspectable and schema-tolerant. Analysis caches excluded; nothing auto-deleted | 5 |
 | Cloud DB backup · Cloud Storage | deferred | Requires accounts + hosting; conflicts with local-first, no-telemetry | — |
 
 ## Extensibility — `11-extensibility.md`

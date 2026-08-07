@@ -1950,5 +1950,32 @@ whose first rule is that the library is read-only should not be what deletes a D
 confirmation dialog says so in as many words, and a test asserts that sentence is on screen — the
 promise is part of the feature, not a footnote.
 
+**No zip crate offline, and the constraint produced a better design.** The spec says ZIP; without
+one available the alternative was a single JSON document — and once written down, JSON is plainly
+the right answer. Compression buys nothing on a few hundred kilobytes of text. Inspectability and
+schema tolerance buy a lot: restoring a copied SQLite file into a newer schema is a gamble, while
+restoring *named columns* degrades gracefully in both directions. Unknown columns get dropped and
+named in the report; a table missing from the backup is left alone rather than emptied. It is
+worth being suspicious when a constraint appears to improve a design, but this one holds up.
+
+**The generic table dump was the right shape.** Fifteen hand-written serialisers would have gone
+stale the first time a column was added. Reading `PRAGMA table_info` and building rows dynamically
+is less code *and* survives schema drift — which is exactly what a backup format has to do.
+
+**Table names reach a `format!` string, so they go through an allowlist first.** There is a test
+that feeds `"tags; DROP TABLE tags"` into a restore and asserts the real table survives. The names
+come from a file the user chose, which makes it untrusted input however friendly the file is.
+
+**Two things a destructive action owes the user.** First: show them what they are swapping *in*,
+not just warn about what they are losing — so the confirm lists the backup's contents, which means
+inspecting the file before asking. Second: catch a wrong file on *read*, not half-way through a
+wipe. Both fell out of splitting inspect from restore, which initially looked like an unnecessary
+extra command.
+
+**Adding a `useDialog` consumer to SettingsPanel broke sixteen tests that rendered it bare.** The
+right fix was wrapping them in `WithProviders`, not avoiding the hook: the panel really does need a
+dialog host, and tests that mount it differently from the app were quietly testing a thing that
+does not exist.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

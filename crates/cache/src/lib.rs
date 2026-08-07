@@ -3,6 +3,7 @@
 //! All derived data (audio features, embeddings, staged changes, conversation
 //! history) lives here, never in the Rekordbox `master.db`.
 
+pub mod backup;
 mod migrations;
 pub mod store;
 

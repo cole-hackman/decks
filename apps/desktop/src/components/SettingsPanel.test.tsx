@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { WithProviders } from "../test-utils/providers";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../ipc", () => ({
@@ -34,6 +35,9 @@ vi.mock("../ipc", () => ({
   commonTextBlocklistList: vi.fn().mockResolvedValue([]),
   commonTextBlocklistAdd: vi.fn().mockResolvedValue(undefined),
   commonTextBlocklistRemove: vi.fn().mockResolvedValue(undefined),
+  createBackup: vi.fn().mockResolvedValue(null),
+  pickAndInspectBackup: vi.fn().mockResolvedValue(null),
+  restoreBackup: vi.fn(),
 }));
 
 import {
@@ -82,28 +86,44 @@ beforeEach(() => {
 
 describe("SettingsPanel", () => {
   it("renders the settings heading", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(screen.getByText("Settings")).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
   });
 
   it("calls onClose when backdrop is clicked", async () => {
     const onClose = vi.fn();
-    render(<SettingsPanel onClose={onClose} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={onClose} />
+      </WithProviders>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
   });
 
   it("shows dark and light theme buttons", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(screen.getByRole("button", { name: "Dark" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Light" })).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
   });
 
   it("calls setTheme and IPC when Dark is clicked", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
     expect(mockStore.setTheme).toHaveBeenCalledWith("dark");
     await waitFor(() =>
@@ -112,7 +132,11 @@ describe("SettingsPanel", () => {
   });
 
   it("calls setTheme and IPC when Light is clicked", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Light" }));
     expect(mockStore.setTheme).toHaveBeenCalledWith("light");
     await waitFor(() =>
@@ -121,20 +145,32 @@ describe("SettingsPanel", () => {
   });
 
   it("shows current library path", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(screen.getByText("/tmp/master.db")).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
   });
 
   it("shows '—' when no library path", async () => {
     mockStore.libraryPath = null;
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(screen.getByText("—")).toBeInTheDocument();
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
   });
 
   it("shows Change Library button", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(
       screen.getByRole("button", { name: "Change Library…" }),
     ).toBeInTheDocument();
@@ -142,7 +178,11 @@ describe("SettingsPanel", () => {
   });
 
   it("calls pickLibraryPath when Change Library is clicked", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Change Library…" }));
     await waitFor(() =>
@@ -152,7 +192,11 @@ describe("SettingsPanel", () => {
 
   it("validates and saves library path when picker returns a path", async () => {
     vi.mocked(pickLibraryPath).mockResolvedValue("/new/master.db");
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: "Change Library…" }));
     await waitFor(() =>
@@ -172,7 +216,11 @@ describe("SettingsPanel", () => {
   });
 
   it("persists the chosen agent model", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     const select = (await screen.findByLabelText("Agent model")) as HTMLSelectElement;
     expect(select.value).toBe("claude-sonnet-4-6");
     fireEvent.change(select, { target: { value: "claude-opus-4-7" } });
@@ -183,7 +231,11 @@ describe("SettingsPanel", () => {
 
   it("loads Anthropic key from keychain on mount", async () => {
     vi.mocked(getApiKey).mockResolvedValue("sk-ant-existing");
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() =>
       expect(
         (screen.getByPlaceholderText("sk-ant-…") as HTMLInputElement).value,
@@ -201,7 +253,11 @@ describe("SettingsPanel", () => {
       email: "dj@example.com",
       error: null,
     });
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     expect(await screen.findByText("Agent Runtime")).toBeInTheDocument();
     expect(screen.getByText(/Claude Code detected/i)).toBeInTheDocument();
     expect(screen.getByText(/Pro subscription/i)).toBeInTheDocument();
@@ -209,7 +265,11 @@ describe("SettingsPanel", () => {
   });
 
   it("saves Anthropic key when Save is clicked", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
     fireEvent.change(screen.getByPlaceholderText("sk-ant-…"), {
       target: { value: "sk-ant-newkey" },
@@ -225,7 +285,11 @@ describe("SettingsPanel", () => {
 
   it("shows Remove button and clears key when clicked", async () => {
     vi.mocked(getApiKey).mockResolvedValue("sk-ant-existing");
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument(),
     );
@@ -241,7 +305,11 @@ describe("SettingsPanel", () => {
   });
 
   it("toggles key visibility via show/hide button", async () => {
-    render(<SettingsPanel onClose={vi.fn()} />);
+    render(
+      <WithProviders>
+        <SettingsPanel onClose={vi.fn()} />
+      </WithProviders>,
+    );
     await waitFor(() => expect(vi.mocked(getApiKey)).toHaveBeenCalled());
     const input = screen.getByPlaceholderText("sk-ant-…");
     expect(input).toHaveAttribute("type", "password");
