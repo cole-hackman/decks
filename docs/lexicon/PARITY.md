@@ -18,14 +18,14 @@ regardless of how much of Lexicon they represent.
 | Library & browser | 0 | 9 | 7 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
-| Player, cues, generator | 0 | 4 | 9 | 0 |
+| Player, cues, generator | 5 | 5 | 6 | 0 |
 | Files | 0 | 3 | 7 | 0 |
 | Health | 0 | 3 | 2 | 0 |
 | Recipes & editing | 1 | 2 | 4 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **10** | **34** | **42** | **16** |
+| **Total** | **15** | **35** | **36** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -101,15 +101,15 @@ of library *editing*, *automation*, or *set preparation*.
 |---|---|---|---|
 | Playback + waveform scrub | partial | `rodio`; no queue, no autoplay | 2 |
 | Play queue | **missing** | | 2 |
-| Cue CRUD on the waveform | **missing** | Read-only today; `ChangeKind` has no cue delete | **2** |
-| Loops / active loops | **missing** | | 2 |
-| Quantize (incl. grid-move-carries-cues) | **missing** | | 2 |
+| Cue CRUD | **done** | Set/play/delete/move/colour via `CueEditor`, all through staged changes. New `ChangeKind::TrackDeleteCue`. Placement is on the cue list + slot grid, not yet drag-on-waveform | 2 |
+| Loops | partial | Loop length in beats via `OutMsec`. **Active loops need a `djmdCue` column we do not model** — deferred | 2 |
+| Quantize (incl. grid-move-carries-cues) | **done** | 1/2/4/16/64-beat snapping; a grid nudge moves only cues already on the grid | 2 |
 | Cue templates | **missing** | | 2 |
-| Beatgrid editing + half/double | **missing** | Parser exists; nothing writes | **2** |
-| Beat jump | **missing** | | 2 |
-| Hotkeys: rebinding, global, inline hints | partial | Fixed handlers in one hook | 2 |
-| **Action registry** | **missing** | The substrate for hotkeys, palette, plugins — see `11-extensibility.md` | **2** |
-| Action Center (`Cmd+Space`) | **missing** | | 2 |
+| Beatgrid editing | partial | Grid nudge stages the cue moves that follow it. Writing the grid itself back to ANLZ, and half/double BPM, still missing | 2 |
+| Beat jump | **done** | ±4/±16 beats along the real ANLZ grid, clamped at both ends | 2 |
+| Hotkeys: rebinding, global, inline hints | partial | Rebinding + persistence + conflict detection exist in the registry; no settings UI yet, and no system-wide hotkeys | 2 |
+| **Action registry** | **done** | `lib/actions.ts` — bindings, rebinding, conflict detection, search. App globals migrated onto it | 2 |
+| Action Center (`Cmd+Space`) | **done** | Palette over the registry with fuzzy search and arrow navigation | 2 |
 | Find Popup (`Cmd+F`) | **missing** | | 2 |
 | **Cue Point Generator** | **missing** | Nearest thing is beatgrid-arithmetic intro cues | **3** |
 | Cue templates w/ anchors | **missing** | | 3 |

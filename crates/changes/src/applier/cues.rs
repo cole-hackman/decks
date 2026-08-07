@@ -98,6 +98,24 @@ pub(super) fn apply_metadata_edit(tx: &Transaction, change: &StagedChange) -> an
     Ok(())
 }
 
+/// `TrackDeleteCue`:
+/// - `target_id` = cue ID
+///
+/// Deleting a cue that no longer exists is an error rather than a silent no-op:
+/// it means the staged change was built against a stale view of the library,
+/// and quietly succeeding would hide that from the user.
+pub(super) fn apply_delete_cue(tx: &Transaction, change: &StagedChange) -> anyhow::Result<()> {
+    let cue_id = change
+        .target_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing target_id (cue id)"))?;
+    let affected = tx.execute("DELETE FROM djmdCue WHERE ID = ?", params![cue_id])?;
+    if affected == 0 {
+        return Err(anyhow!("Cue {cue_id} not found"));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,5 +310,56 @@ mod tests {
             ),
         );
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn delete_cue_removes_the_row() {
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        tx.execute(
+            "INSERT INTO djmdCue (ID, ContentID, InMsec, Kind, Color) VALUES ('c1','t1',1000,1,-1)",
+            [],
+        )
+        .unwrap();
+
+        apply_delete_cue(
+            &tx,
+            &change(ChangeKind::TrackDeleteCue, Some("c1"), None, Value::Null),
+        )
+        .unwrap();
+
+        let count: i64 = tx
+            .query_row("SELECT COUNT(*) FROM djmdCue WHERE ID = 'c1'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn delete_cue_errors_when_the_cue_is_gone() {
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        assert!(apply_delete_cue(
+            &tx,
+            &change(
+                ChangeKind::TrackDeleteCue,
+                Some("missing"),
+                None,
+                Value::Null
+            )
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn delete_cue_requires_a_target_id() {
+        let mut conn = fixture();
+        let tx = conn.transaction().unwrap();
+        assert!(apply_delete_cue(
+            &tx,
+            &change(ChangeKind::TrackDeleteCue, None, None, Value::Null)
+        )
+        .is_err());
     }
 }

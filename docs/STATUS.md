@@ -1,5 +1,21 @@
 # Status
 
+## 2026-08-06 — Epic 2 (part 1): action registry, cue editing, quantize, beat jump
+**Action registry** (`apps/desktop/src/lib/actions.ts`) — the substrate the rest of Epic 2 registers into. Every global capability is a named, bindable command; the Action Center searches that list, hotkeys bind to it, and inline hints read from it. Pure module covering binding serialisation, display formatting, matching (Cmd and Ctrl interchangeable), persisted user rebinding, conflict detection and fuzzy search. `ActionProvider` owns a single global key listener reading the action list through a ref so it installs once. App's four global shortcuts migrated onto it; component-local key handling (track-table arrows) deliberately stays in `useKeyboardShortcuts`. `ActionCenter` is the `Cmd/Ctrl+Space` palette.
+
+**Cue editing.** New `ChangeKind::TrackDeleteCue` + applier (deleting a missing cue errors rather than silently succeeding — it means the staged change was built against a stale view). New `crates/rekordbox-db/src/quantize.rs`: pure beat-grid arithmetic — nearest beat, snap at 1/2/4/16/64-beat resolutions measured from the first grid marker, `is_on_grid`, beat jump clamped at both ends, and `cues_following_grid`, which returns only the cues that were already on the grid. That last one is the subtle bit: a grid nudge must move on-grid cues and leave deliberately off-grid cues alone. Seven Tauri commands in `src-tauri/src/cues.rs`, all staging changes rather than writing `master.db`. `CueEditor` is mounted in `TrackDetailPanel`, so cues are editable from the UI: 1–8 set or play, Cmd/Ctrl+1–8 delete, Q toggles quantize, plus colour, loop length in beats, move-to-playhead, beat jump and grid nudge.
+
+Quantising an existing loop shifts its out-point by the same delta as its in-point, so loop *length* is preserved rather than stretched.
+
+**Not done in this slice, and why** — recorded in ROADMAP and PARITY rather than left implicit:
+- **Active loops are blocked**, not deferred by choice: they need a `djmdCue` column our schema does not model. Loop length works; auto-engaging loops do not.
+- **Beatgrid writing** (ANLZ) and half/double BPM: the grid nudge stages the cue moves that *follow* a grid change, but nothing writes the grid itself yet.
+- Cue placement is on the cue list and slot grid; dragging cues on the waveform is not implemented.
+- Find Popup, play queue, cue templates, and the Cue Destination round-trip remain.
+- Hotkey rebinding exists in the registry (with persistence and conflict detection) but has no settings UI, and there are no system-wide hotkeys.
+
+Verification: `cargo test --workspace` 698 passing, `cargo clippy --workspace --all-targets -- -D warnings` clean, `cargo fmt --check` clean, `pnpm test` 269, `pnpm typecheck`, `pnpm lint`, `pnpm e2e` 11 — all green.
+
 ## 2026-08-05 — Epic 1: Smartlists engine
 New `crates/smartlists` implementing the rule model from ADR-0013: a **two-level** structure (AND of OR-clauses) rather than a general boolean tree, matching what Lexicon actually exposes — OR grouping is only offered in "All Rules" mode. Evaluation is pure and in-memory over `&[Track] + EvalContext`, where `EvalContext` mirrors the frontend `FilterContext` so both sides share semantics. Key equality canonicalises through `changes::key_format` plus a new Open Key parser, so `8A`, `8a`, `8m`, `Am` and `A minor` all match the same track. Archived tracks are excluded unless a rule mentions `IsArchived`; an empty rule set matches nothing rather than the whole library. Also ships the Smartlist Generator (by field / tag category / decade / BPM range / play count) with `only_missing` as the idempotency guard, and a 30-second recompute throttle with injected time.
 

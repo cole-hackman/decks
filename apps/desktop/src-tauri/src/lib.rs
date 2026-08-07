@@ -1,5 +1,6 @@
 mod audio;
 mod claude_agent;
+mod cues;
 mod smartlists;
 
 use std::collections::HashMap;
@@ -2578,6 +2579,13 @@ pub fn run() {
             health_fuzzy_duplicate_scan,
             library_duplicate_groups,
             health_broken_link_scan,
+            cues::get_beat_grid,
+            cues::quantize_position,
+            cues::beat_jump_position,
+            cues::stage_cue_add,
+            cues::stage_cue_delete,
+            cues::stage_cue_edit,
+            cues::stage_grid_shift,
             smartlists::list_smartlists,
             smartlists::create_smartlist,
             smartlists::update_smartlist,

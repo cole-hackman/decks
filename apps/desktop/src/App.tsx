@@ -27,7 +27,9 @@ import { ResizablePanel } from "./components/ui/ResizablePanel";
 import { useAppStore } from "./store/appStore";
 import { useAudioPlayer } from "./hooks/useAudioPlayer";
 import { useStagedChanges } from "./hooks/useStagedChanges";
-import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { ActionProvider } from "./hooks/useActions";
+import { ActionCenter } from "./components/ActionCenter";
+import type { ActionDef } from "./lib/actions";
 import { useFilterContext } from "./hooks/useFilterContext";
 import { useLibrary } from "./hooks/useLibrary";
 import { useTrackContextActions } from "./hooks/useTrackContextActions";
@@ -206,50 +208,74 @@ export default function App() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  useKeyboardShortcuts(
-    useMemo(
-      () => [
-        {
-          key: "/",
-          handler: (event) => {
-            if (currentView !== "library") return;
-            event.preventDefault();
-            searchInputRef.current?.focus();
-            searchInputRef.current?.select();
-          },
+  const [actionCenterOpen, setActionCenterOpen] = useState(false);
+
+  // The global action list. Everything bindable lives here, which is also what
+  // makes it all reachable from the Action Center — see lib/actions.ts.
+  const actions = useMemo<ActionDef[]>(
+    () => [
+      {
+        id: "app.actionCenter",
+        label: "Open Action Center",
+        group: "App",
+        defaultBinding: { key: " ", meta: true },
+        whenEditable: true,
+        run: () => setActionCenterOpen((v) => !v),
+      },
+      {
+        id: "library.focusSearch",
+        label: "Search the library",
+        group: "Library",
+        defaultBinding: { key: "/" },
+        enabled: currentView === "library",
+        run: () => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
         },
-        {
-          key: " ",
-          handler: (event) => {
-            event.preventDefault();
-            void audio.toggleCurrent();
-          },
+      },
+      {
+        id: "player.playPause",
+        label: "Play / pause",
+        group: "Player",
+        defaultBinding: { key: " " },
+        run: () => {
+          void audio.toggleCurrent();
         },
-        {
-          key: "t",
-          handler: (event) => {
-            if (currentView !== "library" && currentView !== "playlists") return;
-            if (selectedTrackIds.size === 0) return;
-            event.preventDefault();
-            setTagPickerTrackIds(new Set(selectedTrackIds));
-          },
+      },
+      {
+        id: "tags.openPicker",
+        label: "Edit tags on the selection",
+        group: "Tags",
+        defaultBinding: { key: "t" },
+        enabled:
+          (currentView === "library" || currentView === "playlists") &&
+          selectedTrackIds.size > 0,
+        run: () => setTagPickerTrackIds(new Set(selectedTrackIds)),
+      },
+      {
+        id: "app.dismiss",
+        label: "Close panel or blur input",
+        group: "App",
+        defaultBinding: { key: "escape" },
+        whenEditable: true,
+        hidden: true,
+        run: () => {
+          if (actionCenterOpen) {
+            setActionCenterOpen(false);
+            return;
+          }
+          if (
+            document.activeElement instanceof HTMLElement &&
+            document.activeElement.tagName === "INPUT"
+          ) {
+            document.activeElement.blur();
+            return;
+          }
+          if (inspector !== null) setInspector(null);
         },
-        {
-          key: "escape",
-          handler: () => {
-            if (
-              document.activeElement instanceof HTMLElement &&
-              document.activeElement.tagName === "INPUT"
-            ) {
-              (document.activeElement as HTMLInputElement).blur();
-              return;
-            }
-            if (inspector !== null) setInspector(null);
-          },
-        },
-      ],
-      [currentView, inspector, audio, selectedTrackIds],
-    ),
+      },
+    ],
+    [currentView, inspector, audio, selectedTrackIds, actionCenterOpen],
   );
 
   // Apply theme class to <html>
@@ -302,7 +328,9 @@ export default function App() {
     currentView === "library" || currentView === "playlists";
 
   return (
+    <ActionProvider actions={actions}>
     <div className="flex h-screen w-screen flex-col bg-base text-ink">
+      <ActionCenter open={actionCenterOpen} onClose={() => setActionCenterOpen(false)} />
       {/* Top bar — draggable, accounts for macOS traffic lights */}
       <header
         data-tauri-drag-region
@@ -621,5 +649,6 @@ export default function App() {
         />
       )}
     </div>
+    </ActionProvider>
   );
 }

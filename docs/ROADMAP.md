@@ -80,25 +80,29 @@ as a materialised playlist, and confirm the tag rules land as MyTag rules where 
 
 ---
 
-## Epic 2 — Player, cues, beatgrid, action registry
+## Epic 2 — Player, cues, beatgrid, action registry (in progress)
 
 Branch `claude/lexicon-cue-editor`. Spec: [`05-cues-player.md`](lexicon/05-cues-player.md).
 
 Turns `decks` from a viewer into an editor, and is a hard prerequisite for Epic 3.
 
-- [ ] **Action registry first** — `id`, label, handler, default binding, context predicate. Migrate
+- [x] **Action registry** — `id`, label, handler, default binding, context predicate. Migrate
       `useKeyboardShortcuts` onto it. Everything below registers into it.
-- [ ] Cue CRUD on `ColorWaveform`; extend `ChangeKind` with cue delete and loop variants
+- [x] Cue CRUD via `CueEditor`; `ChangeKind::TrackDeleteCue` added. Placement is on the cue
+      list and slot grid — dragging cues on the waveform itself is not done
 - [ ] Interaction model: `1`–`8` set/play, `Cmd+1`–`8` delete, double-click seek, `Shift`+click
       move-to-playhead, `Ctrl`+click delete, `Shift`-drag slow scrub
-- [ ] Loops, active loops, global active-loop suppression
-- [ ] Quantize, including grid-move-carries-on-grid-cues
+- [x] Loops (length in beats via `OutMsec`)
+- [ ] **Active loops** — blocked: needs a `djmdCue` column we do not model
+- [x] Quantize, including grid-move-carries-on-grid-cues
 - [ ] Cue templates (unlimited, first 8 hotkeyed)
-- [ ] Beatgrid editing, half/double BPM, BPM changepoints
-- [ ] Beat jump (`Ctrl+←/→`, 16 beats)
+- [ ] Beatgrid *writing* (ANLZ), half/double BPM, BPM changepoints — the grid nudge stages the
+      cue moves that follow a grid change, but nothing writes the grid itself yet
+- [x] Beat jump along the real ANLZ grid
 - [ ] Play queue with autoplay, shuffle, clear
 - [ ] Cue Destination round-trip: hidden merged memory cues restored on sync
-- [ ] Action Center (`Cmd/Ctrl+Space`), Find Popup (`Cmd/Ctrl+F`)
+- [x] Action Center (`Cmd/Ctrl+Space`)
+- [ ] Find Popup (`Cmd/Ctrl+F`)
 - [ ] Compatible-key indicator in the browser
 
 **Acceptance:** load a track, place and colour cues by keyboard alone, turn one into an active loop,

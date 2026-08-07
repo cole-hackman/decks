@@ -94,7 +94,9 @@ describe("TrackDetailPanel", () => {
     // timeline (end-of-track label), so both renders should be present.
     expect(screen.getAllByText("6:00").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("2014")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
+    // Rating 5. The cue editor's slot buttons are also labelled 1–8, so "5"
+    // now appears more than once — same situation as "6:00" above.
+    expect(screen.getAllByText("5").length).toBeGreaterThanOrEqual(1);
   });
 
   it("displays comment", () => {
