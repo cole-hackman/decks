@@ -62,8 +62,30 @@ One action registry drives both.
 box, with per-result actions: add selected tracks to that playlist, add to the play queue, or play.
 `Enter` plays.
 
-*decks status* — **missing.** There is a global search input but no unified popup and no per-result
-actions.
+*decks status* — **done.** `Cmd/Ctrl+F` opens `FindPopup` over playlists, smartlists and tracks in
+one box. `lib/find.ts` holds the ranking; per-result actions are `Enter` (open a container, play a
+track), `Queue` on a track, and "add the current selection" on a playlist.
+
+Deliberately **not** merged into the Action Center. `Cmd+K` searches *commands*, this searches
+*content*; one box over both would have to rank a track title against "Toggle Sidepanel", which is
+a comparison with no sensible answer.
+
+Four decisions:
+
+- **Three match tiers, not fuzzy matching** — exact, prefix, word-start, substring. Fuzzy
+  subsequence matching is right for a palette of a hundred short fixed strings and wrong for four
+  thousand track titles, where it matches almost everything and ranks by noise. `rain` finds
+  "Acid Rain" ahead of "Braindance".
+- **Each section is capped independently.** A library of thousands must not bury the one playlist
+  that matched, and containers sort before tracks for the same reason.
+- **Ties break alphabetically.** Without it, equal-scoring results come back in library order, so
+  the same query returns a different top result after any re-sort and `Enter` plays something else.
+- **An empty query returns nothing.** A Find popup that opens showing the whole library has
+  answered a question nobody asked.
+
+Folders are excluded: they cannot be played and cannot hold tracks, so every action on such a row
+would fail. Row actions are visible on the **highlighted** row as well as on hover — this popup is
+driven by the keyboard, and a hover-only action is one the keyboard cannot reach.
 
 *Epic* — **2**.
 

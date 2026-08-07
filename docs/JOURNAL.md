@@ -2487,3 +2487,21 @@ first), CSV import, the duplicates work.
 - Verified: `pnpm test` (704), `pnpm typecheck`, `pnpm lint`, 55 Playwright e2e.
 - **Next:** Find Popup (`Cmd+F`) consumes the queue; then inline waveform previews and cue
   templates. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (Find Popup)
+
+### Plan
+- Find Popup, which needed the play queue to exist first for its per-result "add to queue".
+
+### End of session
+- **Shipped:** `lib/find.ts` (15 tests), `FindPopup` (13 tests), the `view.find` action bound to
+  `Cmd+F`, and an e2e spec.
+- **A real bug the e2e caught:** the per-result buttons were `group-hover` only, so in a popup
+  driven entirely by the keyboard they could not be reached at all. Fixed by showing them on the
+  highlighted row; vitest had missed it because jsdom does not evaluate the hover class.
+- **Corrected a comment my own earlier commit made false:** `useActions.isEditable` says "same rule
+  as `useKeyboardShortcuts`", which stopped being true when browser-nav taught the latter to yield
+  to `role="grid"`. The divergence is correct — `Cmd+F` must work from a focused table — so the
+  comment now explains it rather than denying it.
+- Verified: `pnpm test` (732), `pnpm typecheck`, `pnpm lint`, 59 Playwright e2e.
+- **Next:** cue templates, inline waveform previews. Epic 7 needs a scoping decision.

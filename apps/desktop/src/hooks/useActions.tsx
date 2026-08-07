@@ -11,8 +11,15 @@ import {
 } from "../lib/actions";
 
 /**
- * Same rule as `useKeyboardShortcuts`: yield to anything the user might be
- * typing into, and to buttons/links that rely on Space and Enter themselves.
+ * Yield to anything the user might be typing into, and to buttons/links that
+ * rely on Space and Enter themselves.
+ *
+ * **Deliberately not identical to `useKeyboardShortcuts`'s copy**, which also
+ * yields to a focused `role="grid"`. The distinction is the one drawn in
+ * `lib/actions.ts`: this handler is for *application* actions, and `Cmd+F`
+ * must work while the track table has focus — that is the most likely place to
+ * press it. Widget-internal bindings like the bare arrow keys are the ones a
+ * focused grid has to win.
  */
 function isEditable(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

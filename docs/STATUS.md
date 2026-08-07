@@ -1,5 +1,39 @@
 # Status
 
+## 2026-08-06 — Find Popup
+
+`Cmd/Ctrl+F` over playlists, smartlists and tracks in one box, with per-result actions. Per
+`docs/lexicon/00-overview.md §Find Popup`. It consumes the play queue shipped in the previous
+commit — "Queue" on a track result is the spec's "add to the play queue".
+
+Deliberately **not** merged into the Action Center: `Cmd+K` searches commands, this searches
+content. One box over both would have to rank a track title against "Toggle Sidepanel".
+
+`lib/find.ts` holds the ranking, pure and synchronous — the library is already in memory for the
+browser, so a round-trip per keystroke would be slower and worse. Four decisions:
+
+- **Three match tiers, not fuzzy matching.** Fuzzy subsequence matching suits a palette of a
+  hundred short fixed strings; over four thousand track titles it matches almost everything and
+  ranks by noise.
+- **Each section caps independently**, and containers sort before tracks, so a big library cannot
+  bury the one playlist that matched.
+- **Ties break alphabetically.** Without it the same query returns a different top result after any
+  re-sort, and `Enter` plays something other than it did a moment ago.
+- **An empty query returns nothing.**
+
+Two things worth recording:
+
+- The Playwright run caught that the per-result buttons were **hover-only** — unreachable in a
+  popup driven entirely by the keyboard. They now show on the highlighted row too. That was a real
+  accessibility bug, not a test artefact.
+- `useActions` and `useKeyboardShortcuts` each keep their own `isEditable`, and they have now
+  **diverged on purpose**: application actions like `Cmd+F` must fire while the track table has
+  focus, while widget-internal bindings like the bare arrows must not. The stale "same rule as"
+  comment left by the browser-nav commit is corrected.
+
+**Next:** cue templates and inline per-row waveform previews are the remaining unblocked rows.
+Epic 7 (streaming) still needs a scoping decision from the user.
+
 ## 2026-08-06 — Play queue
 
 The transport played one file and emitted `playback-ended`. This is the list that decides what
