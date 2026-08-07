@@ -2566,3 +2566,35 @@ first), CSV import, the duplicates work.
 - Verified: `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`,
   `pnpm test` (752), `pnpm typecheck`, `pnpm lint`, **59 Playwright e2e**.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (Imported Tags category)
+
+### Plan
+- Close the remaining Custom Tags gaps, starting with hashtag import.
+
+### End of session
+- **Found the feature already existed.** `parse_hashtags` and the tag-recipe path have covered
+  hashtag import since Epic 5; my own parity notes said "missing". Corrected in `02-library.md`
+  rather than quietly re-scoped.
+- **The real gap was the destination.** New tags went to whichever category came first. Now a
+  reserved `Imported Tags` category, created on demand and matched case-insensitively.
+- **A bug fell out of it:** importing into a library with no categories used to fail outright, so
+  the first import on a fresh library was impossible. Four tests cover the new behaviour.
+- Verified: `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`,
+  `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
+- **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
+
+## Session — 2026-08-06 (rustfmt, and a gap in the definition of done)
+
+CI resumed and failed `cargo fmt --all -- --check` on the Rust (windows) job for #32. Real, and
+entirely mine: I ran `cargo fmt` once early in the session and then stopped, so everything from the
+cue-presets commit forward had drifted. Fixed at the root (#30) and rebased #31→#32→#33 on top;
+all four are rustfmt-clean and the stack is still linear.
+
+**The more useful finding is why local verification missed it.** `CLAUDE.md`'s definition of done
+lists four commands; CI runs five. `cargo fmt --all -- --check` was not on the list, so following
+the documented process exactly could still ship a red build. Added it, with a note saying why.
+
+Second process lesson of the session, and the same shape as the first: the checks that catch things
+are the ones you actually run. `pnpm e2e` was on the list and I skipped it; `cargo fmt` was not on
+the list at all.

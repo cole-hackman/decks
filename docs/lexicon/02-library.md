@@ -253,9 +253,22 @@ and that number bound to a hotkey.
 
 *decks status* — **partial, and well advanced.** Categories, tags, CRUD, usage-count badges, a
 picker modal, bulk apply, the `T` shortcut, tag filter dimensions, inline chips, the
-OR-within/AND-across selection semantics and **MyTag import** all exist. Missing: category colours,
-drag-to-reorder/move (backend `move_tag` exists; blocked on a `reorder_tags` command), hashtag
-import, per-tag number hotkeys, and Field-Mapper export.
+OR-within/AND-across selection semantics, **MyTag import** and **hashtag import** all exist.
+Missing: category colours, drag-to-reorder/move (backend `move_tag` exists; blocked on a
+`reorder_tags` command), per-tag number hotkeys, and Field-Mapper export.
+
+**Correction to an earlier entry.** This section previously listed hashtag import as missing. It
+was not: `recipes::parse_hashtags` plus the tag-recipe preview/apply path had covered it since
+Epic 5. What was actually missing was the spec's *destination* — "unknown tags land in an
+`Imported Tags` category for the user to sort". Invented tags went into whichever category happened
+to be first instead, which quietly fills a real category like Genre with unsorted imports and
+leaves no way to tell afterwards which tags the user put there and which the importer did. They now
+go to a reserved `Imported Tags` category, created on demand and matched case-insensitively so a
+user who made one themselves gets theirs rather than a second.
+
+That change also fixes a smaller bug: importing into a library with **no** categories used to fail
+outright with "create a tag category before importing tags", which made the first import on a fresh
+library impossible.
 
 **MyTag import** reads `djmdMyTag` / `djmdSongMyTag`, where Rekordbox keeps categories and tags in
 the *same* table — a category is a row whose `ParentID` is the root, a tag one whose parent is a
