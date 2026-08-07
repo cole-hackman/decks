@@ -335,6 +335,19 @@ are excluded unless a rule explicitly selects them.
 | Side effects | none |
 | Cost | free |
 
+### `health_playable_scan`
+Scan for audio files that do not decode — truncated downloads, wrong-format files, unsupported
+codecs. Unlike `health_broken_link_scan` this is not an existence check. Reports only; deletes
+nothing.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string`, `depth?: "header" \| "full"` |
+| Returns | `{ id, title, artist, path, status }[]` — only the broken ones |
+| Idempotent | yes |
+| Side effects | none |
+| Cost | free, but `full` decodes every file: budget roughly one analysis per track. Defaults to `header` |
+
 ### `undo_list`
 List Sync runs recorded for a library, newest first, with how many changes of each can be reversed
 and how many cannot.

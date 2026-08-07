@@ -1,5 +1,49 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 5): Find Broken Tracks
+
+The existing broken-link scan asks whether a path exists. That misses the failure DJs actually
+meet: the file is right there, and the deck plays two seconds of it and stops. A truncated
+download, a half-copied file, a `.mp3` that is really an HTML error page — all present, all
+unplayable.
+
+`audio_analysis::playable` decodes instead of stat-ing. Reachable from **Audit → Find Broken
+Tracks**, and exposed as `health_playable_scan` through `crates/agent-tools`.
+
+**Two depths, because the honest ones cost different amounts**, and the UI names the trade rather
+than picking silently. Header probes the container and builds a decoder — fast, catches
+wrong-format and unsupported files, misses anything that goes wrong late. Full decodes every packet
+and discards the audio — catches truncation, costs about what analysing the track costs.
+
+**Truncation needed a second signal.** Raw PCM has no framing to fail on, so a half-downloaded WAV
+decodes perfectly and simply ends early; the first version of this passed it. The check now
+compares frames decoded against the frame count the header *declares*, with a 1% tolerance for
+encoder padding — which as a bonus makes truncation detectable in formats where the stream itself
+would not complain either.
+
+Outcomes are named rather than boolean: `Missing`, `Unreadable`, `Undecodable`, `Truncated`,
+`Damaged { bad_packets }`. Deleting a file that is absent is a different fix from replacing one
+that is corrupt, and a track that plays with glitches is a third thing again.
+
+Two deliberate divergences from the spec:
+
+- **Nothing is deleted.** Lexicon optionally removes broken files from the library, from playlists
+  and from disk. `decks` reports; removing a track is a staged change Sync applies under the write
+  guard. Deleting audio from disk is not offered at all — it is the one operation with no undo,
+  and this program's whole posture is that the user reviews first.
+- **The report saves where the user chooses**, not to `Documents/Lexicon`. Each entry still names
+  which playlists held the track, which is the entire reason the report exists.
+
+Paths resolve through local path mappings first, so a library restored on a second machine is not
+reported as four thousand missing files.
+
+The WAV builder in the tests is worth noting: `fixtures/audio/` is gitignored by design, so a
+decode check that only ran against real files could not be tested at all. A hand-built 44-byte
+header plus PCM gives a genuine pass, a genuine empty-audio case, and a genuine truncation.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 454, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 4): the manual multi-track editor
 
 `E` over a selection opens a field editor; `changes::multi_edit` collapses the fields and plans the

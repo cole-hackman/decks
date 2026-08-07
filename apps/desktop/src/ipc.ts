@@ -64,6 +64,9 @@ import type {
   CsvPlannedRow,
   MultiEdit,
   MultiEditFormData,
+  BrokenScan,
+  BrokenTrack,
+  CheckDepth,
 } from "./types";
 import type {
   ChatMessage,
@@ -1304,4 +1307,42 @@ export async function multiEditApply(
   edits: MultiEdit[],
 ): Promise<string[]> {
   return invoke<string[]>("multi_edit_apply", { libraryPath, trackIds, edits });
+}
+
+export async function scanBrokenTracks(
+  libraryPath: string,
+  trackIds: string[],
+  depth: CheckDepth,
+): Promise<BrokenScan> {
+  return invoke<BrokenScan>("scan_broken_tracks", {
+    libraryPath,
+    trackIds,
+    depth,
+  });
+}
+
+export async function brokenTracksReport(
+  scanBroken: BrokenTrack[],
+): Promise<string> {
+  return invoke<string>("broken_tracks_report", { scanBroken });
+}
+
+/**
+ * Save text to a path the user picks.
+ *
+ * Returns the path, or `null` when the dialog was cancelled — a cancel is a
+ * decision, not a failure, so it must not read as an error.
+ */
+export async function saveTextFile(
+  defaultName: string,
+  contents: string,
+): Promise<string | null> {
+  const path = await save({
+    title: "Save report",
+    defaultPath: defaultName,
+    filters: [{ name: "Text", extensions: ["txt"] }],
+  });
+  if (!path) return null;
+  await invoke<void>("save_broken_tracks_report", { path, contents });
+  return path;
 }

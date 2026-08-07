@@ -2,6 +2,8 @@
 // Symphonia decode + stratum-dsp analysis pipeline.
 // See NOTICE at the workspace root for full attribution.
 
+pub mod playable;
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

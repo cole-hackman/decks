@@ -13,3 +13,7 @@ tracing = { workspace = true }
 stratum-dsp = { path = "../stratum-dsp" }
 cache = { path = "../cache" }
 symphonia = { version = "0.5", features = ["mp3", "flac", "aac", "wav", "pcm", "isomp4"] }
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = "1"

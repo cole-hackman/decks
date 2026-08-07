@@ -369,6 +369,36 @@ impl AgentToolService {
                 }))
             }
 
+            ToolRequest::HealthPlayableScan {
+                library_path,
+                depth,
+            } => {
+                use audio_analysis::playable::{verify_playable, CheckDepth};
+                // Default to the cheap check: an agent that asks for "broken
+                // tracks" should not silently spend an hour decoding a library.
+                let depth = match depth.as_deref() {
+                    Some("full") => CheckDepth::Full,
+                    _ => CheckDepth::Header,
+                };
+                let db = open_library(&library_path)?;
+                let mut broken = Vec::new();
+                for track in db.tracks()? {
+                    let Some(path) = track.folder_path.as_deref() else {
+                        continue;
+                    };
+                    let status = verify_playable(std::path::Path::new(path), depth);
+                    if status.is_broken() {
+                        broken.push(serde_json::json!({
+                            "id": track.id,
+                            "title": track.title,
+                            "artist": track.artist,
+                            "path": path,
+                            "status": status,
+                        }));
+                    }
+                }
+                to_value(broken)
+            }
             ToolRequest::UndoList { library_path } => {
                 let cache = self.open_undo_cache()?;
                 to_value(cache.list_undo_runs(&library_path)?)
