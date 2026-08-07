@@ -103,6 +103,22 @@ test.beforeEach(async ({ page }) => {
                 : change,
             );
             return { output_path: "/tmp/rekordagent-export.xml", exported_count: 1 };
+
+          case "multi_edit_fields":
+            return ["title", "artist", "genre"];
+          case "multi_edit_form":
+            return {
+              track_count: (args.trackIds as string[]).length,
+              fields: [
+                ["title", { kind: "same", value: "Dark Matter" }],
+                ["artist", { kind: "same", value: "DJ One" }],
+                // Nothing agrees on genre in this fixture selection.
+                ["genre", { kind: "multiple" }],
+              ],
+            };
+          case "multi_edit_apply":
+            return (args.edits as unknown[]).map((_, i) => `edit-${i}`);
+
           default:
             return null;
         }
@@ -155,4 +171,50 @@ test("chat exposes the audit workflow", async ({ page }) => {
   await page.getByRole("button", { name: "Open library" }).click();
   await page.getByRole("button", { name: "Open agent" }).click();
   await expect(page.getByRole("button", { name: "Start Library Audit" })).toBeVisible();
+});
+
+test("manual editor: only the touched field is written", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Browse…" }).click();
+  await page.getByRole("button", { name: "Open library" }).click();
+
+  await page.getByText("Dark Matter").first().click();
+  await page.keyboard.press("e");
+
+  const editor = page.getByRole("dialog", { name: "Edit tracks" });
+  await expect(editor).toBeVisible();
+  // A field the selection disagrees on is a placeholder, carrying no value.
+  await expect(editor.getByLabel("genre")).toHaveValue("");
+  await expect(editor.getByLabel("genre")).toHaveAttribute(
+    "placeholder",
+    "<multiple values>",
+  );
+
+  await editor.getByLabel("genre").fill("Techno");
+  await expect(page.getByTestId("multi-edit-count")).toHaveText(
+    "1 field(s) changed",
+  );
+  await editor.getByRole("button", { name: "Save" }).click();
+
+  // One field changed, so one change staged — the untouched title and artist
+  // are not written even though the form showed values for them.
+  await expect(page.getByText(/Staged 1 change\(s\) for review/)).toBeVisible();
+  await expect(editor).toBeHidden();
+});
+
+test("manual editor: Escape discards", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Browse…" }).click();
+  await page.getByRole("button", { name: "Open library" }).click();
+
+  await page.getByText("Dark Matter").first().click();
+  await page.keyboard.press("e");
+
+  const editor = page.getByRole("dialog", { name: "Edit tracks" });
+  await editor.getByLabel("genre").fill("Techno");
+  await page.keyboard.press("Escape");
+  await expect(editor).toBeHidden();
+  await expect(page.getByText(/Staged/)).toHaveCount(0);
 });

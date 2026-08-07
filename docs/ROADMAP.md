@@ -173,7 +173,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 - [x] `Import Tags from Text` (hashtag → custom tags, idempotent), plus add/remove/replace/clear
 - [x] The three "other" recipes: Mark as Incoming, Remove from All Playlists, Import Date from
       Filesystem
-- [ ] Multi-track manual editor with `<multiple values>`
+- [x] Multi-track manual editor with `<multiple values>` — `E` over the selection; untouched
+      fields are never written. Album art and arrow-key track navigation deliberately out
 - [x] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, per-row report
 - [x] Undo History — Sync runs record inverses; undo re-stages them for review. Kept for 50 runs
       per library rather than 60 minutes, and blocked entries carry a reason (ADR-0008)

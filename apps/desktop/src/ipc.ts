@@ -62,6 +62,8 @@ import type {
   CsvImportColumns,
   CsvImportPreview,
   CsvPlannedRow,
+  MultiEdit,
+  MultiEditFormData,
 } from "./types";
 import type {
   ChatMessage,
@@ -1283,4 +1285,23 @@ export async function csvImportApply(
   rows: CsvPlannedRow[],
 ): Promise<string[]> {
   return invoke<string[]>("csv_import_apply", { libraryPath, rows });
+}
+
+export async function multiEditFields(): Promise<string[]> {
+  return invoke<string[]>("multi_edit_fields");
+}
+
+export async function multiEditForm(
+  libraryPath: string,
+  trackIds: string[],
+): Promise<MultiEditFormData> {
+  return invoke<MultiEditFormData>("multi_edit_form", { libraryPath, trackIds });
+}
+
+export async function multiEditApply(
+  libraryPath: string,
+  trackIds: string[],
+  edits: MultiEdit[],
+): Promise<string[]> {
+  return invoke<string[]>("multi_edit_apply", { libraryPath, trackIds, edits });
 }

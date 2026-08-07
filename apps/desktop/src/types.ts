@@ -791,3 +791,22 @@ export interface CsvImportPreview {
   rows: CsvPlannedRow[];
   report: CsvImportReport;
 }
+
+// ── Manual multi-track editing (Epic 5) ──────────────────────────────────────
+// Mirrors `changes::multi_edit`. See docs/lexicon/02-library.md §Manual Editing.
+
+/** `multiple` when the selection disagrees — deliberately carries no value. */
+export type MultiEditFieldValue =
+  | { kind: "same"; value: string | null }
+  | { kind: "multiple" };
+
+export interface MultiEditFormData {
+  fields: [string, MultiEditFieldValue][];
+  track_count: number;
+}
+
+/** A field the user actually changed. `null` clears it. */
+export interface MultiEdit {
+  field: string;
+  value: string | null;
+}
