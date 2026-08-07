@@ -1922,5 +1922,33 @@ decode check that only ran against real audio could not be tested at all. Forty-
 header plus PCM gives a genuine pass, a genuine no-audio case, and — truncated — a genuine failure.
 Cheaper than a fixture and it cannot go stale.
 
+**The archive playlist rule is the best-designed thing in the Lexicon manual.** Archiving from a
+playlist removes the track from that playlist; archiving from the browser leaves every playlist
+alone. Stated flat it sounds like an inconsistency. It is exactly right: the two gestures mean
+different things, and collapsing them would force the user to choose between "archiving breaks my
+sets" and "archiving does nothing useful from inside a set". Implementing it meant putting the
+action on the context menu — the only place that knows which view you are in — and changing the
+label so the menu says which of the two you are about to get.
+
+**Two things that land at different times need two sentences.** Archiving is cache-only and
+immediate; the playlist removal is staged and goes through Sync. One toast claiming both had
+happened would be a lie about one of them, so the result carries both counts and the message reads
+off whichever applies.
+
+**"Older than 0 days" must not select everything.** It is a strict comparison for a reason: the
+user is almost certainly mid-way through picking a real threshold, and a helper that sweeps the
+entire archive on the way there is a helper you learn not to touch. Small, and the sort of thing
+that only shows up if you write the test for the degenerate input.
+
+**A helper that matched nothing has to say so.** Clearing the selection silently looks exactly like
+it having worked, and the user acts on the wrong belief.
+
+**Second time declining delete-from-disk this epic.** Find Broken Tracks offers it, Archive Cleanup
+offers it, and both are now documented divergences rather than gaps. The reasoning is the same both
+times and worth stating once: it is the only operation in the program with no undo, and a tool
+whose first rule is that the library is read-only should not be what deletes a DJ's audio. The
+confirmation dialog says so in as many words, and a test asserts that sentence is on screen — the
+promise is part of the feature, not a footnote.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

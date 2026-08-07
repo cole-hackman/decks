@@ -971,6 +971,22 @@ impl CacheDb {
             .map_err(Into::into)
     }
 
+    /// Archived tracks with when they were archived.
+    ///
+    /// The plain id list cannot answer "archived more than six months ago",
+    /// which is the selection helper's most useful criterion — an archive is a
+    /// holding pen, and age is how you tell what has stopped being temporary.
+    pub fn list_archived_with_dates(&self, library_path: &str) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT track_id, archived_at FROM archived_tracks WHERE library_path = ?1",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![library_path], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
     pub fn archive_tracks(&self, library_path: &str, track_ids: &[String]) -> Result<()> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

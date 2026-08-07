@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | deferred |
 |---|---:|---:|---:|---:|
 | Interop & sync | 4 | 7 | 1 | 11 |
-| Library & browser | 1 | 9 | 6 | 0 |
+| Library & browser | 2 | 8 | 6 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **30** | **40** | **20** | **16** |
+| **Total** | **31** | **39** | **20** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -69,7 +69,7 @@ of library *editing*, *automation*, or *set preparation*.
 | Custom Tags | partial | Strong already; missing category colours, drag-reorder, OR/AND selection on the Tags page, MyTag import, per-tag hotkeys | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
-| Archive | partial | Missing context-sensitive playlist rule, selection helper, delete-from-disk | 5 |
+| Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk deliberately not offered | 5 |
 | Genre / Artist Cleanup | partial | Missing locking, pinned letters, alt-click filter, extra artist fields | 5 |
 
 ## Smartlists — `03-smartlists.md`
