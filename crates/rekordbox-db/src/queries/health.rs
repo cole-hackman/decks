@@ -119,13 +119,39 @@ pub const FINGERPRINT_HAMMING_MAX_BITS: u32 = 10;
 /// alternative is O(n²) pairwise comparison which doesn't scale past ~5k tracks.
 const BUCKET_PREFIX_BYTES: usize = 4;
 
+/// Only tracks between 15 seconds and 15 minutes are fingerprint-matched.
+///
+/// The bounds are the spec's, and the reasons are sound in both directions:
+/// DJ sets and mixes above the ceiling match each other on loose chroma
+/// similarity, and samples below the floor match almost anything.
+///
+/// A track with no recorded duration is **included**: an unknown length is not
+/// evidence of a long one, and excluding it would silently drop tracks that
+/// have simply never been analysed.
+pub fn fingerprintable_length(duration_secs: Option<i64>) -> bool {
+    match duration_secs {
+        None => true,
+        Some(secs) => (MIN_FINGERPRINT_SECS..=MAX_FINGERPRINT_SECS).contains(&secs),
+    }
+}
+
+/// 15 seconds, per the spec.
+pub const MIN_FINGERPRINT_SECS: i64 = 15;
+/// 15 minutes, per the spec.
+pub const MAX_FINGERPRINT_SECS: i64 = 15 * 60;
+
 pub fn audio_fingerprint_duplicates(
     tracks: Vec<Track>,
     fingerprints: &HashMap<String, Vec<u8>>,
 ) -> Result<Vec<DuplicateGroup>, anyhow::Error> {
-    // Filter to tracks we actually have fingerprints for.
+    // Filter to tracks we actually have fingerprints for, within the length
+    // bounds the spec states. A chromagram of a two-hour mix matches every
+    // other two-hour mix loosely enough to be noise, and a one-second stab
+    // matches almost anything — both directions produce groups a user would
+    // have to reject one at a time.
     let fps: Vec<(Track, &Vec<u8>)> = tracks
         .into_iter()
+        .filter(|t| fingerprintable_length(t.duration_secs))
         .filter_map(|t| {
             t.folder_path
                 .as_deref()

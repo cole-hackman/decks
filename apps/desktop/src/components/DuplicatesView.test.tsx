@@ -1,14 +1,21 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DuplicatesView } from "./DuplicatesView";
-import { archiveTracks, listLibraryDuplicateGroups } from "../ipc";
+import {
+  listLibraryDuplicateGroups,
+  planDuplicateResolution,
+  preselectKeepers,
+  resolveDuplicates,
+} from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 import type { DuplicateGroup, Track } from "../types";
 
 vi.mock("../ipc", () => ({
   listLibraryDuplicateGroups: vi.fn(),
-  archiveTracks: vi.fn(),
+  planDuplicateResolution: vi.fn(),
+  resolveDuplicates: vi.fn(),
+  preselectKeepers: vi.fn(),
 }));
 
 function track(id: string, title: string): Track {
@@ -64,6 +71,14 @@ const GROUPS: DuplicateGroup[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(planDuplicateResolution).mockResolvedValue({
+    keeper_id: "f1",
+    loser_ids: ["f2", "f3"],
+    repoint: [],
+    already_present: [],
+  });
+  vi.mocked(resolveDuplicates).mockResolvedValue({ archived: [], staged: [] });
+  vi.mocked(preselectKeepers).mockResolvedValue([]);
 });
 
 function render_() {
@@ -87,7 +102,6 @@ describe("DuplicatesView", () => {
 
   it("archives the non-kept tracks when Keep one, archive rest is clicked", async () => {
     vi.mocked(listLibraryDuplicateGroups).mockResolvedValue([GROUPS[1]]);
-    vi.mocked(archiveTracks).mockResolvedValue(undefined);
     render_();
     const section = await screen.findByTestId("duplicate-group");
     // Default keep = first track (f1). Pick the first track explicitly anyway
@@ -95,7 +109,77 @@ describe("DuplicatesView", () => {
     const radios = within(section).getAllByRole("radio");
     await userEvent.click(radios[0]);
     await userEvent.click(within(section).getByTestId("archive-rest"));
-    expect(archiveTracks).toHaveBeenCalledWith("/db", ["f2", "f3"]);
+    await waitFor(() => {
+      expect(planDuplicateResolution).toHaveBeenCalledWith("/db", "f1", [
+        "f2",
+        "f3",
+      ]);
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Archive and re-point" }),
+    );
+    await waitFor(() => expect(resolveDuplicates).toHaveBeenCalled());
+  });
+
+  it("the review step names the playlists that will be re-pointed", async () => {
+    // Archiving a loser without re-pointing leaves a hole in every set it was
+    // in — so the confirm has to say which sets are affected.
+    vi.mocked(listLibraryDuplicateGroups).mockResolvedValue([GROUPS[1]]);
+    vi.mocked(planDuplicateResolution).mockResolvedValue({
+      keeper_id: "f1",
+      loser_ids: ["f2", "f3"],
+      repoint: [["p1", "Techno Set", "f2"]],
+      already_present: [],
+    });
+    render_();
+    const section = await screen.findByTestId("duplicate-group");
+    await userEvent.click(within(section).getByTestId("archive-rest"));
+    expect(await screen.findByText(/Techno Set/)).toBeInTheDocument();
+  });
+
+  it("says so when no playlist needs re-pointing", async () => {
+    vi.mocked(listLibraryDuplicateGroups).mockResolvedValue([GROUPS[1]]);
+    render_();
+    const section = await screen.findByTestId("duplicate-group");
+    await userEvent.click(within(section).getByTestId("archive-rest"));
+    expect(
+      await screen.findByText(/No playlist held a duplicate/),
+    ).toBeInTheDocument();
+  });
+
+  it("cancelling the review archives nothing", async () => {
+    vi.mocked(listLibraryDuplicateGroups).mockResolvedValue([GROUPS[1]]);
+    render_();
+    const section = await screen.findByTestId("duplicate-group");
+    await userEvent.click(within(section).getByTestId("archive-rest"));
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(resolveDuplicates).not.toHaveBeenCalled();
+  });
+
+  it("a Prefer rule preselects the keeper in every group", async () => {
+    vi.mocked(listLibraryDuplicateGroups).mockResolvedValue([GROUPS[1]]);
+    vi.mocked(preselectKeepers).mockResolvedValue(["f3"]);
+    render_();
+    await screen.findByTestId("duplicate-group");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Prefer rule"),
+      "highest_bitrate",
+    );
+    await waitFor(() => {
+      expect(preselectKeepers).toHaveBeenCalledWith(
+        expect.any(Array),
+        "highest_bitrate",
+      );
+    });
+    // The chosen keeper becomes the selected radio, so the next archive keeps it.
+    const section = screen.getByTestId("duplicate-group");
+    await userEvent.click(within(section).getByTestId("archive-rest"));
+    await waitFor(() => {
+      expect(planDuplicateResolution).toHaveBeenCalledWith("/db", "f3", [
+        "f1",
+        "f2",
+      ]);
+    });
   });
 
   it("renders empty state when no duplicates exist", async () => {

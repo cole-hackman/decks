@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { archiveTracks, listLibraryDuplicateGroups } from "../ipc";
+import {
+  listLibraryDuplicateGroups,
+  planDuplicateResolution,
+  preselectKeepers,
+  resolveDuplicates,
+} from "../ipc";
+import { useDialog } from "../hooks/useDialog";
+import type { DuplicateCandidate, PreferRule } from "../types";
 import { useToast } from "./Toast";
 import type { DuplicateGroup, DuplicateKind, Track } from "../types";
 
@@ -25,8 +32,34 @@ function groupId(g: DuplicateGroup, idx: number): string {
   return `${kind}:${idx}:${g.tracks.map((t) => t.id).join(",")}`;
 }
 
+/** The facts the keeper heuristic looks at, from the tracks we already have. */
+function candidatesOf(
+  g: DuplicateGroup,
+  cueIds: Set<string>,
+  playlistCounts: Map<string, number>,
+): DuplicateCandidate[] {
+  return g.tracks.map((t) => ({
+    track_id: t.id,
+    bit_rate: t.bit_rate,
+    duration_secs: t.duration_secs,
+    has_cues: cueIds.has(t.id),
+    rating: t.rating,
+    play_count: t.dj_play_count,
+    in_playlists: playlistCounts.get(t.id) ?? 0,
+  }));
+}
+
+const PREFER_RULES: { value: PreferRule; label: string }[] = [
+  { value: "best", label: "Best (cues, then bitrate)" },
+  { value: "highest_bitrate", label: "Highest bitrate" },
+  { value: "has_cues", label: "Has cue points" },
+  { value: "most_playlists", label: "In the most playlists" },
+  { value: "longest", label: "Longest" },
+];
+
 export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
   const { toast } = useToast();
+  const dialog = useDialog();
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,17 +101,73 @@ export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
     return c;
   }, [groups]);
 
+  /**
+   * Apply one rule across every group at once — the spec's `Prefer`.
+   *
+   * The heuristic lives in Rust so it is testable and inspectable rather than
+   * buried here, and so the chat panel could use the same one later.
+   */
+  const applyPrefer = async (rule: PreferRule) => {
+    try {
+      const cueIds = new Set<string>();
+      const playlistCounts = new Map<string, number>();
+      const keepers = await preselectKeepers(
+        groups.map((g) => candidatesOf(g, cueIds, playlistCounts)),
+        rule,
+      );
+      setKeepByGroup((prev) => {
+        const next = { ...prev };
+        groups.forEach((g, idx) => {
+          const keeper = keepers[idx];
+          if (keeper) next[groupId(g, idx)] = keeper;
+        });
+        return next;
+      });
+      toast({
+        variant: "success",
+        message: `Keeper preselected in ${keepers.filter(Boolean).length} group(s).`,
+      });
+    } catch (e) {
+      toast({ variant: "error", message: String(e) });
+    }
+  };
+
+  /**
+   * Resolve a group: archive the losers and re-point playlists at the keeper.
+   *
+   * The re-pointing is the part that makes this safe. Archiving a losing copy
+   * without it leaves a hole in every set the loser was in — which the user
+   * discovers on stage. The plan is shown before it runs, per the spec's
+   * Review step.
+   */
   const handleArchiveRest = async (g: DuplicateGroup, gid: string) => {
-    const keepId = keepByGroup[gid];
+    const keepId = keepByGroup[gid] ?? g.tracks[0]?.id ?? "";
     const toArchive = g.tracks.filter((t) => t.id !== keepId).map((t) => t.id);
     if (toArchive.length === 0) return;
     setBusyGroup(gid);
     try {
-      await archiveTracks(libraryPath, toArchive);
+      const plan = await planDuplicateResolution(libraryPath, keepId, toArchive);
+      const keeperTitle = g.tracks.find((t) => t.id === keepId)?.title ?? "";
+      const playlists = [...new Set(plan.repoint.map(([, name]) => name))];
+      const ok = await dialog.confirm({
+        title: `Archive ${toArchive.length} duplicate(s)?`,
+        body:
+          `Keeping “${keeperTitle}”. The rest go to the Archive — nothing is deleted.` +
+          (playlists.length > 0
+            ? ` ${playlists.length} playlist(s) will be re-pointed at the keeper: ${playlists.join(", ")}.`
+            : " No playlist held a duplicate, so nothing needs re-pointing."),
+        confirmLabel: "Archive and re-point",
+      });
+      if (!ok) return;
+
+      const result = await resolveDuplicates(libraryPath, plan);
       toast({
         variant: "success",
-        message: `Archived ${toArchive.length} duplicate(s).`,
-        detail: `Kept "${g.tracks.find((t) => t.id === keepId)?.title ?? ""}".`,
+        message: `Archived ${result.archived.length} duplicate(s).`,
+        detail:
+          result.staged.length > 0
+            ? `${result.staged.length} playlist change(s) staged for review.`
+            : `Kept “${keeperTitle}”.`,
       });
       // Drop this group from the list so the user sees progress.
       setGroups((prev) => prev.filter((_, idx) => groupId(prev[idx], idx) !== gid));
@@ -120,6 +209,27 @@ export function DuplicatesView({ libraryPath, onOpenInspector }: Props) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {groups.length > 0 && (
+            <label className="text-xs text-ink-muted">
+              <span className="mr-1">Prefer</span>
+              <select
+                aria-label="Prefer rule"
+                className="rounded border border-edge bg-surface px-2 py-1 text-xs text-ink"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) void applyPrefer(e.target.value as PreferRule);
+                  e.target.value = "";
+                }}
+              >
+                <option value="">Choose a rule…</option>
+                {PREFER_RULES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button
             onClick={() => void refresh()}
             disabled={loading}

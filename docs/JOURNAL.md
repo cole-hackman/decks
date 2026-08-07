@@ -2005,5 +2005,26 @@ stays "House 12 locked" — the count is the number the user is actually reading
 the number a screen reader reads too. The e2e failure was pointing at a real accessibility
 regression, not at itself.
 
+**"Archive the duplicate" is not a feature until playlists follow it.** The spec flags playlist
+re-pointing as the important guarantee and it is right: archiving a losing copy without rewriting
+the sets it was in leaves holes the user meets on stage. The ordering detail matters too — the
+keeper is added *before* the loser is removed, because both are staged and the batch applies in
+order, and a removal-first ordering would leave the set briefly short.
+
+**Cues beat bitrate, and that is the whole heuristic.** Losing someone's cue work is the expensive
+mistake; losing 64kbps is not. Every other criterion is a tie-break. Writing the rule as a scored
+tuple rather than a chain of ifs made the ordering readable and made "what does Prefer actually
+change" a one-line diff between rules.
+
+**A tie has to resolve the same way every time.** A bulk `Prefer` over 200 groups that gave a
+different answer each preview would be unusable, and the failure would look like flakiness rather
+than like a missing tie-break. `max_by_key` keeps the *last* maximum, so the iterator is reversed
+to take the first — cheaper than cloning an id per candidate for a final comparison.
+
+**"No recorded duration" is not "too long".** The fingerprint bounds exclude tracks outside 15s–15m,
+and the obvious implementation excludes unknown durations too — silently dropping everything that
+has never been analysed, which is exactly the library most in need of a duplicate scan. Unknown is
+included, with a comment saying why.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

@@ -71,6 +71,10 @@ import type {
   ArchiveResult,
   BackupSummary,
   RestoreReport,
+  DuplicateCandidate,
+  PreferRule,
+  ResolutionPlan,
+  ResolveResult,
 } from "./types";
 import type {
   ChatMessage,
@@ -1432,4 +1436,32 @@ export async function togglePinnedLetter(
   letter: string,
 ): Promise<boolean> {
   return invoke<boolean>("toggle_pinned_letter", { kind, letter });
+}
+
+// ── Duplicate resolution ─────────────────────────────────────────────────────
+
+export async function preselectKeepers(
+  groups: DuplicateCandidate[][],
+  rule: PreferRule,
+): Promise<(string | null)[]> {
+  return invoke<(string | null)[]>("preselect_keepers", { groups, rule });
+}
+
+export async function planDuplicateResolution(
+  libraryPath: string,
+  keeperId: string,
+  loserIds: string[],
+): Promise<ResolutionPlan> {
+  return invoke<ResolutionPlan>("plan_duplicate_resolution", {
+    libraryPath,
+    keeperId,
+    loserIds,
+  });
+}
+
+export async function resolveDuplicates(
+  libraryPath: string,
+  plan: ResolutionPlan,
+): Promise<ResolveResult> {
+  return invoke<ResolveResult>("resolve_duplicates", { libraryPath, plan });
 }

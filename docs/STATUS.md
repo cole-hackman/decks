@@ -1,5 +1,40 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 9): duplicate resolution
+
+Detection already existed. What did not was the part that makes it safe to use.
+
+**Playlist re-pointing** was the flagged gap and is closed. Resolving a group stages a
+`PlaylistAddTrack` for the keeper and a `PlaylistRemoveTrack` for each loser, in every playlist that
+held one — archiving a losing copy without that leaves a hole in every set it was in, and the user
+finds out on stage. The keeper is added **before** the loser is removed: both are staged, so the
+order only matters at apply time, and that is exactly when a removal-first ordering would leave the
+set briefly short. A playlist already holding the keeper gets the loser removed rather than the
+keeper added twice.
+
+**The keeper heuristic puts cues above bitrate**, and that is the single most important line in it.
+Losing someone's cue work is the expensive mistake; losing 64kbps is not. Ties fall through bitrate
+→ playlist membership → play count, and a genuine tie resolves the same way every run — otherwise a
+bulk `Prefer` over 200 groups would give a different answer each time it was previewed. An explicit
+rule like `Highest bitrate` overrides the default, which is the whole point of `Prefer`: "I know,
+do it my way anyway."
+
+The heuristic lives in Rust as a pure function rather than in a click handler, so it is inspectable
+and testable — and reusable if the chat panel ever wants it.
+
+**Duration bounds** are the spec's 15 seconds to 15 minutes, and the interesting case is the third
+one: a track with **no recorded duration is included**. An unknown length is not evidence of a long
+one, and excluding it would silently drop everything that has never been analysed.
+
+**The review step** names the playlists that will be re-pointed before anything happens, and says
+so plainly when none will be. Losers are archived, never deleted, and the confirmation says it.
+
+Still missing: **interruptible scans** and **manual merge**. The first needs cancellation plumbing
+through a long-running command; the manual's advice to work in passes is not possible without it.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 479, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 8): Genre / Artist Cleanup
 
 **Locking** is the interesting one, and it turns on where it is *not* scoped. By kind
