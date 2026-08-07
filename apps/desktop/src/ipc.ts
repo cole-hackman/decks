@@ -46,6 +46,16 @@ import type {
   AutomaticAction,
   FieldMappingRow,
   MappingSource,
+  Recipe,
+  RecipePreview,
+  RecipeProposal,
+  TagRecipe,
+  TagProposal,
+  TagApplyResult,
+  OtherRecipe,
+  OtherRecipeResult,
+  CueRecipe,
+  CueRecipeTrack,
 } from "./types";
 import type {
   ChatMessage,
@@ -1150,4 +1160,79 @@ export async function markIncomingReviewed(
   trackIds: string[],
 ): Promise<number> {
   return invoke<number>("mark_incoming_reviewed", { libraryPath, trackIds });
+}
+
+// ── Recipes (Epic 5) ─────────────────────────────────────────────────────────
+
+export async function recipeFields(): Promise<string[]> {
+  return invoke<string[]>("recipe_fields");
+}
+
+export async function recipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipes: Recipe[],
+): Promise<RecipePreview> {
+  return invoke<RecipePreview>("recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipes,
+  });
+}
+
+export async function recipeApply(
+  libraryPath: string,
+  proposals: RecipeProposal[],
+): Promise<string[]> {
+  return invoke<string[]>("recipe_apply", { libraryPath, proposals });
+}
+
+export async function tagRecipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: TagRecipe,
+): Promise<TagProposal[]> {
+  return invoke<TagProposal[]>("tag_recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
+}
+
+export async function tagRecipeApply(
+  libraryPath: string,
+  proposals: TagProposal[],
+): Promise<TagApplyResult> {
+  return invoke<TagApplyResult>("tag_recipe_apply", { libraryPath, proposals });
+}
+
+export async function otherRecipeApply(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: OtherRecipe,
+): Promise<OtherRecipeResult> {
+  return invoke<OtherRecipeResult>("other_recipe_apply", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
+}
+
+export async function cueRecipePreview(
+  libraryPath: string,
+  trackIds: string[],
+  recipe: CueRecipe,
+): Promise<CueRecipeTrack[]> {
+  return invoke<CueRecipeTrack[]>("cue_recipe_preview", {
+    libraryPath,
+    trackIds,
+    recipe,
+  });
+}
+
+export async function cueRecipeApply(
+  libraryPath: string,
+  tracks: CueRecipeTrack[],
+): Promise<string[]> {
+  return invoke<string[]>("cue_recipe_apply", { libraryPath, tracks });
 }

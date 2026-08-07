@@ -1668,3 +1668,109 @@ inbox is how a track silently gets skipped.
 **Next:** enrichment (Find Tags & album art) is the remaining large Epic 4 item, and it needs
 network providers plus a local cache. Energy/Danceability and the Beatshift Fixer are analysis work,
 closer in character to Epic 3 part 2 than to file management. Epics 5–7 untouched.
+
+## 2026-08-06 — Session: Epic 5 part 1 (Recipes)
+
+**The framing that made this tractable:** recipes are not "bulk edit", they are a small pure
+function library with a serialisable description attached. Once that was clear, the crate wrote
+itself — `(Recipe, TrackFields) -> (TrackFields, Outcome)`, no I/O anywhere, 75 tests that need no
+fixtures. The Tauri layer is then thin enough to be obviously correct.
+
+**Reporting *why* nothing happened turned out to be the design decision.** The naive version returns
+the new fields and shrugs. But a user running a recipe over 400 tracks and seeing 340 change wants
+to know about the other 60, and "the source field was empty" versus "the delimiter was not found"
+are different problems with different fixes. So every operation that declines to act says which of
+four reasons applied, and the UI surfaces it.
+
+**Two near-misses the tests caught.** `Extract Text` with no match must not write an empty string —
+that would blank a remixer field the user spent time on. And `Merge Fields` where one half is
+missing must yield the other half rather than `"Daft Punk & "`. Both are the same underlying
+instinct: an operation that cannot do its job should leave the track alone, not do a bad job.
+
+**One that clippy caught:** the emoji range list had `0x1F3FB..=0x1F3FF` (skin tones) *inside*
+`0x1F300..=0x1FAFF`. Harmless, but it meant the list was written from a reference rather than
+checked — worth a comment saying which ranges are genuinely separate and why.
+
+**And one Playwright habit worth writing down:** `getByText("Get Lucky")` is case-insensitive by
+default, so it matched the `get lucky` before-value and the track name as well as the `Get Lucky`
+after-value. `{ exact: true }` is the fix. Three strict-mode violations this session have all been
+locators that were less specific than they looked.
+
+**The tag recipes went in the same session**, and modelling them as a *delta* rather than a new tag
+list was the decision that made everything else easy: the cache already has add/remove accessors, so
+a `TagChange { added, removed }` writes through without a second diff, and the preview can say
+"adds 3, removes 1" instead of showing two lists and making the user spot the difference.
+
+**Idempotency needed defining before it could be built.** "Safe to re-run" turns out to mean two
+things: a tag already present is not re-added, *and* nothing existing is ever removed. The second
+half is the one that matters — a user who imported from comments and then hand-added a tag must not
+lose it on the next run. Both have tests saying so.
+
+**Two rules the manual leaves open, both found by asking "what if they overlap":** replacing a tag
+with one the track already has must be a removal only, or the track holds it twice; and replacing
+with an empty tag has to be refused, or Replace quietly becomes Delete.
+
+**An e2e fixture caught a real bug.** The mock's field list omitted `comment`, and the tag section
+defaults its source to `comment` — so the select had a value matching no option and the browser
+silently showed the first one instead. The form would have lied about what it was about to do.
+Fixed in the component (fall back to the first field when the default is not on offer), not just in
+the fixture. Worth remembering that a fixture that disagrees with production is sometimes telling
+you something.
+
+**The "other" recipes were three unrelated things wearing one hat.** Mark as Incoming is the exact
+inverse of Selected done — the per-track reviewed flag from migration v12 already existed, so it was
+one accessor. Remove from All Playlists stages a `PlaylistRemoveTrack` per playlist and deliberately
+ignores smartlists, which are derived and would just re-add the track. Import Date reads the
+filesystem. Nothing shared except the selection, so they got their own section rather than joining
+the ordered recipe list.
+
+**Modification time, not creation time,** and the reason is worth keeping: creation time is not
+portable — Linux has no reliable `birthtime` — and a file copied between drives keeps its mtime
+while its ctime becomes the copy date. Using ctime would quietly stamp every track with the date the
+user got a new hard disk.
+
+**The UI states what each does before it runs**, which matters most for Remove from All Playlists:
+without the smartlist caveat spelled out, a user watching tracks stay in their smartlists would
+reasonably conclude the recipe was broken.
+
+**The cue recipes were the interesting half.** Every other recipe category is a function from a
+string to a string; a cue recipe rewrites a *list*, and one operation can delete, reorder, rename
+and recolour in the same pass. Trying to force that into the `FieldChange` shape would have meant
+running the engine three times. `CueEdits { cues, deleted, skipped }` — the whole new list plus
+what went — was the model that fit.
+
+**Passing the beat grid in rather than reading it** is the trick that made the category testable.
+`QuantizeCues` is the only operation that needs a grid, and having it take `&[i64]` means the
+entire cue vocabulary has unit tests without a single ANLZ file on disk. The Tauri command does the
+reading, the way `cue_generator` already does.
+
+**"First cue" is ambiguous and the ambiguity matters.** `djmdCue` rows come back in insertion
+order, so "delete the first cue" could mean the earliest in the track or the earliest one added.
+Users mean the timeline every time. There is a test whose name says so, built on a fixture stored
+deliberately out of order.
+
+**`Sort Cues` had no obvious target.** `djmdCue` stores no cue ordering — the hot-cue slot number
+*is* the order, which is why a sort had to become a slot reassignment over slots 1–8. Memory cues
+have no slot, so they are excluded rather than being silently promoted to hot cues by a `Kind`
+write. That one is worth remembering: the obvious implementation would have changed what the cues
+*were*, not just where they sat.
+
+**Two operations from the spec are deliberately absent,** and saying why beats leaving a gap.
+`Change Active Loops` needs a `djmdCue` column `decks` does not model; `Half/Double BPM` moves
+beatgrid markers, which means writing an ANLZ file — that is a beatgrid recipe with a cue recipe's
+name. Both are recorded in `10-recipes.md` rather than living only in a commit message.
+
+**Staged values have to carry their type.** `InMsec` is an integer column and `json_to_sql` has no
+schema to consult — it maps JSON strings to `TEXT` and JSON numbers to `INTEGER`. So the cue diff
+holds `serde_json::Value`, not the display strings the field recipes use, and there is a test
+asserting a position edit stages a number. Rekordbox's "no colour" being `-1` rather than `NULL` is
+the same class of detail: the preview shows *its* spelling, not ours.
+
+**Playwright's `getByRole` name option matches a substring by default,** which the existing
+`getByRole("button", { name: "Preview" }).first()` would have quietly survived — "Preview cues"
+sorts after both existing Preview buttons, so `.first()` and `.nth(1)` still resolved correctly.
+Surviving by accident is not the same as being correct, so both got `exact: true`. The next section
+added would have broken them.
+
+**Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
+first). Then the larger items — Undo History, CSV import, the duplicates work.

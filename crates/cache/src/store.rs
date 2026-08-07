@@ -1270,6 +1270,25 @@ impl CacheDb {
         Ok(out)
     }
 
+    /// Clear the reviewed flag, so a track surfaces on Incoming again.
+    ///
+    /// The `Mark as Incoming` recipe: Incoming doubles as a to-do list, and
+    /// putting a track back on it is how the spec says to use it that way.
+    pub fn unmark_incoming_reviewed(
+        &self,
+        library_path: &str,
+        track_ids: &[String],
+    ) -> Result<usize> {
+        let mut n = 0;
+        for id in track_ids {
+            n += self.conn.execute(
+                "DELETE FROM incoming_reviewed WHERE library_path = ?1 AND track_id = ?2",
+                rusqlite::params![library_path, id],
+            )?;
+        }
+        Ok(n)
+    }
+
     /// Idempotent — marking a track done twice is not an error.
     pub fn mark_incoming_reviewed(
         &self,
@@ -1589,6 +1608,30 @@ mod tests {
         got.sort();
         assert_eq!(got, ids);
         assert!(db.list_incoming_reviewed("/other").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_track_can_be_pushed_back_onto_incoming() {
+        // `Mark as Incoming` — Incoming doubles as a to-do list.
+        let db = CacheDb::open_in_memory().unwrap();
+        let ids = vec!["t1".to_string(), "t2".to_string()];
+        db.mark_incoming_reviewed("/db", &ids).unwrap();
+
+        assert_eq!(
+            db.unmark_incoming_reviewed("/db", &["t1".into()]).unwrap(),
+            1
+        );
+        assert_eq!(db.list_incoming_reviewed("/db").unwrap(), vec!["t2"]);
+    }
+
+    #[test]
+    fn unmarking_a_track_that_was_never_reviewed_is_not_an_error() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert_eq!(
+            db.unmark_incoming_reviewed("/db", &["ghost".into()])
+                .unwrap(),
+            0
+        );
     }
 
     #[test]

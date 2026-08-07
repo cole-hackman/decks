@@ -65,6 +65,29 @@ This category is the most valuable and the furthest from anything `decks` has.
 | Remove Cue Text | Strip all cue names |
 | Remove Cues by Label | Delete cues whose label contains a string (case-insensitive) |
 
+**Status in `decks`:** nine of the eleven are implemented in `crates/recipes::cues` and reachable
+from the Recipes panel's Cue Recipes section. Deliberate divergences and omissions:
+
+- **`Change Active Loops` and `Half/Double BPM` are not implemented.** The first needs a
+  `djmdCue` "active loop" column `decks` does not model; the second has to move beatgrid markers,
+  which means writing an ANLZ file — that is a beatgrid recipe wearing a cue recipe's name, and it
+  belongs with the beatgrid category below.
+- **`Shift Cues/Beatgrid` shifts cues only.** The grid half is the same ANLZ write. Loops move
+  whole rather than having only their start shifted, which would silently resize them.
+- **"Random" is spelled `Cycle` and is deterministic**, walking an eight-colour palette in track
+  order. A preview that showed different colours from the apply would be worse than no preview.
+- **"First" and "last" mean first and last in the *track*,** not in storage order — `djmdCue` rows
+  come back in insertion order, and a user means the timeline.
+- **`Sort Cues` reassigns hot-cue slots 1–8** in the new order, because `djmdCue` stores no cue
+  ordering of its own. Memory cues have no slot and stay put; a ninth hot cue keeps its slot.
+- **`Quantize Cues` reports "this track has no beat grid"** rather than quietly changing nothing,
+  per ADR-0008. It preserves loop length instead of snapping both ends independently.
+- **`Remove Cues by Label` refuses an empty needle** — it would match every named cue, which is
+  `Remove Cue Text`'s job.
+
+Everything stages as `CueMetadataEdit` / `TrackDeleteCue` and goes through Sync; nothing here
+writes to `master.db` directly.
+
 ### Beatgrid recipes
 
 `Delete Beatgrid` · `Round BPM` (rounds track BPM and every marker to a whole number — for
@@ -116,10 +139,57 @@ comment field for years — worth prioritising within the epic.
   smartlists, which are derived.
 - **Import Date from Filesystem** — take the file's creation date as the track's date.
 
-*decks status* — **missing**, all of it.
+*decks status* — **partial.** `crates/recipes` implements the casing, field, text and number
+categories — 18 operations — as pure functions of (recipe, fields) → fields. `RecipesPanel`
+(sidebar → Recipes) builds a list, previews every proposed change as a deselectable before/after
+row, and stages what survives review as `TrackMetadataEdit` changes. Recipes serialise, so one built
+today can be saved and replayed on next month's downloads.
+
+Three rules the manual leaves open, decided and tested:
+
+- A recipe whose source field is empty **reports why** rather than doing nothing silently —
+  `SourceEmpty`, `NoMatch`, `NotANumber`, `Misconfigured`. "340 of 400 changed" needs an
+  explanation attached.
+- `Merge Fields` with one half missing yields the other half, not a stray separator.
+- `Extract Text` with no match leaves the target **untouched**. Writing an empty string would blank
+  a good remixer field, which is worse than not running.
+
+The field vocabulary offered is deliberately the intersection of what `decks` models and what the
+applier's allowlist will actually write — offering a field that cannot be persisted would produce a
+preview full of changes that silently vanish at sync time.
+
+The **tag recipes** are done too, in `crates/recipes::tags`. They are modelled as a *delta* to the
+track's tag set rather than a new value, which is both what the cache's add/remove accessors want
+and what lets a preview say "adds 3, removes 1".
+
+`Import Tags from Text` is idempotent as the manual requires, and in two senses: a tag the track
+already has is not re-added, and nothing existing is ever removed — so a tag added by hand survives
+a re-run. Matching is case-insensitive, since a library holding both `#techno` and `#Techno` is
+exactly the mess the feature exists to clean up. A tag runs from the marker to the next whitespace,
+matching how the convention is actually written (`#PeakTime`, not `#Peak time`), and trailing
+punctuation is trimmed so `#Techno, #Vocals` gives two clean tags.
+
+Two rules the manual leaves open: replacing a tag with one the track *already has* is a removal
+only, or the track ends up holding it twice; and replacing with an empty tag is refused rather than
+silently becoming a delete.
+
+Tag recipes apply directly rather than staging — tags live in the local cache, so there is no sync
+step to carry them. A tag name with no existing tag is created in the first category, and the result
+says which were invented.
+
+The three **"other" recipes** are done as well. Each reaches into a different subsystem, so they run
+one at a time rather than joining the ordered recipe list, and the UI states what each does before
+it runs — `Remove from All Playlists` leaving smartlists alone is exactly the sort of thing that
+otherwise reads as the recipe having missed some.
+
+`Import Date from Filesystem` takes the file's **modification** time, not its creation time:
+creation time is not portable (Linux has no reliable `birthtime`), and a file copied between drives
+keeps its mtime while its ctime becomes the copy date — worse than useless as a release year.
+
+Still missing: the **cue and beatgrid recipes** (14 ops).
 
 *Epic* — **5**. Within the epic, the cue recipes depend on the cue-editing model from Epic 2, so
-sequence field/text/tag recipes first.
+field/text/tag recipes came first as the spec advises.
 
 ---
 

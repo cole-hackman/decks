@@ -25,6 +25,7 @@ members = [
     "crates/smartlists",
     "crates/cue-generator",
     "crates/file-organizer",
+    "crates/recipes",
 ]
 
 [workspace.package]

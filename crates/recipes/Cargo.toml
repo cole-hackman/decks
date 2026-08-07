@@ -1,0 +1,12 @@
+[package]
+name = "recipes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Parameterized bulk-edit operations applied per track"
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

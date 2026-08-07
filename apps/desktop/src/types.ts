@@ -520,3 +520,186 @@ export interface FieldMappingRow {
   target: string;
   overwrite: boolean;
 }
+
+// ── Recipes (Epic 5) ─────────────────────────────────────────────────────────
+
+export type DelimiterPair =
+  | "parentheses"
+  | "brackets"
+  | "braces"
+  | "angles"
+  | "double_quotes"
+  | "single_quotes";
+
+export type SpecialCharacterMode = "special" | "emojis";
+
+/** Mirrors `recipes::Recipe`. */
+export type Recipe =
+  | { op: "to_upper_case"; field: string; ignore_words: string[] }
+  | { op: "to_lower_case"; field: string; ignore_words: string[] }
+  | { op: "to_title_case"; field: string; ignore_words: string[] }
+  | { op: "to_sentence_case"; field: string }
+  | { op: "copy_field"; from: string; to: string }
+  | { op: "move_field"; from: string; to: string }
+  | {
+      op: "merge_fields";
+      first: string;
+      second: string;
+      target: string;
+      separator: string;
+    }
+  | { op: "prefix_field"; field: string; text: string }
+  | { op: "suffix_field"; field: string; text: string }
+  | { op: "swap_fields"; first: string; second: string }
+  | {
+      op: "split_field";
+      field: string;
+      delimiter: string;
+      first_target: string;
+      second_target: string;
+      preserve_split_text: boolean;
+      append: boolean;
+    }
+  | { op: "remove_text"; field: string; text: string; case_insensitive: boolean }
+  | {
+      op: "replace_text";
+      field: string;
+      find: string;
+      replace: string;
+      case_insensitive: boolean;
+    }
+  | {
+      op: "extract_text";
+      field: string;
+      start: string;
+      end: string;
+      target: string;
+      include_delimiters: boolean;
+      delete_from_source: boolean;
+      append: boolean;
+    }
+  | { op: "shorten_text"; field: string; chars_per_word: number }
+  | { op: "remove_special_characters"; field: string; mode: SpecialCharacterMode }
+  | { op: "remove_between"; field: string; pair: DelimiterPair }
+  | { op: "adjust_number"; field: string; amount: number };
+
+export interface RecipeProposal {
+  id: string;
+  track_id: string;
+  track_title: string;
+  field: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface RecipePreview {
+  proposals: RecipeProposal[];
+  /** `[track_id, reason]` for tracks a recipe could not act on. */
+  skipped: [string, string][];
+}
+
+export type TagRecipe =
+  | { op: "import_from_text"; field: string; separator: string }
+  | { op: "add_tags"; tags: string[] }
+  | { op: "remove_tags"; tags: string[] }
+  | { op: "replace_tag"; from: string; to: string }
+  | { op: "clear_tags" };
+
+export interface TagProposal {
+  track_id: string;
+  track_title: string;
+  added: string[];
+  removed: string[];
+}
+
+export interface TagApplyResult {
+  tracks_changed: number;
+  tags_added: number;
+  tags_removed: number;
+  tags_created: string[];
+}
+
+export type OtherRecipe =
+  | "mark_as_incoming"
+  | "remove_from_all_playlists"
+  | "import_date_from_filesystem";
+
+export interface OtherRecipeResult {
+  changed: string[];
+  staged: string[];
+  skipped: [string, string][];
+}
+
+export type CueDeleteMode =
+  | "all"
+  | "first"
+  | "last"
+  | "keep_first"
+  | "keep_last"
+  | "loops_only"
+  | "without_colour"
+  | "without_text"
+  | "memory_cues";
+
+export type CueColourScheme =
+  | "basic"
+  | "grayscale"
+  | "cold"
+  | "warm"
+  | "cycle"
+  | "none"
+  | "first_cue_colour";
+
+export type CueSortOrder =
+  | "time_asc"
+  | "time_desc"
+  | "label_asc"
+  | "label_desc"
+  | "empty_labels_first"
+  | "empty_labels_last"
+  | "cues_before_loops"
+  | "loops_before_cues";
+
+export type CueRecipe =
+  | { op: "delete_cues"; mode: CueDeleteMode }
+  | { op: "change_colours"; scheme: CueColourScheme }
+  | {
+      op: "find_and_replace";
+      match_text: string | null;
+      match_colour: number | null;
+      new_text: string | null;
+      new_colour: number | null;
+    }
+  | { op: "sort_cues"; order: CueSortOrder }
+  | {
+      op: "replace_cue_text";
+      find: string;
+      replace: string;
+      case_insensitive: boolean;
+    }
+  | { op: "remove_cue_text" }
+  | { op: "remove_cues_by_label"; text: string }
+  | { op: "shift_cues"; offset_ms: number }
+  | { op: "quantize_cues"; resolution_beats: number };
+
+/** One `djmdCue` column edit, ready to stage. Values are typed, not stringified. */
+export interface CueChange {
+  cue_id: string;
+  cue_label: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface CueDeletion {
+  cue_id: string;
+  cue_label: string;
+}
+
+export interface CueRecipeTrack {
+  track_id: string;
+  track_title: string;
+  edits: CueChange[];
+  deletions: CueDeletion[];
+  skipped: string | null;
+}

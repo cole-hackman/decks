@@ -1,5 +1,102 @@
 # Status
 
+## 2026-08-06 — Epic 5: the Recipes engine
+
+New `crates/recipes` — the *other* bulk-editing system. `crates/smart-fixes` is ten fixed,
+zero-parameter cleanups; a recipe takes parameters, and the user assembles the one they need. The
+casing, field, text and number categories are done: **18 operations**, every one a pure function of
+(recipe, fields) → fields, with no database, no filesystem and no notion of what a track is. That
+keeps the whole vocabulary testable in isolation and lets one engine back the preview, the apply
+pass and, later, an agent tool.
+
+**The casing recipes exist because of one parameter.** `fix_casing` hardcodes its
+article/preposition list; a recipe takes the user's own words-to-ignore. A library full of `EDM`,
+`NYC` and `DJ` needs those protected, and no hardcoded list will ever contain them.
+
+Three rules the spec leaves open, decided and tested:
+
+- A recipe whose source is empty **reports why** — `SourceEmpty`, `NoMatch`, `NotANumber`,
+  `Misconfigured`. "340 of 400 changed" needs an explanation attached; silence reads as a bug.
+- `Merge Fields` with one half missing yields the other half, not a stray separator.
+- `Extract Text` with no match leaves the target **untouched**. Writing an empty string would blank
+  a good remixer field, which is worse than not running at all.
+
+Smaller decisions worth recording: `AdjustNumber` keeps an integer looking like an integer (bumping
+a track number from 3 must give `4`, not `4`); casing preserves original spacing rather than
+round-tripping through `split_whitespace`; and `RemoveBetween` collapses the gap it leaves, since
+`"Track  Live"` with a double space is exactly what a cleanup recipe should not produce.
+
+The field vocabulary offered by the UI is deliberately the intersection of what `decks` models and
+what the applier's allowlist will actually write — a test enforces it. Offering a field that cannot
+be persisted would produce a preview full of changes that silently vanish at sync time.
+
+`RecipesPanel` (sidebar → **Recipes**) builds an ordered list, previews every change as a
+deselectable before/after row, and stages what survives. Recipes serialise, so one built today can
+be saved and replayed on next month's downloads — the point of the feature.
+
+**The tag recipes** ship alongside, in `crates/recipes::tags`. They are modelled as a *delta* to
+the track's tag set rather than a new value — which is what the cache's add/remove accessors want,
+and what lets a preview say "adds 3, removes 1" instead of showing two lists.
+
+`Import Tags from Text` is the one the spec singles out, and it is idempotent in two senses: a tag
+the track already has is not re-added, and nothing existing is ever removed, so a hand-added tag
+survives a re-run. Matching is case-insensitive, because a library holding both `#techno` and
+`#Techno` is exactly the mess the feature exists to clean up. A tag runs from the marker to the
+next whitespace, matching how the convention is written (`#PeakTime`, not `#Peak time`).
+
+Two more rules the spec leaves open: replacing a tag with one the track already has is a removal
+*only*, or it ends up holding it twice; and replacing with an empty tag is refused rather than
+silently becoming a delete.
+
+Tag recipes apply directly rather than staging — tags live in the local cache, so there is no sync
+step to carry them. A tag name with no existing tag is created in the first category, and the result
+reports which were invented.
+
+**The three "other" recipes** close the category. Each reaches into a different subsystem — Incoming
+state, playlists, the filesystem — so they run one at a time rather than joining the ordered recipe
+list, and the UI states what each does *before* it runs. `Remove from All Playlists` leaving
+smartlists alone is exactly the sort of thing that otherwise reads as the recipe having missed some.
+
+`Import Date from Filesystem` takes the file's **modification** time, not creation time: creation
+time is not portable (Linux has no reliable `birthtime`), and a file copied between drives keeps its
+mtime while its ctime becomes the copy date — worse than useless as a release year. `Mark as
+Incoming` is the exact inverse of `Selected done`, clearing the per-track reviewed flag added in
+migration v12.
+
+**The cue recipes** land in `crates/recipes::cues` — nine of the spec's eleven. The spec calls this
+category the most valuable and the furthest from anything `decks` had, and it needed a different
+shape: one operation can delete, reorder, rename and recolour in a single pass, so the engine
+returns a whole new cue list plus the ids it removed, rather than a per-field diff.
+
+The beat grid is passed **in** rather than read, which keeps the category a pure function and means
+`QuantizeCues` is testable without an ANLZ file on disk.
+
+Decisions worth recording, all tested:
+
+- **"First" and "last" mean first and last in the track.** `djmdCue` rows come back in insertion
+  order; a user means the timeline. Every mode that says first/last sorts by position before
+  picking.
+- **`Sort Cues` reassigns hot-cue slots 1–8** in the new order, because `djmdCue` has no cue
+  ordering of its own — the slot *is* the order. Memory cues have no slot and stay put; a ninth hot
+  cue keeps the slot it had. A sort that changes nothing stages nothing.
+- **Quantizing preserves loop length** rather than snapping both ends independently, which would
+  stretch the loop. Shifting takes loops whole, for the same reason, and clamps at zero.
+- **`QuantizeCues` on an unanalysed track says "this track has no beat grid"** instead of reporting
+  no changes (ADR-0008). The UI lists the track with its reason and excludes it from the count.
+- **"Random" is `Cycle` and is deterministic.** A preview showing different colours from the apply
+  would be worse than no preview at all.
+- **Colour edits stage `-1`, not null** — Rekordbox's spelling of "no colour" — and position edits
+  stage a JSON *number*, so `json_to_sql` lands them as integers rather than text.
+
+`Change Active Loops` and `Half/Double BPM` are deliberately out: the first needs a `djmdCue`
+column `decks` does not model, the second has to move beatgrid markers, which is an ANLZ write and
+belongs with the beatgrid recipes.
+
+**Not done:** the beatgrid recipes (3), which all write a grid.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 401, typecheck, lint, `pnpm e2e` 22 — all green.
+
 ## Blockers — verified, not assumed (2026-08-06)
 
 The three Epic 4 items still open cannot be built *in this environment*, for reasons that are about
