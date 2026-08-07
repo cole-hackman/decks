@@ -2447,3 +2447,23 @@ first), CSV import, the duplicates work.
   `pnpm lint`, and the new Playwright spec.
 - **Next:** Epic 7 needs a scoping decision. Unblocked: spreadsheet keyboard navigation, inline
   waveform preview, and the four remaining Custom Tags gaps.
+
+## Session — 2026-08-06 (browser keyboard navigation)
+
+### Plan
+- Close the last unblocked `missing` rows in Library & browser, starting with spreadsheet
+  keyboard navigation.
+
+### End of session
+- **Shipped:** `lib/grid-nav.ts` (pure movement rules, 21 tests), a cell cursor and inline cell
+  editing in `TrackTable` (16 new component tests), and an e2e spec covering the cursor walk, the
+  stage-don't-write path and Escape.
+- **Two real bugs my own tests caught**, both in the same place: Escape committed the edit via the
+  input's unmount blur, and an unchanged value staged a no-op change. The first is the one that
+  mattered — a cancel that silently saves.
+- **One deliberate regression:** `j`/`k` no longer move while the table has focus, because a
+  focused grid now owns printable characters. Documented in `02-library.md` rather than left for
+  someone to discover.
+- Verified: `cargo clippy --workspace --all-targets -D warnings`, `pnpm test` (657),
+  `pnpm typecheck`, `pnpm lint`, 52 Playwright e2e.
+- **Next:** inline per-row waveform previews; Epic 7 needs a scoping decision.
