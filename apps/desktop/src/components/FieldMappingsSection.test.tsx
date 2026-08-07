@@ -55,8 +55,11 @@ describe("FieldMappingsSection", () => {
 
   it("lists mappings with whether they replace or append", async () => {
     renderSection();
-    expect(await screen.findByText("Energy")).toBeInTheDocument();
-    expect(screen.getByText("replaces")).toBeInTheDocument();
+    // Wait on something only the rule list renders. "Energy" is *also* a
+    // static <option> in the source picker, so awaiting that resolves on the
+    // first render and never waits for `listFieldMappings` at all — which is
+    // green locally and red on a slower runner.
+    expect(await screen.findByText("replaces")).toBeInTheDocument();
     expect(screen.getByText("appends")).toBeInTheDocument();
   });
 

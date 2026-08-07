@@ -5,6 +5,7 @@
 pub mod applier;
 pub mod field_mappings;
 pub mod key_format;
+pub mod undo;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -4,6 +4,7 @@ import { useStagedChanges } from "../hooks/useStagedChanges";
 import { useLibrary } from "../hooks/useLibrary";
 import { useToast } from "./Toast";
 import { ErrorPanel } from "./ErrorPanel";
+import { UndoHistoryPanel } from "./UndoHistoryPanel";
 
 interface Props {
   libraryPath: string;
@@ -24,6 +25,7 @@ export function DiffReviewPanel({ libraryPath, onClose }: Props) {
     data: changes = [],
     isLoading,
     error,
+    refetch,
     acceptChange,
     rejectChange,
     acceptAllSafe,
@@ -227,6 +229,8 @@ export function DiffReviewPanel({ libraryPath, onClose }: Props) {
           )}
         </div>
       </div>
+
+      <UndoHistoryPanel libraryPath={libraryPath} onStaged={() => void refetch()} />
     </aside>
   );
 }

@@ -335,6 +335,43 @@ are excluded unless a rule explicitly selects them.
 | Side effects | none |
 | Cost | free |
 
+### `undo_list`
+List Sync runs recorded for a library, newest first, with how many changes of each can be reversed
+and how many cannot.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string` |
+| Returns | `UndoRun[]` |
+| Idempotent | yes |
+| Side effects | none |
+| Cost | free |
+
+### `undo_entries`
+Show what one Sync run did, and the reason for each change that cannot be undone. A blocked entry
+carries a sentence explaining why (ADR-0008) rather than being omitted.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `run_id: string` |
+| Returns | `UndoEntry[]` |
+| Idempotent | yes |
+| Side effects | none |
+| Cost | free |
+
+### `undo_run`
+Stage the inverse of everything a Sync run applied. The inverses land as **proposed** changes and
+still go through review and Sync — this never writes to `master.db`. A run can only be undone once;
+a second call errors rather than staging a duplicate pile.
+
+| Field | Value |
+|-------|-------|
+| Parameters | `library_path: string`, `run_id: string` |
+| Returns | `StagedUndo` — `{ staged: string[], blocked: [description, reason][] }` |
+| Idempotent | no (stages changes; refuses on a second call) |
+| Side effects | writes rows to the cache DB's `staged_changes`; marks the run undone |
+| Cost | free |
+
 ---
 
 ## Phase 3+ — Not yet implemented

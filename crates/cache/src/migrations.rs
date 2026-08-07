@@ -272,6 +272,51 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        13,
+        "
+        -- Undo history (Epic 5).
+        --
+        -- One row per Sync run, plus the inverse of every change that run
+        -- applied. The inverses are computed and stored at apply time rather
+        -- than derived on demand, because `staged_changes` rows can be cleared
+        -- and a run has to stay undoable after its originals are gone.
+        --
+        -- Lexicon drops its undo history after 60 minutes or on restart. We
+        -- keep it: the cache is already persistent, and a DJ who notices a bad
+        -- sync the next morning has more use for an undo than one who notices
+        -- within the hour. Bounded by pruning, not by a clock — see
+        -- `prune_undo_runs`.
+        CREATE TABLE undo_runs (
+          id           TEXT PRIMARY KEY,
+          library_path TEXT NOT NULL,
+          applied_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+          -- Set when the run's inverses have been staged, so a run cannot be
+          -- undone twice into a double-staged pile.
+          undone_at    INTEGER
+        );
+
+        -- `blocked_reason IS NULL` is the reversible half. The unreversible
+        -- entries are stored too, so the UI can say what an undo will *not*
+        -- put back rather than silently restoring a subset.
+        CREATE TABLE undo_entries (
+          id               TEXT PRIMARY KEY,
+          run_id           TEXT NOT NULL REFERENCES undo_runs(id) ON DELETE CASCADE,
+          seq              INTEGER NOT NULL,
+          source_change_id TEXT NOT NULL,
+          kind             TEXT,
+          target_id        TEXT,
+          field            TEXT,
+          old_value        TEXT,
+          new_value        TEXT,
+          description      TEXT NOT NULL,
+          blocked_reason   TEXT
+        );
+
+        CREATE INDEX idx_undo_runs_library ON undo_runs(library_path, applied_at DESC);
+        CREATE INDEX idx_undo_entries_run ON undo_entries(run_id, seq);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -481,6 +526,44 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM path_mappings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn undo_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO undo_runs (id, library_path, applied_at)
+                VALUES ('r1', '/lib.db', 100);
+             INSERT INTO undo_entries
+                (id, run_id, seq, source_change_id, kind, description)
+                VALUES ('e1', 'r1', 0, 'c1', 'TrackMetadataEdit', 'Title: a → b');",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM undo_entries", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn deleting_an_undo_run_takes_its_entries_with_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute_batch(
+            "INSERT INTO undo_runs (id, library_path, applied_at)
+                VALUES ('r1', '/lib.db', 100);
+             INSERT INTO undo_entries
+                (id, run_id, seq, source_change_id, description)
+                VALUES ('e1', 'r1', 0, 'c1', 'x');
+             DELETE FROM undo_runs WHERE id = 'r1';",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM undo_entries", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 
     #[test]

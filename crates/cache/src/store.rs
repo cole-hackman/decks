@@ -1592,6 +1592,267 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     })
 }
 
+// ── Undo history ─────────────────────────────────────────────────────────────
+
+/// One Sync run, as the undo list shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UndoRun {
+    pub id: String,
+    pub library_path: String,
+    pub applied_at: i64,
+    /// Set once the run's inverses have been staged.
+    pub undone_at: Option<i64>,
+    /// How many of this run's changes can be put back.
+    pub reversible: usize,
+    /// How many cannot, with reasons on the entries.
+    pub blocked: usize,
+}
+
+/// The inverse of one applied change — or the reason there isn't one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UndoEntry {
+    pub id: String,
+    pub source_change_id: String,
+    pub kind: Option<ChangeKind>,
+    pub target_id: Option<String>,
+    pub field: Option<String>,
+    pub old_value: Option<serde_json::Value>,
+    pub new_value: Option<serde_json::Value>,
+    /// One line, written from the undo's point of view.
+    pub description: String,
+    /// `None` when the entry is reversible.
+    pub blocked_reason: Option<String>,
+}
+
+/// How many runs to keep per library.
+///
+/// Lexicon expires undo history after 60 minutes or on restart. We keep runs
+/// instead — the cache is already persistent, and noticing a bad sync the next
+/// morning is at least as common as noticing it within the hour. A count bound
+/// rather than a clock bound, because "the last fifty syncs" is a thing a user
+/// can reason about and "anything since 09:14" is not.
+const UNDO_RUN_LIMIT: usize = 50;
+
+impl CacheDb {
+    /// Record a Sync run and the inverse of everything it applied.
+    ///
+    /// Inverses are computed here, at apply time, rather than derived on demand
+    /// later: `staged_changes` rows get cleared, and a run has to stay undoable
+    /// after its originals are gone.
+    ///
+    /// Returns `None` when the run applied nothing worth remembering.
+    pub fn record_undo_run(
+        &self,
+        library_path: &str,
+        applied: &[changes::StagedChange],
+    ) -> Result<Option<String>> {
+        if applied.is_empty() {
+            return Ok(None);
+        }
+        let run_id = new_id("undo");
+        self.conn.execute(
+            "INSERT INTO undo_runs (id, library_path, applied_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![run_id, library_path, now_secs()],
+        )?;
+
+        for (seq, change) in applied.iter().enumerate() {
+            let description = changes::undo::describe(change);
+            let (kind, target_id, field, old_value, new_value, blocked) =
+                match changes::undo::invert(change) {
+                    changes::undo::Reversal::Reversible(inv) => (
+                        Some(kind_to_db(&inv.kind)?),
+                        inv.target_id,
+                        inv.field,
+                        optional_json_to_db(&inv.old_value)?,
+                        optional_json_to_db(&inv.new_value)?,
+                        None,
+                    ),
+                    changes::undo::Reversal::Blocked(why) => {
+                        (None, None, None, None, None, Some(why.to_string()))
+                    }
+                };
+            self.conn.execute(
+                "INSERT INTO undo_entries
+                    (id, run_id, seq, source_change_id, kind, target_id, field,
+                     old_value, new_value, description, blocked_reason)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![
+                    new_id("undoentry"),
+                    run_id,
+                    seq as i64,
+                    change.id,
+                    kind,
+                    target_id,
+                    field,
+                    old_value,
+                    new_value,
+                    description,
+                    blocked,
+                ],
+            )?;
+        }
+
+        self.prune_undo_runs(library_path)?;
+        Ok(Some(run_id))
+    }
+
+    /// Drop the oldest runs past the limit.
+    ///
+    /// `ON DELETE CASCADE` carries the entries, but only with foreign keys on —
+    /// so the entries go explicitly rather than relying on a pragma set
+    /// somewhere else.
+    fn prune_undo_runs(&self, library_path: &str) -> Result<()> {
+        let stale: Vec<String> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT id FROM undo_runs
+                 WHERE library_path = ?1
+                 ORDER BY applied_at DESC, rowid DESC
+                 LIMIT -1 OFFSET ?2",
+            )?;
+            let mut rows = stmt.query(rusqlite::params![library_path, UNDO_RUN_LIMIT as i64])?;
+            let mut out = Vec::new();
+            while let Some(r) = rows.next()? {
+                out.push(r.get(0)?);
+            }
+            out
+        };
+        for id in stale {
+            self.conn.execute(
+                "DELETE FROM undo_entries WHERE run_id = ?1",
+                rusqlite::params![id],
+            )?;
+            self.conn
+                .execute("DELETE FROM undo_runs WHERE id = ?1", rusqlite::params![id])?;
+        }
+        Ok(())
+    }
+
+    /// Runs for a library, newest first.
+    pub fn list_undo_runs(&self, library_path: &str) -> Result<Vec<UndoRun>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT r.id, r.library_path, r.applied_at, r.undone_at,
+                    SUM(CASE WHEN e.blocked_reason IS NULL THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN e.blocked_reason IS NULL THEN 0 ELSE 1 END)
+             FROM undo_runs r
+             LEFT JOIN undo_entries e ON e.run_id = r.id
+             WHERE r.library_path = ?1
+             GROUP BY r.id
+             ORDER BY r.applied_at DESC, r.rowid DESC",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![library_path])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(UndoRun {
+                id: r.get(0)?,
+                library_path: r.get(1)?,
+                applied_at: r.get(2)?,
+                undone_at: r.get(3)?,
+                reversible: r.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
+                blocked: r.get::<_, Option<i64>>(5)?.unwrap_or(0) as usize,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Everything a run touched, in the order it was applied.
+    pub fn undo_run_entries(&self, run_id: &str) -> Result<Vec<UndoEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source_change_id, kind, target_id, field,
+                    old_value, new_value, description, blocked_reason
+             FROM undo_entries WHERE run_id = ?1 ORDER BY seq",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![run_id])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            let kind_raw: Option<String> = r.get(2)?;
+            let old_raw: Option<String> = r.get(5)?;
+            let new_raw: Option<String> = r.get(6)?;
+            out.push(UndoEntry {
+                id: r.get(0)?,
+                source_change_id: r.get(1)?,
+                kind: kind_raw
+                    .as_deref()
+                    .map(|k| parse_string_enum(2, k))
+                    .transpose()?,
+                target_id: r.get(3)?,
+                field: r.get(4)?,
+                old_value: parse_optional_json(5, old_raw)?,
+                new_value: parse_optional_json(6, new_raw)?,
+                description: r.get(7)?,
+                blocked_reason: r.get(8)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Mark a run undone, so its inverses cannot be staged twice.
+    ///
+    /// Returns `false` when the run was already undone — the caller should
+    /// report that rather than silently staging a second pile of inverses.
+    pub fn mark_undo_run_done(&self, run_id: &str) -> Result<bool> {
+        let rows = self.conn.execute(
+            "UPDATE undo_runs SET undone_at = ?2 WHERE id = ?1 AND undone_at IS NULL",
+            rusqlite::params![run_id, now_secs()],
+        )?;
+        Ok(rows > 0)
+    }
+
+    /// Stage a run's inverses for review.
+    ///
+    /// Lives here rather than in the desktop command so the chat panel, the MCP
+    /// server and the CLI get the same behaviour from one implementation —
+    /// including the once-only guard, which is the part that would hurt to have
+    /// two copies of.
+    ///
+    /// Marks the run undone **first**. A partial pile of inverses is visible
+    /// and rejectable; a run undone twice gives the user two identical piles
+    /// and no way to tell them apart.
+    pub fn stage_undo_run(&self, library_path: &str, run_id: &str) -> Result<StagedUndo> {
+        let entries = self.undo_run_entries(run_id)?;
+        if entries.is_empty() {
+            anyhow::bail!("that sync run is no longer in the undo history");
+        }
+        if !self.mark_undo_run_done(run_id)? {
+            anyhow::bail!("that sync run has already been undone");
+        }
+
+        let mut out = StagedUndo::default();
+        for entry in entries {
+            let Some(kind) = entry.kind else {
+                out.blocked.push((
+                    entry.description,
+                    entry
+                        .blocked_reason
+                        .unwrap_or_else(|| "not reversible".into()),
+                ));
+                continue;
+            };
+            let record = self.stage_change(changes::NewChange {
+                library_path: Some(library_path.to_string()),
+                kind,
+                target_id: entry.target_id,
+                field: entry.field,
+                old_value: entry.old_value,
+                new_value: entry.new_value,
+                reason: Some(format!("Undo — {}", entry.description)),
+                // An inverse is a record of what was there, not a guess.
+                confidence: Some(1.0),
+            })?;
+            out.staged.push(record.id);
+        }
+        Ok(out)
+    }
+}
+
+/// What staging an undo produced.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct StagedUndo {
+    /// Staged change ids, awaiting review.
+    pub staged: Vec<String>,
+    /// `(description, reason)` for entries that could not be reversed.
+    pub blocked: Vec<(String, String)>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2308,6 +2569,185 @@ mod tests {
         let reloaded = db.get_smartlist("/lib.db", &created.id).unwrap().unwrap();
         assert_eq!(reloaded.clauses, new_clauses);
         assert_eq!(reloaded.parent_folder_id.as_deref(), Some("Lexicon"));
+    }
+
+    // ── undo history ────────────────────────────────────────────────────────
+
+    fn applied(
+        id: &str,
+        kind: ChangeKind,
+        old: Option<serde_json::Value>,
+    ) -> changes::StagedChange {
+        changes::StagedChange {
+            id: id.into(),
+            library_path: Some("/lib.db".into()),
+            kind,
+            target_id: Some("t1".into()),
+            field: Some("Title".into()),
+            old_value: old,
+            new_value: Some(serde_json::json!("Get Lucky")),
+            reason: None,
+            confidence: Some(1.0),
+            status: ChangeStatus::Exported,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn a_run_records_an_inverse_for_every_change_it_applied() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let run = db
+            .record_undo_run(
+                "/lib.db",
+                &[
+                    applied(
+                        "c1",
+                        ChangeKind::TrackMetadataEdit,
+                        Some(serde_json::json!("get lucky")),
+                    ),
+                    applied(
+                        "c2",
+                        ChangeKind::TrackMetadataEdit,
+                        Some(serde_json::json!("x")),
+                    ),
+                ],
+            )
+            .unwrap()
+            .unwrap();
+
+        let entries = db.undo_run_entries(&run).unwrap();
+        assert_eq!(entries.len(), 2);
+        // The inverse points the other way round.
+        assert_eq!(entries[0].new_value, Some(serde_json::json!("get lucky")));
+        assert!(entries[0].blocked_reason.is_none());
+    }
+
+    #[test]
+    fn a_run_that_applied_nothing_is_not_recorded() {
+        // An empty run in the list would be noise the user has to scroll past.
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.record_undo_run("/lib.db", &[]).unwrap().is_none());
+        assert!(db.list_undo_runs("/lib.db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn unreversible_changes_are_kept_with_their_reason_not_dropped() {
+        // Dropping them would make an undo look complete when it is not.
+        let db = CacheDb::open_in_memory().unwrap();
+        let run = db
+            .record_undo_run(
+                "/lib.db",
+                &[
+                    applied(
+                        "c1",
+                        ChangeKind::TrackMetadataEdit,
+                        Some(serde_json::json!("a")),
+                    ),
+                    applied("c2", ChangeKind::TrackAddCue, None),
+                ],
+            )
+            .unwrap()
+            .unwrap();
+
+        let entries = db.undo_run_entries(&run).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries[1].blocked_reason.is_some());
+        assert!(entries[1].kind.is_none());
+
+        let runs = db.list_undo_runs("/lib.db").unwrap();
+        assert_eq!((runs[0].reversible, runs[0].blocked), (1, 1));
+    }
+
+    #[test]
+    fn entries_come_back_in_the_order_they_were_applied() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let run = db
+            .record_undo_run(
+                "/lib.db",
+                &(0..5)
+                    .map(|i| {
+                        applied(
+                            &format!("c{i}"),
+                            ChangeKind::TrackMetadataEdit,
+                            Some(serde_json::json!(i)),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap()
+            .unwrap();
+        let ids: Vec<_> = db
+            .undo_run_entries(&run)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.source_change_id)
+            .collect();
+        assert_eq!(ids, vec!["c0", "c1", "c2", "c3", "c4"]);
+    }
+
+    #[test]
+    fn a_run_can_only_be_undone_once() {
+        // Otherwise a double-click stages two piles of identical inverses.
+        let db = CacheDb::open_in_memory().unwrap();
+        let run = db
+            .record_undo_run(
+                "/lib.db",
+                &[applied(
+                    "c1",
+                    ChangeKind::TrackMetadataEdit,
+                    Some(serde_json::json!("a")),
+                )],
+            )
+            .unwrap()
+            .unwrap();
+        assert!(db.mark_undo_run_done(&run).unwrap());
+        assert!(!db.mark_undo_run_done(&run).unwrap());
+        assert!(db.list_undo_runs("/lib.db").unwrap()[0].undone_at.is_some());
+    }
+
+    #[test]
+    fn runs_are_scoped_to_their_library() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.record_undo_run(
+            "/a.db",
+            &[applied(
+                "c1",
+                ChangeKind::TrackMetadataEdit,
+                Some(serde_json::json!("a")),
+            )],
+        )
+        .unwrap();
+        assert_eq!(db.list_undo_runs("/a.db").unwrap().len(), 1);
+        assert!(db.list_undo_runs("/b.db").unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_oldest_runs_are_pruned_and_take_their_entries_with_them() {
+        let db = CacheDb::open_in_memory().unwrap();
+        for i in 0..(UNDO_RUN_LIMIT + 5) {
+            db.record_undo_run(
+                "/lib.db",
+                &[applied(
+                    &format!("c{i}"),
+                    ChangeKind::TrackMetadataEdit,
+                    Some(serde_json::json!(i)),
+                )],
+            )
+            .unwrap();
+        }
+        assert_eq!(db.list_undo_runs("/lib.db").unwrap().len(), UNDO_RUN_LIMIT);
+        // No orphaned entries left behind.
+        let orphans: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM undo_entries
+                 WHERE run_id NOT IN (SELECT id FROM undo_runs)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphans, 0);
     }
 
     #[test]

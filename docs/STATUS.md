@@ -1,6 +1,53 @@
 # Status
 
-## 2026-08-06 — Epic 5: the Recipes engine
+## 2026-08-06 — Epic 5 (part 2): Undo History
+
+`decks` gates hard *before* a write — every change reviewed, Sync opt-in, `WriteGuard` taking a
+timestamped backup first. It had no answer at all for the change you accept and then regret, and
+restoring the backup is a sledgehammer that throws away the rest of the session with it.
+
+**Every Sync run now records the inverse of each change it applied**, and undoing stages those
+inverses as ordinary proposed changes. So an undo goes back through review and the same guarded
+Sync: two steps rather than one, no second write path into `master.db`, and nothing reaches the
+library without the user seeing it. That is the whole design decision — an undo that wrote directly
+would have been one click, and would have broken the program's first rule.
+
+Inverses are computed **at apply time**, not derived on demand: `staged_changes` rows get cleared,
+and a run has to stay undoable after its originals are gone. Migration **v13** adds `undo_runs` and
+`undo_entries`.
+
+**Not every change can be inverted, and the UI says which.** Per ADR-0008 a blocked entry carries a
+named reason rather than being quietly dropped, and a run shows its reversible/blocked split before
+the user commits to anything. An undo that silently restored eight of twelve edits would be worse
+than one that restored none.
+
+- Metadata, cue, relocate edits, playlist rename and reorder invert by swapping the change's two ends.
+- Playlist add ↔ remove is the same payload under the opposite verb; a re-added track lands at the end.
+- Cue deletions invert **when the deletion recorded the cue** — the cue recipes now snapshot it into
+  `old_value`, so the restored cue comes back at the same position, name and colour with a new row id.
+- Adding a cue and creating a playlist are blocked: the new row's id is minted inside the apply
+  transaction and nothing carries it back out.
+- Deleting a playlist or a track is blocked, and points at the backup Sync already took.
+
+**One distinction does real work throughout:** `old_value: Some(Null)` means the field was
+genuinely empty and restoring it means clearing the field; `old_value: None` means nothing was
+recorded and the change cannot be reversed at all. Collapsing the two would blank fields the user
+never asked to blank. There is a test named after it.
+
+**Retention diverges from the spec on purpose.** Lexicon drops undo history after 60 minutes or on
+restart; `decks` keeps the last 50 runs per library. The cache is already persistent, and noticing
+a bad sync the next morning is at least as common as noticing it within the hour — and "the last
+fifty syncs" is something a user can reason about where "anything since 09:14" is not.
+
+Reachable from **Changes → Undo History**, and exposed as `undo_list` / `undo_entries` /
+`undo_run` through `crates/agent-tools`, so the chat panel, the MCP server and the CLI all gain it
+from one implementation. The staging loop — including the once-only guard — lives in
+`CacheDb::stage_undo_run` rather than in the Tauri command, so there is exactly one copy of it.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 411, typecheck, lint, `pnpm e2e` 23 — all green.
+
+## 2026-08-06 — Epic 5 (part 1): the Recipes engine
 
 New `crates/recipes` — the *other* bulk-editing system. `crates/smart-fixes` is ten fixed,
 zero-parameter cleanups; a recipe takes parameters, and the user assembles the one they need. The

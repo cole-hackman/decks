@@ -17,6 +17,19 @@ struct PlaylistDetail {
 }
 
 impl AgentToolService {
+    /// The cache DB, or a message naming what is missing.
+    ///
+    /// Undo history lives in the cache rather than in `master.db`, so a service
+    /// configured without one has nothing to answer with — and saying so beats
+    /// returning an empty list that reads as "you have never synced".
+    fn open_undo_cache(&self) -> Result<cache::CacheDb> {
+        let path = self
+            .cache_path
+            .as_deref()
+            .context("cache_path is required for undo tools")?;
+        cache::CacheDb::open(path)
+    }
+
     pub fn execute(&self, request: ToolRequest) -> Result<Value> {
         match request {
             ToolRequest::LibrarySearch {
@@ -356,6 +369,21 @@ impl AgentToolService {
                 }))
             }
 
+            ToolRequest::UndoList { library_path } => {
+                let cache = self.open_undo_cache()?;
+                to_value(cache.list_undo_runs(&library_path)?)
+            }
+            ToolRequest::UndoEntries { run_id } => {
+                let cache = self.open_undo_cache()?;
+                to_value(cache.undo_run_entries(&run_id)?)
+            }
+            ToolRequest::UndoRun {
+                library_path,
+                run_id,
+            } => {
+                let cache = self.open_undo_cache()?;
+                to_value(cache.stage_undo_run(&library_path, &run_id)?)
+            }
             ToolRequest::SmartlistList { library_path } => {
                 let cache_path = self
                     .cache_path

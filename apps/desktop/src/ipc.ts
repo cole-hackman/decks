@@ -56,6 +56,9 @@ import type {
   OtherRecipeResult,
   CueRecipe,
   CueRecipeTrack,
+  UndoEntry,
+  UndoResult,
+  UndoRun,
 } from "./types";
 import type {
   ChatMessage,
@@ -1235,4 +1238,19 @@ export async function cueRecipeApply(
   tracks: CueRecipeTrack[],
 ): Promise<string[]> {
   return invoke<string[]>("cue_recipe_apply", { libraryPath, tracks });
+}
+
+export async function listUndoRuns(libraryPath: string): Promise<UndoRun[]> {
+  return invoke<UndoRun[]>("list_undo_runs", { libraryPath });
+}
+
+export async function undoRunEntries(runId: string): Promise<UndoEntry[]> {
+  return invoke<UndoEntry[]>("undo_run_entries", { runId });
+}
+
+export async function undoRun(
+  libraryPath: string,
+  runId: string,
+): Promise<UndoResult> {
+  return invoke<UndoResult>("undo_run", { libraryPath, runId });
 }
