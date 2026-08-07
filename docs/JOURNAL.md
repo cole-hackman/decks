@@ -1831,5 +1831,42 @@ and the failure message points at the wrong line. Sharpening the rule: **wait on
 thing you are asserting about renders.** Not the trigger, and not a string that something static
 also happens to contain.
 
+**CSV import is two features wearing one name, and separating them was the whole job.** The repo
+already had `csv_input`, which parses a CSV to *find* tracks. This one parses a CSV to *write onto*
+them. Same file format, opposite direction, and trying to extend the first into the second would
+have produced a function with a mode flag and two sets of half-applicable semantics.
+
+**The interesting decisions were all about refusing to guess.** A mapping with no matching strategy
+is refused, because "0 rows matched" reads as a broken file rather than a misconfiguration. A
+column the file does not have is an error, not an empty column, because importing blanks over good
+metadata is not recoverable. Two tracks matching one row is `Ambiguous` rather than "pick the
+first", because the spreadsheet has nothing to say about which one and guessing writes the values
+onto the wrong track. The through-line: an import that quietly did *something* on every row would
+be far worse than one that says which rows it could not use.
+
+**The Excel byte-order mark is the caveat the manual means.** "CSV UTF-8" export writes one, and it
+lands inside the *first header name* — so a mapping that names the first column silently stops
+matching and the error reads as the user's typo. One `strip_prefix` and a test; the kind of detail
+that costs an afternoon if you meet it in the wild instead of in a spec.
+
+**Reading a picked file needed a fallback.** `Blob.text()` is the obvious call and needs Safari
+14+, which matters because the shell is WKWebView. jsdom is missing it too, which is how it turned
+up — a test failure that was pointing at a real portability gap rather than at itself. The
+`FileReader` fallback went into a helper and the Track Matcher now shares it, since it had the same
+latent problem.
+
+**A panic hiding in a Smart Fix.** `remove_common_text` lower-cased the value, found the index in
+the *copy*, and spliced the *original* using the pattern's byte length. All three of those are
+fine individually and wrong together: lower-casing can change byte length (`İ` → `i̇`), so the
+index and the length both drift and `replace_range` lands mid-character. Exactly the trap the
+recipes text engine was written to avoid — so `smart-fixes` now depends on `recipes` and there is
+one correct implementation instead of two. Worth generalising: when two crates both need
+case-insensitive search, the second one is usually where the bug is.
+
+**Presets offered, not seeded.** The blocklist ships empty with two one-click buttons for the
+patterns the manual names. A blocklist that arrives pre-populated will eventually strip something
+the user wanted, and they will have no idea where it came from — the button says exactly what it
+adds, and they chose to press it.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

@@ -174,7 +174,7 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 - [x] The three "other" recipes: Mark as Incoming, Remove from All Playlists, Import Date from
       Filesystem
 - [ ] Multi-track manual editor with `<multiple values>`
-- [ ] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, report
+- [x] Import Tags From CSV — match on `Location` or `Artist`+`Title`, write fields, per-row report
 - [x] Undo History — Sync runs record inverses; undo re-stages them for review. Kept for 50 runs
       per library rather than 60 minutes, and blocked entries carry a reason (ADR-0008)
 - [ ] Database backup/restore as a ZIP of the cache DB's derived state
@@ -184,7 +184,8 @@ Branch `claude/lexicon-library-editing`. Specs: [`10-recipes.md`](lexicon/10-rec
 - [ ] Find Broken Tracks (decode check, not existence check)
 - [ ] Archive: context-sensitive playlist rule, selection helper, delete-from-disk
 - [ ] Genre/Artist Cleanup: locking, pinned letters, alt-click filter, extra artist fields
-- [ ] Common-text blocklist settings UI
+- [x] Common-text blocklist settings UI — Settings → Remove Common Text, with the manual's
+      `(Original Mix)` and Camelot-key presets offered rather than seeded
 
 ---
 

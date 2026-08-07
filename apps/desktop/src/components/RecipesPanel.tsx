@@ -8,6 +8,7 @@ import {
   type ParamValues,
   type RecipeDef,
 } from "../lib/recipe-forms";
+import { CsvImportSection } from "./CsvImportSection";
 import { CueRecipesSection } from "./CueRecipesSection";
 import { OtherRecipesSection } from "./OtherRecipesSection";
 import { TagRecipesSection } from "./TagRecipesSection";
@@ -351,6 +352,8 @@ export function RecipesPanel({ libraryPath, trackIds }: Props) {
       <CueRecipesSection libraryPath={libraryPath} trackIds={trackIds} />
 
       <OtherRecipesSection libraryPath={libraryPath} trackIds={trackIds} />
+
+      <CsvImportSection libraryPath={libraryPath} />
     </div>
   );
 }

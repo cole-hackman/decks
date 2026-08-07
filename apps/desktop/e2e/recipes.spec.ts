@@ -145,6 +145,51 @@ test.beforeEach(async ({ page }) => {
                 },
               ];
             }
+            case "csv_import_fields":
+              return ["title", "artist", "genre"];
+            case "csv_import_headers":
+              return ["Artist", "Title", "Genre"];
+            case "csv_import_preview":
+              return {
+                report: {
+                  rows: 2,
+                  matched: 1,
+                  already_current: 0,
+                  unmatched: 1,
+                  ambiguous: 0,
+                  changes: 1,
+                },
+                rows: [
+                  {
+                    row: {
+                      line: 2,
+                      location: null,
+                      artist: "daft punk",
+                      title: "get lucky",
+                      values: { genre: "Disco" },
+                    },
+                    outcome: {
+                      kind: "matched",
+                      track_id: "1",
+                      track_title: "get lucky",
+                      changes: [["genre", "House", "Disco"]],
+                    },
+                  },
+                  {
+                    row: {
+                      line: 3,
+                      location: null,
+                      artist: "nobody",
+                      title: "nothing",
+                      values: { genre: "Techno" },
+                    },
+                    outcome: { kind: "unmatched" },
+                  },
+                ],
+              };
+            case "csv_import_apply":
+              return ["csv-change-0"];
+
             case "cue_recipe_apply": {
               const tracks = args.tracks as Array<Record<string, unknown>>;
               tracks.forEach((t) => staged.push(t));
@@ -190,7 +235,7 @@ test("build a recipe, preview it, deselect a row, then stage", async ({ page }) 
   await expect(page.getByTestId("no-recipes")).toBeVisible();
   await expect(fieldPreview(page)).toBeDisabled();
 
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await fieldPreview(page).click();
 
   const preview = page.getByTestId("recipe-preview");
@@ -207,7 +252,7 @@ test("build a recipe, preview it, deselect a row, then stage", async ({ page }) 
 
 test("deselecting every row leaves nothing to stage", async ({ page }) => {
   await openRecipes(page);
-  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add", exact: true }).click();
   await fieldPreview(page).click();
   await expect(page.getByTestId("recipe-preview")).toBeVisible();
 
@@ -269,4 +314,41 @@ test("cue recipes: quantizing an unanalysed track says why, and stages nothing",
   // Honest labelling: the track is listed with its reason, not silently
   // dropped, but there is nothing to stage.
   await expect(page.getByRole("button", { name: /Stage 0 track/ })).toBeDisabled();
+});
+
+test("csv import: map columns, preview, and stage what matched", async ({
+  page,
+}) => {
+  await openRecipes(page);
+
+  // Nothing to map until a file is chosen.
+  await expect(page.getByLabel("Artist column")).toHaveCount(0);
+
+  await page.getByLabel("CSV file").setInputFiles({
+    name: "tags.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Artist,Title,Genre\ndaft punk,get lucky,Disco\nnobody,nothing,Techno\n",
+    ),
+  });
+
+  // Artist and Title are guessed from the header names.
+  await expect(page.getByLabel("Artist column")).toHaveValue("Artist");
+  await expect(page.getByLabel("Title column")).toHaveValue("Title");
+  // Matching is satisfied, but there is still nothing to write.
+  await expect(page.getByTestId("csv-no-match-strategy")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Preview import" })).toBeDisabled();
+
+  await page.getByLabel("Import column").selectOption("Genre");
+  await page.getByLabel("Import into field").selectOption("genre");
+  await page.getByRole("button", { name: "Add column" }).click();
+  await page.getByRole("button", { name: "Preview import" }).click();
+
+  const preview = page.getByTestId("csv-import-preview");
+  await expect(preview).toContainText("2 row(s)");
+  // The row that matched nothing is reported, not silently dropped.
+  await expect(preview).toContainText("no matching track");
+
+  await page.getByRole("button", { name: /Stage 1 change/ }).click();
+  await expect(page.getByText(/Staged 1 change\(s\) for review/)).toBeVisible();
 });

@@ -17,6 +17,11 @@ vi.mock("../ipc", () => ({
   // Used by the cue section mounted below.
   cueRecipePreview: vi.fn(async () => []),
   cueRecipeApply: vi.fn(),
+  // Used by the CSV import section mounted below.
+  csvImportFields: vi.fn(async () => ["title", "artist"]),
+  csvImportHeaders: vi.fn(async () => []),
+  csvImportPreview: vi.fn(),
+  csvImportApply: vi.fn(),
 }));
 
 const PREVIEW: RecipePreview = {

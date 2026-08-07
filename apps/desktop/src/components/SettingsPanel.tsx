@@ -24,6 +24,7 @@ import { useToast } from "./Toast";
 import { PathMappingsSection } from "./PathMappingsSection";
 import { AutomaticActionsSection } from "./AutomaticActionsSection";
 import { FieldMappingsSection } from "./FieldMappingsSection";
+import { CommonTextSection } from "./CommonTextSection";
 
 interface Props {
   /** When provided, the panel renders as a modal overlay with a close affordance.
@@ -306,6 +307,8 @@ export function SettingsPanel({ onClose }: Props) {
       <AutomaticActionsSection className={onClose ? "px-5 py-4" : "py-6"} />
 
       <FieldMappingsSection className={onClose ? "px-5 py-4" : "py-6"} />
+
+      <CommonTextSection className={onClose ? "px-5 py-4" : "py-6"} />
 
       <PathMappingsSection className={onClose ? "px-5 py-4" : "py-6"} />
 

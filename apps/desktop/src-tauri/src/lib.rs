@@ -1,6 +1,7 @@
 mod audio;
 mod automation;
 mod claude_agent;
+mod csv_import;
 mod cue_generator;
 mod cues;
 mod organizer;
@@ -2744,6 +2745,10 @@ pub fn run() {
             undo::list_undo_runs,
             undo::undo_run_entries,
             undo::undo_run,
+            csv_import::csv_import_headers,
+            csv_import::csv_import_fields,
+            csv_import::csv_import_preview,
+            csv_import::csv_import_apply,
             write_tags::mappable_tag_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,

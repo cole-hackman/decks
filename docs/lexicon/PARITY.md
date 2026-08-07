@@ -21,11 +21,11 @@ regardless of how much of Lexicon they represent.
 | Player, cues, generator | 7 | 7 | 2 | 0 |
 | Files | 5 | 6 | 0 | 0 |
 | Health | 0 | 3 | 2 | 0 |
-| Recipes & editing | 5 | 3 | 1 | 0 |
+| Recipes & editing | 7 | 1 | 1 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **26** | **42** | **22** | **16** |
+| **Total** | **28** | **40** | **22** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -145,13 +145,13 @@ of library *editing*, *automation*, or *set preparation*.
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Smart Fixes (10 fixed cleanups) | **done** | 11 fixes with preview/apply diffs — ahead of Lexicon here | — |
-| Common-text blocklist UI | partial | IPC exists, **no UI consumes it** | 5 |
+| Common-text blocklist UI | **done** | Settings → Remove Common Text, with the manual's two presets | 5 |
 | Recipes: casing / field / text / number | **done** | 18 ops in `crates/recipes`, preview-then-stage | 5 |
 | Recipes: tag | **done** | Import from text (idempotent), add/remove/replace/clear | 5 |
 | Recipes: other (3 ops) | **done** | Mark as Incoming, Remove from All Playlists, Import Date from Filesystem | 5 |
 | Recipes: cue point (11 ops) | partial | 9 of 11 in `crates/recipes::cues`; Change Active Loops and Half/Double BPM need an unmodelled column and ANLZ writes | 5 |
 | Recipes: beatgrid (3 ops) | **missing** | Depends on Epic 2 | 5 |
-| Import Tags From CSV | partial | CSV parses, but only to match — never writes fields | 5 |
+| Import Tags From CSV | **done** | `csv_import`: Location or Artist+Title matching, per-row report, stages edits | 5 |
 | Undo History | **done** | Sync runs record inverses; undo re-stages them for review. Kept for 50 runs rather than 60 minutes | 5 |
 
 ## Streaming — `08-streaming.md`

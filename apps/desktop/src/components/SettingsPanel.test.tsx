@@ -31,6 +31,9 @@ vi.mock("../ipc", () => ({
   createPathMapping: vi.fn().mockResolvedValue("m1"),
   deletePathMapping: vi.fn().mockResolvedValue(true),
   previewPathMapping: vi.fn().mockResolvedValue(["/x", false]),
+  commonTextBlocklistList: vi.fn().mockResolvedValue([]),
+  commonTextBlocklistAdd: vi.fn().mockResolvedValue(undefined),
+  commonTextBlocklistRemove: vi.fn().mockResolvedValue(undefined),
 }));
 
 import {
