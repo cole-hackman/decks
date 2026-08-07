@@ -98,8 +98,14 @@ describe("PlaylistPanel", () => {
     render(<PlaylistPanel libraryPath="/db" />, { wrapper });
 
     // Folder + its children appear (auto-expanded on first load).
-    expect(await screen.findByText("Gigs")).toBeInTheDocument();
-    expect(screen.getByText("Friday Night")).toBeInTheDocument();
+    //
+    // Wait on a *child*, not on the folder: auto-expansion happens in an effect
+    // after the first render with data, so "Gigs" is on screen one render
+    // before its children are. Waiting on the folder and then asserting
+    // synchronously catches that intermediate render whenever the machine is
+    // slow enough.
+    expect(await screen.findByText("Friday Night")).toBeInTheDocument();
+    expect(screen.getByText("Gigs")).toBeInTheDocument();
     expect(screen.getByText("Saturday Set")).toBeInTheDocument();
     expect(screen.getByText("Reference")).toBeInTheDocument();
 

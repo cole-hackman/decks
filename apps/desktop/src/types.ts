@@ -373,3 +373,134 @@ export interface GeneratePreview {
   skipped: SkippedCue[];
   anchors: ResolvedAnchor[];
 }
+
+// ── File organiser (Epic 4) ──────────────────────────────────────────────────
+
+export type SubfolderPattern =
+  | { kind: "field"; name: string }
+  | { kind: "bitrate_bucket" }
+  | { kind: "first_tag" }
+  | { kind: "current_year" }
+  | { kind: "current_month" }
+  | { kind: "current_decade" }
+  | { kind: "release_decade" };
+
+export interface SubfolderSpec {
+  levels: SubfolderPattern[];
+}
+
+export interface OrganizeRequest {
+  /** Absent renames in place. */
+  target_folder?: string | null;
+  /** Absent keeps the existing filename. */
+  filename_pattern?: string | null;
+  subfolders: SubfolderSpec;
+}
+
+export interface OrganizeRow {
+  track_id: string;
+  source: string;
+  /** Null when the file is already where it belongs. */
+  destination: string | null;
+  title: string;
+  artist: string | null;
+}
+
+export interface OrganizeResult {
+  moved: string[];
+  failed: [string, string][];
+  staged: string[];
+}
+
+export interface PatternField {
+  name: string;
+  supported: boolean;
+}
+
+export type ExtensionMode = "include" | "exclude";
+
+export interface ExtensionFilter {
+  mode: ExtensionMode;
+  extensions: string[];
+}
+
+export interface UnusedFile {
+  path: string;
+  size_bytes: number;
+}
+
+export interface UnusedScan {
+  files: UnusedFile[];
+  total_bytes: number;
+  skipped_directories: string[];
+  errors: string[];
+}
+
+export interface DeleteReport {
+  deleted: string[];
+  failed: [string, string][];
+  report_path: string | null;
+}
+
+export interface TagFieldSelection {
+  title: boolean;
+  artist: boolean;
+  album: boolean;
+  genre: boolean;
+  bpm: boolean;
+  musical_key: boolean;
+  comment: boolean;
+  year: boolean;
+}
+
+export interface WriteTagsResult {
+  written: string[];
+  failed: [string, string][];
+  skipped: string[];
+}
+
+export interface PathMappingRow {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export interface QuickMoveFolder {
+  id: string;
+  path: string;
+  favourite: boolean;
+  last_used_at: number;
+}
+
+export interface WatchFolderRow {
+  id: string;
+  path: string;
+}
+
+export interface Arrival {
+  path: string;
+  size_bytes: number;
+  /** Seconds since last modification, as of the scan. */
+  age_secs: number;
+}
+
+export interface WatchScan {
+  arrivals: Arrival[];
+  /** Files still being written — reported so the UI can say so. */
+  pending: Arrival[];
+  errors: string[];
+}
+
+export interface ImportResult {
+  staged: string[];
+  failed: [string, string][];
+}
+
+export interface AutomaticAction {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  /** Non-null when decks cannot honour the action yet; the toggle is disabled. */
+  unavailable: string | null;
+}

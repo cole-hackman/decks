@@ -1,5 +1,142 @@
 # Status
 
+## 2026-08-06 — Epic 4 (part 1): Move & Rename
+
+New `crates/file-organizer`, three pure layers with no filesystem access anywhere in the crate:
+
+**`pattern`** — the `%field%` template language. `%field%` interpolates, literal text passes
+through, and `{ … }` marks an optional segment that is emitted only when *every* field inside it
+has a value. That last construct is the whole point: `%artist% - %title% (%key%)` on a keyless
+track leaves `Daft Punk - Get Lucky ()`, while `{(%key%)}` leaves nothing behind. Renders are
+trimmed, because a dropped segment nearly always strands the space that separated it. Optional
+segments deliberately do not nest — one level covers every documented use, and rejecting nesting
+gives a clear error rather than a surprise. Every worked example from the manual is a test.
+
+**`subfolder`** — up to three nested levels, each independently optional, plus the computed
+patterns: bitrate as `320+`/`320-` buckets rather than raw numbers, first tag, current year, current
+month zero-padded, current decade as a range. **An empty field drops its level, not the move** — a
+track with no genre still lands in the target folder, one level shallower. Anything else orphans
+files. A missing bitrate drops the level rather than defaulting into `320-` and mislabelling a
+lossless file. Field values are sanitised per component, so `Drum & Bass / Jungle` is one folder
+and cannot invent a second level.
+
+**`plan`** — combines the two into destination paths, taking an existence oracle as an argument so
+collisions, no-op moves and empty renders are all unit-testable. Collisions suffix ` (2)`, both
+against the filesystem and against destinations claimed earlier in the same batch: two tracks can
+legitimately render to the same name, and overwriting one with the other destroys audio. A render
+containing nothing but punctuation falls back to the existing filename, so an untagged track never
+becomes `-.mp3`.
+
+**New `ChangeKind::TrackRelocate`.** Moving files is a filesystem operation; telling Rekordbox
+where they went is a staged change like everything else. The applier writes `FolderPath`, and
+writes `FileNameL`/`FileNameS` **only if the database has them** — detected per-database with
+`PRAGMA table_info` rather than assumed, since `decks` does not model those columns.
+
+This also fixes a live bug: `RelocateBanner` staged path updates as
+`TrackMetadataEdit { field: "folder_path" }`, which is not a `djmdContent` column and was rejected
+by the applier's allowlist — so relocations staged from the UI never actually applied. It now
+stages `TrackRelocate`. The frontend `ChangeKind` union was also missing `TrackDelete`,
+`TrackAddCue` and `TrackDeleteCue`; it now mirrors the Rust enum.
+
+Four Tauri commands in `src-tauri/src/organizer.rs`. `pattern_fields` returns the manual's full
+28-field vocabulary with a `supported` flag, so the editor can say "decks cannot fill remixer yet"
+instead of quietly rendering blanks. `preview_organize` plans without touching anything;
+`apply_organize` executes exactly the rows it is handed back, so what runs is what the user read.
+A file that cannot be moved fails alone — one locked file must not abandon the other 500.
+`fs::rename` falls back to copy-then-remove for cross-filesystem moves, which is the common case
+(downloads on the internal disk, library on an external one).
+
+New `OrganizeFilesView`, reachable from the sidebar as **Move & Rename**, acting on the selection
+or the whole library. Preview lists rows that would *not* change too, and the success toast says a
+sync is still needed — per the manual, a partial sync leaves the old locations behind.
+
+**Find Unused Files** ships in the same crate, because it is the same concern from the other side:
+which files on disk the library does not account for. Include/exclude extension filtering (an empty
+list means "no filter" in either mode, since an empty include list would report nothing and look
+broken), the DJ-folder skip list matched case-insensitively, `Copy paths` to export without
+deleting, and a timestamped record of every deletion under the app data folder.
+
+Its output is a list of deletion candidates, so it carries three guards the manual does not
+specify. A scan against an **empty library refuses to run** — everything would look unused. Library
+membership is **re-checked at delete time**, because the library can gain a track between the scan
+and the click. And path comparison is case- and separator-insensitive, since Rekordbox and the
+filesystem do not reliably agree and a case-only mismatch would offer a real track for deletion.
+Nothing is pre-selected and deletion needs an explicit second click.
+
+**Bulk Write Tags** rounds out the slice: `write_tags_bulk` projects the library's values into the
+files' own tags, with per-field selection, over the selection or the whole library. The rule that
+matters is the one the manual does not state — **a selected field whose library value is empty is
+not written**, because ticking "Artist" on a library that happens not to know one would blank a
+perfectly good tag in the file. Those tracks come back as `skipped` and the panel says how many.
+Nothing is ticked by default: this writes to files and cannot be rolled back through the staged-
+change pipeline.
+
+The sidebar entry is now **Files** rather than Move & Rename, with Move & Rename, Write Tags and
+Find Unused Files as sections — they are one domain (things that write to disk rather than to
+Rekordbox's database) and `docs/lexicon/06-files.md` treats them as one.
+
+**Local Path Mappings** (cache migration **v8**) close the slice. Per-computer prefix rewrites so a
+library restored on a second machine finds its music without a bulk relocate. Longest matching
+prefix wins; matching is on whole path components, so `/Music` cannot swallow `/MusicVideos`;
+separators are interchangeable because these databases cross platforms; and matching is
+case-insensitive while the remainder keeps its original case — the comparison has to be lenient,
+the filesystem may not be.
+
+Read-side only. The library keeps saying `D:\Music\…`, which is exactly what lets one database
+work on two machines at once. The table is deliberately **not** keyed by `library_path`: a mapping
+describes where this *computer* keeps its music and has to apply the moment any library is opened.
+Recorded as **ADR-0014**, since it breaks the pattern every other post-v5 table follows.
+
+Applied at every point that turns a stored path into a real one: the missing-file scan (a mapped
+track is not missing), Move & Rename's sources, Write Tags, and — the one that matters most — the
+unused-file sweep's known-path set, since without it every mapped track would look unused and land
+on the delete list.
+
+**Quick move** (cache migration **v9**) closes the slice: remembered destinations, favourites first,
+hotkeys 1–9. Recording a folder is an upsert, so using the same one twice moves it up the list
+rather than duplicating it, and the hotkeys are ignored while a text field has focus — otherwise
+typing a path fires a move on every digit. The move itself reuses the Move & Rename planner, so
+collisions and `TrackRelocate` staging behave identically, and the success message repeats the
+full-sync warning the manual is emphatic about.
+
+**Watch folders** (cache migration **v10**) complete the automation story, with one deliberate
+substitution: arrivals are found by a **debounced scan** every 15 seconds rather than a native
+filesystem watcher. That makes the arrival set a pure function of (files on disk, library,
+dismissed) — testable without an event loop, unable to miss something that happened while the app
+was closed, and free of a platform-specific dependency. A push-based watcher would sit behind the
+same function and change nothing the user sees.
+
+Two rules the manual does not state, both earned rather than assumed. A file whose modification
+time is under **10 seconds** old is held back and reported separately: a large FLAC copied over a
+network share exists on disk long before it is complete, and importing mid-copy reads truncated
+tags and a wrong duration. And dismissals are recorded, so a file the user chose not to import is
+not offered again on every scan.
+
+**New `ChangeKind::TrackCreate`, and it is export-only.** Inserting a row into `djmdContent` needs
+columns `decks` does not model and cannot verify against a real fixture, and a half-populated row
+in a performing library is worse than no row. So the applier **refuses** it — with a message naming
+the file and pointing at the XML route — and the exporter emits the new tracks into the collection,
+continuing IDs past the highest existing one so an import can never silently replace a real track.
+
+**Automatic Actions** closes the epic's automation story, honestly. The settings group exists and
+**Auto Analyze New Tracks** works: importing an arrival detects BPM and key on the way in, and a
+failed analysis does not undo an import that already succeeded. The other four are shown as
+**disabled toggles that state what they need** — automatic drop detection, the Beatshift Fixer,
+field mappings, the enrichment providers — rather than hidden or offered as switches that quietly
+do nothing. A switch that does not switch anything is worse than one that says why it is off, and
+hiding them would make the gap invisible. An unavailable action also reads as off at the point of
+use regardless of what is stored, so a setting enabled before its feature regressed cannot silently
+take effect.
+
+**What is NOT done in Epic 4:** incoming auto-advance and its hotkey, delete-from-disk, quick
+move's context-menu entry point, field mappings, auto-write-on-change, enrichment (Find Tags &
+album art), Energy/Danceability, and the Beatshift Fixer.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 339, typecheck, lint, `pnpm e2e` 17 — all green. One CI-only clippy lint
+(`unnecessary_sort_by`, 1.97) had to be fixed after the fact: the container's toolchain is 1.94, so
+`cargo clippy` passing locally does not guarantee CI.
+
 ## 2026-08-06 — Epic 3 (part 1): cue templates and custom cue anchors
 New `crates/cue-generator`, split in two so detection can land later without touching the placement logic:
 

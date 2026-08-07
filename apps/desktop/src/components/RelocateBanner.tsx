@@ -46,11 +46,18 @@ export function RelocateBanner({ libraryPath }: Props) {
     try {
       await stageChange({
         library_path: libraryPath,
-        kind: "TrackMetadataEdit",
+        // Not a TrackMetadataEdit: "folder_path" is not a djmdContent column
+        // and was rejected by the applier's allowlist, so relocations staged
+        // here never actually applied. TrackRelocate writes FolderPath (and the
+        // filename columns, when the database has them).
+        kind: "TrackRelocate",
         target_id: trackId,
-        field: "folder_path",
+        field: null,
         old_value: oldPath,
-        new_value: newPath,
+        new_value: {
+          folder_path: newPath,
+          file_name: newPath.split(/[\\/]/).pop() ?? null,
+        },
         reason: "Relocated missing file via manual UI selection",
         confidence: 1.0,
       });

@@ -29,6 +29,21 @@ import type {
   CueTemplate,
   CustomAnchorRule,
   GeneratePreview,
+  OrganizeRequest,
+  OrganizeResult,
+  OrganizeRow,
+  PatternField,
+  ExtensionFilter,
+  UnusedScan,
+  DeleteReport,
+  TagFieldSelection,
+  WriteTagsResult,
+  PathMappingRow,
+  QuickMoveFolder,
+  WatchFolderRow,
+  WatchScan,
+  ImportResult,
+  AutomaticAction,
 } from "./types";
 import type {
   ChatMessage,
@@ -970,4 +985,140 @@ export async function suggestAnchorRules(
   trackId: string,
 ): Promise<CustomAnchorRule[]> {
   return invoke<CustomAnchorRule[]>("suggest_anchor_rules", { libraryPath, trackId });
+}
+
+// ── File organiser (Epic 4) ──────────────────────────────────────────────────
+
+export async function patternFields(): Promise<PatternField[]> {
+  return invoke<PatternField[]>("pattern_fields");
+}
+
+export async function validatePattern(pattern: string): Promise<string[]> {
+  return invoke<string[]>("validate_pattern", { pattern });
+}
+
+export async function previewOrganize(
+  libraryPath: string,
+  trackIds: string[],
+  request: OrganizeRequest,
+): Promise<OrganizeRow[]> {
+  return invoke<OrganizeRow[]>("preview_organize", {
+    libraryPath,
+    trackIds,
+    request,
+  });
+}
+
+export async function applyOrganize(
+  libraryPath: string,
+  rows: OrganizeRow[],
+): Promise<OrganizeResult> {
+  return invoke<OrganizeResult>("apply_organize", { libraryPath, rows });
+}
+
+export async function scanUnusedFiles(
+  libraryPath: string,
+  roots: string[],
+  filter: ExtensionFilter,
+): Promise<UnusedScan> {
+  return invoke<UnusedScan>("scan_unused_files", { libraryPath, roots, filter });
+}
+
+export async function deleteUnusedFiles(
+  libraryPath: string,
+  paths: string[],
+): Promise<DeleteReport> {
+  return invoke<DeleteReport>("delete_unused_files", { libraryPath, paths });
+}
+
+export async function writeTagsBulk(
+  libraryPath: string,
+  trackIds: string[],
+  selection: TagFieldSelection,
+): Promise<WriteTagsResult> {
+  return invoke<WriteTagsResult>("write_tags_bulk", {
+    libraryPath,
+    trackIds,
+    selection,
+  });
+}
+
+export async function listPathMappings(): Promise<PathMappingRow[]> {
+  return invoke<PathMappingRow[]>("list_path_mappings");
+}
+
+export async function createPathMapping(
+  from: string,
+  to: string,
+): Promise<string> {
+  return invoke<string>("create_path_mapping", { from, to });
+}
+
+export async function deletePathMapping(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_path_mapping", { id });
+}
+
+/** Returns `[resolvedPath, existsOnDisk]`. */
+export async function previewPathMapping(
+  storedPath: string,
+): Promise<[string, boolean]> {
+  return invoke<[string, boolean]>("preview_path_mapping", { storedPath });
+}
+
+export async function listQuickMoveFolders(): Promise<QuickMoveFolder[]> {
+  return invoke<QuickMoveFolder[]>("list_quick_move_folders");
+}
+
+export async function recordQuickMoveFolder(path: string): Promise<string> {
+  return invoke<string>("record_quick_move_folder", { path });
+}
+
+export async function toggleQuickMoveFavourite(id: string): Promise<boolean> {
+  return invoke<boolean>("toggle_quick_move_favourite", { id });
+}
+
+export async function deleteQuickMoveFolder(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_quick_move_folder", { id });
+}
+
+export async function listWatchFolders(): Promise<WatchFolderRow[]> {
+  return invoke<WatchFolderRow[]>("list_watch_folders");
+}
+
+export async function addWatchFolder(path: string): Promise<string> {
+  return invoke<string>("add_watch_folder", { path });
+}
+
+export async function removeWatchFolder(id: string): Promise<boolean> {
+  return invoke<boolean>("remove_watch_folder", { id });
+}
+
+export async function scanArrivals(libraryPath: string): Promise<WatchScan> {
+  return invoke<WatchScan>("scan_arrivals", { libraryPath });
+}
+
+export async function stageArrivalImports(
+  libraryPath: string,
+  paths: string[],
+): Promise<ImportResult> {
+  return invoke<ImportResult>("stage_arrival_imports", { libraryPath, paths });
+}
+
+export async function dismissArrivals(paths: string[]): Promise<number> {
+  return invoke<number>("dismiss_arrivals", { paths });
+}
+
+export async function clearDismissedArrivals(): Promise<number> {
+  return invoke<number>("clear_dismissed_arrivals");
+}
+
+export async function listAutomaticActions(): Promise<AutomaticAction[]> {
+  return invoke<AutomaticAction[]>("list_automatic_actions");
+}
+
+export async function setAutomaticAction(
+  key: string,
+  enabled: boolean,
+): Promise<void> {
+  return invoke<void>("set_automatic_action", { key, enabled });
 }

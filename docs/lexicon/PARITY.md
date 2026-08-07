@@ -19,13 +19,13 @@ regardless of how much of Lexicon they represent.
 | Smartlists | 2 | 1 | 0 | 0 |
 | Analysis | 0 | 5 | 4 | 0 |
 | Player, cues, generator | 7 | 7 | 2 | 0 |
-| Files | 0 | 3 | 7 | 0 |
+| Files | 5 | 6 | 0 | 0 |
 | Health | 0 | 3 | 2 | 0 |
 | Recipes & editing | 1 | 2 | 4 | 0 |
 | Streaming | 0 | 1 | 8 | 0 |
 | History & backup | 1 | 0 | 2 | 2 |
 | Extensibility | 0 | 0 | 0 | 3 |
-| **Total** | **17** | **37** | **32** | **16** |
+| **Total** | **22** | **40** | **25** | **16** |
 
 The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
 of library *editing*, *automation*, or *set preparation*.
@@ -120,16 +120,16 @@ of library *editing*, *automation*, or *set preparation*.
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
-| Watch folder | **missing** | | **4** |
-| Incoming staging | partial | Exists; no watcher feeding it, no auto-advance, no hotkey | 4 |
-| Auto move on done | **missing** | | 4 |
-| Rename patterns (`%field%`, `{}` optional) | **missing** | | 4 |
-| Special subfolder patterns | **missing** | Bitrate buckets, first tag, current year/month/decade | 4 |
-| Quick move + favourite folders | **missing** | | 4 |
-| Write Tags (ID3) | partial | `audio-tags` can write; no bulk flow, no per-field select, no mappings, no auto | 4 |
-| Find Unused Files | **missing** | | 4 |
-| Local Path Mappings | **missing** | `relocate` solves an adjacent problem | 4 |
-| Automatic Actions settings group | **missing** | 5 automations | 4 |
+| Watch folder | **done** | Debounced scan rather than a native watcher; settle rule; dismissals | **4** |
+| Incoming staging | partial | Watch queue with import/ignore; no auto-advance, no hotkey, no delete-from-disk | 4 |
+| Auto move on done | partial | Move & Rename runs on demand; nothing triggers it, no watch folder | 4 |
+| Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
+| Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
+| Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9; no context-menu entry | 4 |
+| Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
+| Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
+| Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
+| Automatic Actions settings group | partial | Group + auto-analyse work; other four disabled with reasons | 4 |
 
 ## Health — `07-health.md`
 

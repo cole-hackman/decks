@@ -1,0 +1,13 @@
+[package]
+name = "file-organizer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Filename patterns, subfolder patterns, move/rename planning and the unused-file sweep"
+
+[dependencies]
+serde = { workspace = true }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+serde_json = { workspace = true }

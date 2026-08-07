@@ -35,6 +35,7 @@ scoring = { path = "../../../crates/scoring" }
 smart-fixes = { path = "../../../crates/smart-fixes" }
 smartlists = { path = "../../../crates/smartlists" }
 cue-generator = { path = "../../../crates/cue-generator" }
+file-organizer = { path = "../../../crates/file-organizer" }
 track-matcher = { path = "../../../crates/track-matcher" }
 
 [build-dependencies]

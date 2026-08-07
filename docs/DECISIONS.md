@@ -289,3 +289,48 @@ Degradation on sync: when a target cannot express a rule, materialise the smartl
 - Materialising on sync means the DJ app's copy goes stale until the next sync. This is inherent to any app lacking the rule, and is what Lexicon does.
 
 **Implementation note (Epic 1, 2026-08-05):** point 1 above proposed compiling rules to SQL where the field lives in `master.db` and falling back to in-memory filtering otherwise. As implemented, **evaluation is entirely in memory**. Two reasons emerged while building it: the app already loads the full track list to render the virtualized table and already builds the derived sets (`tracksWithCues`, `tracksInAnyPlaylist`, `tracksWithMissingFiles`, `tagsByTrack`) for the filter drawer, so the inputs are in hand either way; and a majority of the interesting rule fields — energy, custom tags, archived state, missing-file state — live in the local cache or on the filesystem rather than in `master.db`, so a SQL path would have to be abandoned mid-query for most non-trivial rule sets. A hybrid would mean two evaluators to keep in agreement for no measured gain. The SQL path stays available if profiling on a large library ever justifies it; the evaluator's signature (`&[Track] + EvalContext`) does not preclude it.
+
+---
+
+## ADR-0014 — Local Path Mappings are computer-scoped, not library-scoped
+
+**Status:** accepted (Epic 4, 2026-08-06)
+
+**Context:** Every table added to the cache since migration v5 is keyed by `library_path` —
+smartlists, staged changes, archived tracks, audio features. A Local Path Mapping rewrites a stored
+path prefix (`D:\Music\…`) into the one this machine uses (`/Users/me/Music/…`), so a database
+restored on a second computer finds its music without a bulk relocate.
+
+**Decision:** the `path_mappings` table (migration v8) is **not** keyed by `library_path`. Mappings
+are global to the installation. Resolution is read-side only — the library is never rewritten — and
+mappings are never staged, exported or synced.
+
+**Reasons:**
+
+1. A mapping describes where *this computer* keeps its music. It is a fact about the machine, not
+   about a library. The same mapping is correct for every library opened on it.
+2. It has to apply from the first moment a library is opened, which is before anything has been
+   recorded against that library's path. Library-scoped mappings would have a bootstrap problem:
+   the user could not fix a path until after the app had already failed to find the files.
+3. Read-side-only resolution is what makes the two-computer workflow work at all. If resolution
+   rewrote the library, syncing would push one machine's paths onto the other and the two would
+   fight. Leaving the stored path alone means one database is simultaneously correct on both.
+
+**Consequences:**
+
+- Mappings must be applied at *every* point that turns a stored path into a real one, not just the
+  obvious ones. The non-obvious case is the Find Unused Files known-path set: resolve the scan but
+  not the known paths, and every mapped track in the library is reported as unused — that is, as a
+  deletion candidate. There is a test for exactly this.
+- Matching is on whole path components (`/Music` must not swallow `/MusicVideos`), longest prefix
+  wins so a specific mapping beats a general one regardless of insertion order, both separators are
+  treated as separators because these databases cross platforms, and comparison is case-insensitive
+  while the rewritten remainder keeps its original case — the comparison has to be lenient, the
+  filesystem may not be.
+- An empty `from` prefix is refused at the storage layer: it would match every path in the library
+  and rewrite all of it.
+
+**Alternatives rejected:** keying by `library_path` for consistency with the other v5+ tables (loses
+the bootstrap case and duplicates identical rows per library); rewriting `folder_path` in the
+library via a staged change (breaks the two-computer workflow, which is the feature's whole
+purpose — `crates/relocate` already covers the case where a path is genuinely, permanently wrong).

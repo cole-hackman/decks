@@ -15,6 +15,7 @@ import { SyncPanel } from "./components/SyncPanel";
 import { SmartFixesPanel } from "./components/SmartFixesPanel";
 import { TrackMatcherView } from "./components/TrackMatcherView";
 import { SmartlistsView } from "./components/SmartlistsView";
+import { OrganizeFilesView } from "./components/OrganizeFilesView";
 import { DuplicatesView } from "./components/DuplicatesView";
 import { IncomingView } from "./components/IncomingView";
 import { ArchiveView } from "./components/ArchiveView";
@@ -548,6 +549,13 @@ export default function App() {
             <TrackMatcherView
               libraryPath={libraryPath}
               onGoToSync={() => setCurrentView("sync")}
+            />
+          )}
+          {currentView === "organize" && (
+            <OrganizeFilesView
+              libraryPath={libraryPath}
+              tracks={tracks}
+              selectedTrackIds={selectedTrackIds}
             />
           )}
           {currentView === "sync" && (

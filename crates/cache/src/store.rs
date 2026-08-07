@@ -1,6 +1,7 @@
 use crate::migrations;
 use anyhow::{Context, Result};
 use changes::{ChangeKind, ChangeStatus};
+use file_organizer::{PathMapping, PathMappings};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use smartlists::{Clause, Combinator, Smartlist};
@@ -1176,6 +1177,254 @@ fn combinator_from_str(s: &str) -> Combinator {
     }
 }
 
+/// Local Path Mappings (Epic 4).
+///
+/// Deliberately not keyed by `library_path`: a mapping says where *this
+/// computer* keeps its music, and it has to apply the moment any library is
+/// opened. It is local state only — never staged, exported or synced.
+impl CacheDb {
+    pub fn list_path_mappings(&self) -> Result<PathMappings> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT from_prefix, to_prefix FROM path_mappings ORDER BY seq, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut mappings = Vec::new();
+        while let Some(r) = rows.next()? {
+            mappings.push(PathMapping {
+                from: r.get(0)?,
+                to: r.get(1)?,
+            });
+        }
+        Ok(PathMappings::new(mappings))
+    }
+
+    /// Add a mapping. Both prefixes must be non-empty — an empty `from` would
+    /// match every path in the library and rewrite all of it.
+    pub fn create_path_mapping(&self, from: &str, to: &str) -> Result<String> {
+        let from = from.trim();
+        let to = to.trim();
+        if from.is_empty() || to.is_empty() {
+            anyhow::bail!("both prefixes are required");
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let seq: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(seq), -1) + 1 FROM path_mappings",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        self.conn.execute(
+            "INSERT INTO path_mappings (id, from_prefix, to_prefix, seq, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, from, to, seq, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn delete_path_mapping(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM path_mappings WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// The mappings with their ids, for the settings list.
+    pub fn list_path_mappings_with_ids(&self) -> Result<Vec<(String, PathMapping)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, from_prefix, to_prefix FROM path_mappings ORDER BY seq, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push((
+                r.get(0)?,
+                PathMapping {
+                    from: r.get(1)?,
+                    to: r.get(2)?,
+                },
+            ));
+        }
+        Ok(out)
+    }
+}
+
+/// A folder under observation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WatchFolder {
+    pub id: String,
+    pub path: String,
+}
+
+/// Watch folders and the arrivals the user has finished with (Epic 4).
+///
+/// Computer-scoped for the same reason as path mappings and quick-move
+/// destinations: "the folder my downloads land in" is a fact about this disk.
+impl CacheDb {
+    pub fn list_watch_folders(&self) -> Result<Vec<WatchFolder>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, path FROM watch_folders ORDER BY created_at, rowid")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(WatchFolder {
+                id: r.get(0)?,
+                path: r.get(1)?,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn add_watch_folder(&self, path: &str) -> Result<String> {
+        let path = path.trim();
+        if path.is_empty() {
+            anyhow::bail!("a folder path is required");
+        }
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM watch_folders WHERE path = ?1",
+            rusqlite::params![path],
+            |r| r.get::<_, String>(0),
+        ) {
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO watch_folders (id, path, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![id, path, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn remove_watch_folder(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM watch_folders WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Paths the user has already dealt with, so a scan stops offering them.
+    pub fn dismissed_watch_paths(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT path FROM watch_dismissed")?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(r.get(0)?);
+        }
+        Ok(out)
+    }
+
+    /// Mark paths as dealt with. Idempotent — dismissing twice is not an error,
+    /// and two scans racing to dismiss the same file must not fail one of them.
+    pub fn dismiss_watch_paths(&self, paths: &[String]) -> Result<usize> {
+        let mut n = 0;
+        for path in paths {
+            let key = path.replace('\\', "/").to_lowercase();
+            n += self.conn.execute(
+                "INSERT INTO watch_dismissed (path_key, path, dismissed_at)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(path_key) DO UPDATE SET dismissed_at = excluded.dismissed_at",
+                rusqlite::params![key, path, now_secs()],
+            )?;
+        }
+        Ok(n)
+    }
+
+    /// Un-dismiss everything, so a folder can be triaged again from scratch.
+    pub fn clear_dismissed_watch_paths(&self) -> Result<usize> {
+        Ok(self.conn.execute("DELETE FROM watch_dismissed", [])?)
+    }
+}
+
+/// A remembered quick-move destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuickMoveFolder {
+    pub id: String,
+    pub path: String,
+    pub favourite: bool,
+    pub last_used_at: i64,
+}
+
+/// Quick move destinations (Epic 4).
+///
+/// Favourites first, then most-recently-used. Like path mappings, these belong
+/// to the computer rather than to a library — "the folder I file house tracks
+/// into" is a fact about this disk.
+impl CacheDb {
+    pub fn list_quick_move_folders(&self) -> Result<Vec<QuickMoveFolder>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, path, favourite, last_used_at FROM quick_move_folders
+             ORDER BY favourite DESC, last_used_at DESC",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            out.push(QuickMoveFolder {
+                id: r.get(0)?,
+                path: r.get(1)?,
+                favourite: r.get::<_, i64>(2)? != 0,
+                last_used_at: r.get(3)?,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Remember a destination, or refresh its recency if already known.
+    ///
+    /// Upsert rather than insert: using the same folder twice should move it up
+    /// the list, not create a duplicate entry.
+    pub fn record_quick_move_folder(&self, path: &str) -> Result<String> {
+        let path = path.trim();
+        if path.is_empty() {
+            anyhow::bail!("a folder path is required");
+        }
+        if let Ok(id) = self.conn.query_row(
+            "SELECT id FROM quick_move_folders WHERE path = ?1",
+            rusqlite::params![path],
+            |r| r.get::<_, String>(0),
+        ) {
+            self.conn.execute(
+                "UPDATE quick_move_folders SET last_used_at = ?1 WHERE id = ?2",
+                rusqlite::params![now_secs(), id],
+            )?;
+            return Ok(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO quick_move_folders (id, path, favourite, last_used_at)
+             VALUES (?1, ?2, 0, ?3)",
+            rusqlite::params![id, path, now_secs()],
+        )?;
+        Ok(id)
+    }
+
+    /// Toggle the favourite flag, returning its new state.
+    pub fn toggle_quick_move_favourite(&self, id: &str) -> Result<bool> {
+        let current: i64 = self.conn.query_row(
+            "SELECT favourite FROM quick_move_folders WHERE id = ?1",
+            rusqlite::params![id],
+            |r| r.get(0),
+        )?;
+        let next = if current == 0 { 1 } else { 0 };
+        self.conn.execute(
+            "UPDATE quick_move_folders SET favourite = ?1 WHERE id = ?2",
+            rusqlite::params![next, id],
+        )?;
+        Ok(next == 1)
+    }
+
+    pub fn delete_quick_move_folder(&self, id: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM quick_move_folders WHERE id = ?1",
+            rusqlite::params![id],
+        )?;
+        Ok(n > 0)
+    }
+}
+
 fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     let clauses_json: String = r.get(4)?;
     let clauses: Vec<Clause> = serde_json::from_str(&clauses_json).unwrap_or_default();
@@ -1195,6 +1444,144 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
 mod tests {
     use super::*;
     use smartlists::{Field, Operator, Rule, Value};
+
+    #[test]
+    fn adding_the_same_watch_folder_twice_is_idempotent() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let a = db.add_watch_folder("/Music/Watch").unwrap();
+        let b = db.add_watch_folder("/Music/Watch").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(db.list_watch_folders().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn watch_folders_can_be_removed() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.add_watch_folder("/Music/Watch").unwrap();
+        assert!(db.remove_watch_folder(&id).unwrap());
+        assert!(!db.remove_watch_folder(&id).unwrap());
+        assert!(db.list_watch_folders().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_empty_watch_folder_path_is_refused() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.add_watch_folder("   ").is_err());
+    }
+
+    #[test]
+    fn dismissing_the_same_path_twice_is_not_an_error() {
+        // Two scans racing to dismiss the same file must not fail one of them.
+        let db = CacheDb::open_in_memory().unwrap();
+        let paths = vec!["/Music/Watch/a.mp3".to_string()];
+        db.dismiss_watch_paths(&paths).unwrap();
+        db.dismiss_watch_paths(&paths).unwrap();
+        assert_eq!(db.dismissed_watch_paths().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dismissal_is_keyed_case_and_separator_insensitively() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.dismiss_watch_paths(&["/Music/Watch/A.mp3".to_string()])
+            .unwrap();
+        db.dismiss_watch_paths(&["\\music\\watch\\a.mp3".to_string()])
+            .unwrap();
+        assert_eq!(db.dismissed_watch_paths().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dismissals_can_be_cleared_to_triage_a_folder_again() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.dismiss_watch_paths(&["/a.mp3".to_string(), "/b.mp3".to_string()])
+            .unwrap();
+        assert_eq!(db.clear_dismissed_watch_paths().unwrap(), 2);
+        assert!(db.dismissed_watch_paths().unwrap().is_empty());
+    }
+
+    #[test]
+    fn recording_the_same_quick_move_folder_twice_does_not_duplicate_it() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let first = db.record_quick_move_folder("/Music/House").unwrap();
+        let second = db.record_quick_move_folder("/Music/House").unwrap();
+        assert_eq!(first, second);
+        assert_eq!(db.list_quick_move_folders().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn quick_move_favourites_sort_ahead_of_plain_recents() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.record_quick_move_folder("/Music/House").unwrap();
+        let techno = db.record_quick_move_folder("/Music/Techno").unwrap();
+        assert!(db.toggle_quick_move_favourite(&techno).unwrap());
+
+        let list = db.list_quick_move_folders().unwrap();
+        assert_eq!(list[0].path, "/Music/Techno");
+        assert!(list[0].favourite);
+        assert!(!list[1].favourite);
+    }
+
+    #[test]
+    fn toggling_a_favourite_twice_returns_it_to_plain() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.record_quick_move_folder("/Music/House").unwrap();
+        assert!(db.toggle_quick_move_favourite(&id).unwrap());
+        assert!(!db.toggle_quick_move_favourite(&id).unwrap());
+    }
+
+    #[test]
+    fn quick_move_folders_can_be_forgotten() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let id = db.record_quick_move_folder("/Music/House").unwrap();
+        assert!(db.delete_quick_move_folder(&id).unwrap());
+        assert!(!db.delete_quick_move_folder(&id).unwrap());
+        assert!(db.list_quick_move_folders().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_empty_quick_move_path_is_refused() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.record_quick_move_folder("   ").is_err());
+    }
+
+    #[test]
+    fn path_mappings_round_trip_and_delete() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.list_path_mappings().unwrap().is_empty());
+
+        let id = db
+            .create_path_mapping("D:\\Music", "/Users/me/Music")
+            .unwrap();
+        let mappings = db.list_path_mappings().unwrap();
+        assert_eq!(mappings.mappings.len(), 1);
+        assert_eq!(
+            mappings.resolve("D:\\Music\\a.mp3"),
+            std::path::PathBuf::from("/Users/me/Music/a.mp3")
+        );
+
+        assert!(db.delete_path_mapping(&id).unwrap());
+        assert!(!db.delete_path_mapping(&id).unwrap());
+        assert!(db.list_path_mappings().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_mapping_with_an_empty_prefix_is_refused() {
+        // An empty `from` would match every path and rewrite the whole library.
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.create_path_mapping("  ", "/Users/me/Music").is_err());
+        assert!(db.create_path_mapping("/Music", "").is_err());
+    }
+
+    #[test]
+    fn mappings_come_back_in_insertion_order_with_their_ids() {
+        let db = CacheDb::open_in_memory().unwrap();
+        let first = db.create_path_mapping("/Music", "/a").unwrap();
+        let second = db.create_path_mapping("/Music/Live", "/b").unwrap();
+        let rows = db.list_path_mappings_with_ids().unwrap();
+        assert_eq!(
+            rows.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>(),
+            vec![first, second]
+        );
+    }
 
     #[test]
     fn open_in_memory_succeeds() {

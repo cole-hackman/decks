@@ -1495,3 +1495,128 @@ properly, and the placement machinery is useful on its own today for anyone who 
 existing `stratum-dsp` chroma and novelty curves, with energy contrast separating drop from
 breakdown, and fade-out from low frequencies only. Evaluate against hand-placed cues on a
 genre-labelled fixture set, and report per-anchor accuracy rather than claiming a number.
+
+## 2026-08-06 — Session: Epic 4 part 1
+
+**Why the file organiser first, out of everything in Epic 4:** the pattern language is pure, fully
+specified by worked examples in the manual, and has no dependency on anything `decks` does not
+already have. It is the highest-confidence piece of a large epic, and the rest of the epic
+(watch folder, quick move, auto-move-on-done) all consume it. Building it first means the risky
+parts get to lean on something already tested.
+
+**The rule that shaped the design:** "if a field is empty the track still moves to the target
+folder, just without that subfolder level." Read past that and the obvious implementation — skip
+the track when a level cannot be resolved — silently orphans files in the incoming folder, which is
+exactly the failure a bulk mover must not have. Every level resolves to `Option<String>` and the
+`None`s are filtered out, not propagated.
+
+**Purity was worth the small awkwardness.** `plan_batch` takes `&dyn Fn(&Path) -> bool` as its
+existence oracle instead of calling `Path::exists` itself. It costs one parameter and buys unit
+tests for every collision case, including the subtle one: a file already sitting at its correct
+destination must not be pushed to `(2)` by its own existence.
+
+**A bug fell out of the work rather than being looked for.** Wiring `TrackRelocate` meant reading
+the applier's field allowlist, which is where `RelocateBanner`'s `field: "folder_path"` turned out
+to be rejected — the existing relocate flow staged changes that could never apply. Fixed here
+because the new change kind is exactly what it needed.
+
+**Deliberately not guessed:** `FileNameL`/`FileNameS` are well-known Rekordbox columns but are not
+modelled in this repo and there is no real fixture to check against. Rather than assume, the
+applier probes `PRAGMA table_info` and writes them if present. Feature detection, not a stub.
+
+**Also deliberate:** `ReleaseDecade` is not in the manual's table of special subfolder patterns —
+those are all date-of-run buckets. But a decade computed from *today* is the same string for every
+track in a run, so filing by release decade is the obviously intended use and it costs nothing.
+Recorded in GAPS rather than left as an undocumented divergence.
+
+**Find Unused Files went in the same crate and the same session** because it is the mirror image of
+the move planner: one asks where a track should go, the other asks which files no track claims. It
+also has the worst failure mode in the app — its output is a deletion list, and a false positive is
+a lost track. So it got guards the manual does not mention: refuse to scan an empty library,
+re-check library membership at delete time rather than trusting the scan, and compare paths
+case- and separator-insensitively because Rekordbox and the filesystem do not reliably agree. That
+last one is not hypothetical; a case-only mismatch would put a real track on the delete list.
+
+**Bulk Write Tags** turned out to hinge on one decision: what to do with a ticked field whose
+library value is empty. Writing it is the naive reading of "write these fields", and it would blank
+real tags in people's files with nothing. Not writing it makes the feature safe and costs a
+`skipped` count in the result. Easy call once stated, easy to get wrong if never stated.
+
+**Toolchain note for future sessions:** the container's clippy is 1.94 and CI's is 1.97. A clean
+local `cargo clippy --workspace --all-targets -- -D warnings` is necessary but not sufficient.
+`unnecessary_sort_by` caught us twice in one session — it fires on `sort_by(|a, b| b.k.cmp(&a.k))`
+where the key is `Ord`, and wants `sort_by_key(|x| Reverse(x.k))`. Float comparisons using
+`partial_cmp` do **not** trigger it, which is why most of `stratum-dsp` is unaffected. When adding
+a descending sort over an integer key, write `sort_by_key(Reverse(..))` first and save the
+round-trip.
+
+**Local Path Mappings** looked like the smallest thing in the epic and turned out to be the one with
+the most reach. Storing and resolving a prefix is twenty lines; deciding *where* resolution applies
+is the actual feature. The unused-file sweep is the case that makes it non-optional — resolve the
+scan but not the known-path set, and every mapped track in the library shows up as unused and
+therefore deletable. So the mappings go through `KnownPaths` too, and there is a test for it.
+
+Also deliberate: the `path_mappings` table is not keyed by `library_path`, unlike every other table
+added since v5. A mapping is a fact about the *computer*, not about a library, and it has to apply
+the moment a library is opened — before anything has been recorded against that library's path.
+Noted in the migration itself so the inconsistency reads as a decision rather than an oversight.
+
+**Quick move cost almost nothing** because the planner was already there — it is `apply_organize`
+with a target folder and no subfolder levels. That is the payoff for having built the pure planner
+first rather than putting the logic in the command handler.
+
+Two small things worth remembering. Recording a destination is an upsert keyed on the path, so
+using a folder twice promotes it rather than duplicating it — an append-only recents list degrades
+into noise fast. And the 1–9 hotkeys have to bail out when focus is in a text field, or typing
+`/Music/1` into the "remember this folder" box fires a move mid-keystroke. Both are the kind of
+thing that only shows up when you actually use the feature, so both have tests.
+
+Mounting a fourth panel in the Files view also squeezed the Move & Rename preview to zero height —
+flex children without `shrink-0` get compressed once the siblings fill the container. Caught by
+Playwright reporting the element as "hidden" while it was plainly in the DOM; vitest could not have
+seen it, since jsdom has no layout.
+
+**A pre-existing flake surfaced on CI** and is fixed here since it was red on this PR:
+`PlaylistPanel.test.tsx` waited on the folder row and then asserted synchronously on its children.
+Auto-expansion happens in an effect *after* the first render with data, so the folder is on screen
+one render before its children are — the assertion caught that intermediate render whenever the
+machine was slow enough. Waiting on a child instead is both correct and what the test's own comment
+already claimed it was doing. Worth remembering: `findBy*` on the thing that appears first does not
+wait for the thing that appears second.
+
+**The watch folder decision, resolved.** Importing a new file is a `master.db` write, and the
+non-negotiable says no. Two honest options: model the `djmdContent` INSERT and hope the schema
+matches, or route new tracks through Rekordbox's own XML import. The second wins easily — the
+export already exists, the import is Pioneer's own supported path, and a half-populated row in a
+performing library is a genuinely bad outcome. So `TrackCreate` is export-only and the applier
+*refuses* it, with a message that names the file and says where to go instead. A refusal that
+teaches is worth more than one that just fails.
+
+**Scanning beat watching.** The manual says "continuous observation", which reads like a filesystem
+watcher. But a watcher misses everything that happened while the app was closed, needs a
+platform-specific dependency, and cannot be tested without an event loop. A 15-second scan of one
+folder is cheap and makes the arrival set a pure function of three inputs — which is why
+`scan_watch_folders` has tests for the skip list, the settle rule and clock skew, none of which
+would be reachable through a watcher. If push ever matters, it slots in behind the same function.
+
+**The settle rule was not in the spec and had to be.** A large FLAC over a network share exists on
+disk long before it is complete. Reading its tags mid-copy gives a truncated title and, worse, a
+wrong duration that then propagates into Rekordbox. Ten seconds of no modification, and the files
+still moving are reported separately rather than silently omitted — "3 files still copying" is
+information; a short list is a mystery.
+
+**Automatic Actions forced a question worth writing down:** what do you do with a settings group
+where you can only honour one of the five switches? Three options — hide the four, ship them as
+toggles that do nothing, or show them disabled with the reason. The second is banned outright (no
+stub logic in production paths). The first is tempting and wrong: hiding them makes the gap
+invisible, to us as much as to the user. So they render disabled, each naming what it is blocked
+on, and `set_automatic_action` refuses them at the backend too rather than trusting the UI to keep
+them off.
+
+One more guard: `is_enabled` returns false for an unavailable action *regardless of what is
+stored*. If one of these ever ships, gets enabled, and is then blocked again by a regression, the
+stored `true` must not silently take effect.
+
+**Next:** what remains in Epic 4 is field mappings, the enrichment revival (Find Tags & album art),
+Energy/Danceability, and the Beatshift Fixer — the last two are analysis work closer in character
+to Epic 3 part 2 than to the file management this PR covers. Epic 5 onward is untouched.

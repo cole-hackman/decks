@@ -21,6 +21,8 @@ const MODEL_OPTIONS: { value: AgentModel; label: string }[] = [
 ];
 import { useAppStore } from "../store/appStore";
 import { useToast } from "./Toast";
+import { PathMappingsSection } from "./PathMappingsSection";
+import { AutomaticActionsSection } from "./AutomaticActionsSection";
 
 interface Props {
   /** When provided, the panel renders as a modal overlay with a close affordance.
@@ -299,6 +301,10 @@ export function SettingsPanel({ onClose }: Props) {
           </div>
         )}
       </section>
+
+      <AutomaticActionsSection className={onClose ? "px-5 py-4" : "py-6"} />
+
+      <PathMappingsSection className={onClose ? "px-5 py-4" : "py-6"} />
 
       {/* Agent model */}
       <section className={onClose ? "px-5 py-4" : "py-6"}>

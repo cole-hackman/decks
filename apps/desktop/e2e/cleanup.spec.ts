@@ -128,7 +128,7 @@ test("genre cleanup: rename stages a TrackMetadataEdit and exports", async ({ pa
 
   // Select House and rename it.
   await page.getByRole("button", { name: /^House\s*12$/ }).click();
-  await page.getByRole("button", { name: "Rename" }).click();
+  await page.getByRole("button", { name: "Rename", exact: true }).click();
 
   const dialogInput = page.getByPlaceholder("New genre name");
   await dialogInput.fill("Deep House");

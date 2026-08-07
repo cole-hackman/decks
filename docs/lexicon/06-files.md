@@ -10,8 +10,24 @@ managing the filesystem.
 *What it does* — A folder under continuous observation. Any music file dropped in is imported
 automatically. Default location `Music/Lexicon/Watch Folder`.
 
-*decks status* — **missing.** `decks` has an Incoming view, but ingest is a manual filesystem pick
-with fuzzy matching, not a watcher.
+*decks status* — **done**, with one deliberate substitution. `WatchFolderPanel` (Files view) plus
+cache migration v10. Arrivals are found by a **debounced scan** every 15 seconds rather than a
+native filesystem watcher: the arrival set is a pure function of (files on disk, library,
+dismissed), so it is testable without an event loop, it cannot miss something that happened while
+the app was closed, and it needs no platform-specific dependency. A push-based watcher would sit
+behind the same function and change nothing the user sees.
+
+Two rules the manual does not state. Files whose modification time is less than **10 seconds** old
+are held back and reported separately — a large FLAC copied over a network share exists on disk
+long before it is complete, and importing mid-copy reads truncated tags and a wrong duration. And
+dismissals are recorded, so a file the user chose not to import is not offered again on every scan;
+`Un-ignore everything` clears them.
+
+Importing stages a `TrackCreate` change. It is **export-only**: inserting a row into `djmdContent`
+needs columns `decks` does not model and cannot verify against a real schema, and a half-populated
+row in a performing library is worse than no row. New tracks reach Rekordbox through its own XML
+import, which the export emits them into, and the applier's refusal message says exactly that
+rather than failing generically.
 
 *Epic* — **4**.
 
@@ -30,8 +46,9 @@ button is bindable to a hotkey. That turns triage into a single repeated keystro
 labelled as such.
 
 *decks status* — **partial.** `IncomingView` exists with `Mark all reviewed` and `Archive selected`
-header actions, backed by a `last_incoming_cleared_at` watermark. Missing: auto-advance, hotkey
-binding, delete-from-disk, and the whole point of the page — that it is fed by a watcher.
+header actions, backed by a `last_incoming_cleared_at` watermark, and the Files view now has a
+watch-folder queue with per-file and bulk import/ignore. Missing: auto-advance on `Selected done`,
+its hotkey binding, and delete-from-disk.
 
 *Epic* — **4**.
 
@@ -46,7 +63,11 @@ target folder is configured, nothing moves — but renaming still happens.
 field. `Genre` then `BPM` yields `…/Music/House/128/track.mp3`. **If a field is empty the track
 still moves to the target folder, just without that subfolder level** — no orphaning.
 
-*decks status* — **missing.**
+*decks status* — **partial.** `crates/file-organizer::subfolder` implements the three levels, the
+empty-level rule and all five special patterns; `OrganizeFilesView` (sidebar → Files) runs it over
+the selection with a full preview, and each move stages a `TrackRelocate` change. What is missing is
+the *auto* half — the watch folder now exists, but marking an arrival done does not yet trigger a
+move; that needs the Automatic Actions settings group.
 
 *Epic* — **4**.
 
@@ -63,6 +84,8 @@ still moves to the target folder, just without that subfolder level** — no orp
   `Daft Punk - Get Lucky ()` on a keyless track, while `%artist% - %title% {(%key%)}` yields
   `Daft Punk - Get Lucky`.
 - Optional segments compose: `%artist% - %title% {%key%}{|%bpm%}`.
+- Optional segments do **not** nest in `decks`; nesting is a parse error rather than a surprise.
+- Renders are trimmed, since a dropped segment usually strands its separator.
 
 *Field vocabulary* (verbatim from the manual, and identical to the Lexicon field list):
 `artist, title, albumTitle, label, remixer, mix, composer, producer, grouping, lyricist, comment,
@@ -79,7 +102,13 @@ trackNumber, energy, danceability, popularity, extra1, extra2`
 | Current month | Zero-padded `01`–`12` |
 | Current decade | A range, e.g. `1990 - 1999` |
 
-*decks status* — **missing.**
+`decks` adds one more, `Release decade`, for the decade of the track's own release year — see
+`GAPS.md` §Deliberate divergences.
+
+*decks status* — **done.** `crates/file-organizer::pattern` implements the language;
+`validate_pattern` and `pattern_fields` back the editor, which marks the fields `decks` cannot
+supply yet rather than rendering them blank. Illegal filename characters become `-`, and a render
+that is nothing but punctuation falls back to the original filename.
 
 *Epic* — **4**.
 
@@ -94,7 +123,15 @@ folders get hotkeys 1–9**. A hotkey opens the popup itself.
 *Critical follow-up* — after moving files you must **Full Sync** to the DJ app. A partial sync
 leaves the old locations behind; only a full sync clears them.
 
-*decks status* — **missing.**
+*decks status* — **done.** `QuickMovePanel` (Files view) with cache migration v9 behind it.
+Destinations are remembered on use (upsert, so the same folder moves up the list rather than
+duplicating), favourites sort first and get hotkeys 1–9, and the hotkeys are ignored while a text
+field has focus so typing a path does not fire a move on every digit. Moving reuses the Move &
+Rename planner, so collisions and `TrackRelocate` staging behave identically, and the success
+message repeats the full-sync warning.
+
+Not done: opening the picker itself from a hotkey, and the right-click → Send to entry point —
+this lives in the Files view rather than the track context menu for now.
 
 *Epic* — **4**.
 
@@ -111,10 +148,16 @@ detected.
 *Why it's separate from sync* — syncing updates the DJ app's database; this updates the files. A
 user whose music is also in a plain music player needs both.
 
-*decks status* — **partial.** `crates/audio-tags` (lofty) already reads *and writes* title, artist,
-album, genre, BPM, key, comment, year and duration for MP3/FLAC/M4A/WAV, and a `write_audio_tags`
-Tauri command exists. There is no bulk flow, no per-field selection, no field-mapping projection,
-and no auto-write.
+*decks status* — **partial.** `crates/audio-tags` (lofty) reads *and writes* title, artist, album,
+genre, BPM, key, comment and year for MP3/FLAC/M4A/WAV. `write_tags_bulk` plus `WriteTagsPanel`
+(Files view) add the bulk flow with per-field selection over the selection or the whole library.
+
+One rule the manual does not state but the feature needs: **a selected field whose library value is
+empty is not written.** Otherwise ticking "Artist" on a library that happens not to know an artist
+would blank a perfectly good tag in the file. Those tracks come back as `skipped` and the UI says
+how many.
+
+Still missing: field-mapping projection and auto-write-on-change.
 
 *Epic* — **4**.
 
@@ -136,7 +179,18 @@ missing-file scan. Aimed at reclaiming disk space.
 - The scan results can be exported as a plain path list **without deleting**, so users can hand
   them to their own scripts.
 
-*decks status* — **missing.**
+*decks status* — **done.** `crates/file-organizer::unused` implements the sweep;
+`UnusedFilesPanel` (inside Move & Rename) runs it. Include/exclude extension filtering with an
+empty list meaning "no filter" in either mode; the DJ-folder skip list plus OS and VCS
+directories, matched case-insensitively; `Copy paths` exports the list without deleting; and a
+timestamped record of every deletion is written under the app data folder.
+
+Three guards the manual does not specify but this needs, given the output is a deletion list:
+a scan against an **empty library refuses to run** (everything would look unused); library
+membership is **re-checked at delete time**, not just at scan time, because the library can gain
+a track in between; and path comparison is case- and separator-insensitive, since Rekordbox and
+the filesystem do not reliably agree and a case-only mismatch would offer a real track for
+deletion. Nothing is pre-selected, and deletion is behind an explicit second click.
 
 *Epic* — **4**.
 
@@ -148,8 +202,21 @@ missing-file scan. Aimed at reclaiming disk space.
 restored on a second machine finds its music without a bulk relocate. The documented two-computer
 workflow is cloud database backup plus path mappings.
 
-*decks status* — **missing.** `crates/relocate` solves the adjacent problem (fuzzy filename + size
-matching for broken paths) but there is no prefix-mapping layer.
+*decks status* — **done.** `crates/file-organizer::mappings` plus cache migration v8 and a
+`PathMappingsSection` in Settings. Longest matching prefix wins, matching is on whole path
+components (so `/Music` cannot swallow `/MusicVideos`), separators are interchangeable because the
+databases cross platforms, and matching is case-insensitive while the remainder keeps its original
+case — the comparison has to be lenient, the filesystem may not be.
+
+Read-side only: the library keeps saying `D:\Music\…`, which is what lets one database work on two
+machines at once. Mappings live in the local cache and are **not** keyed by library path — they
+describe where this *computer* keeps its music, and must apply the moment any library is opened.
+Never staged, exported or synced.
+
+Applied wherever a stored path is turned into a real one: the missing-file scan (a mapped track is
+not missing), Move & Rename's source paths, Write Tags, and the unused-file sweep's known-path set
+— that last one matters, since without it every mapped track would look unused and land on the
+delete list. `crates/relocate` still solves the adjacent problem of genuinely broken paths.
 
 *Epic* — **4**.
 

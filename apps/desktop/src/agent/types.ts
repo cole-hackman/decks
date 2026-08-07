@@ -9,9 +9,14 @@ import type {
 
 export type ChangeStatus = "Proposed" | "Accepted" | "Rejected" | "Exported";
 
+/** Mirrors `changes::ChangeKind`. */
 export type ChangeKind =
   | "TrackMetadataEdit"
+  | "TrackDelete"
+  | "TrackRelocate"
   | "CueMetadataEdit"
+  | "TrackAddCue"
+  | "TrackDeleteCue"
   | "PlaylistCreate"
   | "PlaylistRename"
   | "PlaylistDelete"

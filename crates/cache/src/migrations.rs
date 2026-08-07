@@ -168,6 +168,67 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_smartlists_library ON smartlists(library_path, seq, name);
         ",
     ),
+    (
+        8,
+        "
+        -- Local Path Mappings (Epic 4). Per-computer prefix rewrites, so a
+        -- database restored on a second machine finds its music without a bulk
+        -- relocate.
+        --
+        -- Deliberately NOT keyed by library_path: the mapping describes where
+        -- this *computer* keeps its music, and it must apply the moment a
+        -- library is opened, before anything has been recorded against that
+        -- library's path. Never staged, exported or synced.
+        CREATE TABLE path_mappings (
+          id           TEXT PRIMARY KEY,
+          from_prefix  TEXT NOT NULL,
+          to_prefix    TEXT NOT NULL,
+          seq          INTEGER NOT NULL DEFAULT 0,
+          created_at   INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX idx_path_mappings_seq ON path_mappings(seq);
+        ",
+    ),
+    (
+        9,
+        "
+        -- Quick move destinations (Epic 4). Recently-used folders, with a
+        -- favourite flag; favourites get hotkeys 1-9 in the picker.
+        --
+        -- Like path_mappings and for the same reason, not keyed by
+        -- library_path: 'the folder I file house tracks into' is a fact about
+        -- this computer's disk, not about one Rekordbox database.
+        CREATE TABLE quick_move_folders (
+          id           TEXT PRIMARY KEY,
+          path         TEXT NOT NULL UNIQUE,
+          favourite    INTEGER NOT NULL DEFAULT 0,
+          last_used_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE INDEX idx_quick_move_recent ON quick_move_folders(favourite DESC, last_used_at DESC);
+        ",
+    ),
+    (
+        10,
+        "
+        -- Watch folders (Epic 4) and the files the user has finished with.
+        --
+        -- `watch_dismissed` is what stops a file the user chose not to import
+        -- from being offered again on every scan. Keyed on a normalised path
+        -- (lower-cased, forward slashes) for the same reason the unused-file
+        -- sweep normalises: the filesystem and the library do not reliably
+        -- agree on case.
+        CREATE TABLE watch_folders (
+          id         TEXT PRIMARY KEY,
+          path       TEXT NOT NULL UNIQUE,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        CREATE TABLE watch_dismissed (
+          path_key     TEXT PRIMARY KEY,
+          path         TEXT NOT NULL,
+          dismissed_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -283,6 +344,56 @@ mod tests {
         .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM staged_changes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn watch_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO watch_folders (id, path) VALUES ('w1', '/Music/Watch');
+             INSERT INTO watch_dismissed (path_key, path)
+                VALUES ('/music/watch/a.mp3', '/Music/Watch/a.mp3');",
+        )
+        .unwrap();
+        let folders: i64 = conn
+            .query_row("SELECT COUNT(*) FROM watch_folders", [], |r| r.get(0))
+            .unwrap();
+        let dismissed: i64 = conn
+            .query_row("SELECT COUNT(*) FROM watch_dismissed", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!((folders, dismissed), (1, 1));
+    }
+
+    #[test]
+    fn quick_move_folders_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO quick_move_folders (id, path) VALUES ('q1', '/Music/House')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM quick_move_folders", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn path_mappings_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO path_mappings (id, from_prefix, to_prefix)
+             VALUES ('m1', 'D:\\Music', '/Users/me/Music')",
+            [],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM path_mappings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }
