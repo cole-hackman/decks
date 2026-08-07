@@ -1977,5 +1977,33 @@ right fix was wrapping them in `WithProviders`, not avoiding the hook: the panel
 dialog host, and tests that mount it differently from the app were quietly testing a thing that
 does not exist.
 
+**A lock is only worth having if it survives select-all.** That is the whole design of the cleanup
+locking feature: `Cmd/Ctrl+A` selects everything *unlocked*, because select-all is precisely the
+gesture most likely to sweep a good value into a rename. A lock that only stopped deliberate clicks
+would be decoration. The follow-on — locking something already selected must deselect it — took a
+minute to notice and would have read as the lock silently failing.
+
+**What a lock is scoped by is the actual decision.** By kind, because "Ambient" can be a fine genre
+and a misspelt artist. Not by library, because a value the user has declared canonical is canonical
+for *them* — making them re-lock fifty genres per library would mean nobody ever locks anything.
+
+**Alt-click filtering exposed an asymmetry worth naming rather than hiding.** Genre has a real
+filter dimension; artist does not, so it goes through the search box, which searches several fields
+and therefore returns a superset. The temptation is to present both as "filter to this". The
+comment and the spec both say which one is a search.
+
+**I rewrote three dialog strings that were not mine to change**, and four existing tests caught it.
+The copy was fine; I had reworded it while moving code around. Restored. Worth remembering that a
+rewrite is a good moment to accidentally redesign things nobody asked about — the test failure was
+the feature working.
+
+**An `aria-label` replaces the accessible name; it does not add to it.** Adding
+`aria-label={item.name}` to the cleanup chips to mark locked state quietly threw away the track
+count for screen readers *and* broke an e2e that matched on "House 12". The fix was to stop
+overriding the name at all and append a visually-hidden "locked" instead, so the accessible name
+stays "House 12 locked" — the count is the number the user is actually reading, and it should be
+the number a screen reader reads too. The e2e failure was pointing at a real accessibility
+regression, not at itself.
+
 **Next in Epic 5:** the beatgrid recipes (all three write a grid, so they need an ANLZ writer
 first), CSV import, the duplicates work.

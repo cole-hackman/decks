@@ -1608,6 +1608,65 @@ fn row_to_smartlist(r: &rusqlite::Row<'_>) -> Result<Smartlist> {
     })
 }
 
+// ── Genre / Artist Cleanup state ─────────────────────────────────────────────
+
+/// Locked values and pinned letters for the cleanup panels (Epic 5).
+///
+/// Neither is scoped by library: a value the user has declared canonical is
+/// canonical for *them*, and re-locking the same fifty genres for every
+/// library would defeat the point of locking.
+impl CacheDb {
+    pub fn list_cleanup_locks(&self, kind: &str) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT value FROM cleanup_locks WHERE kind = ?1 ORDER BY value")?;
+        let rows = stmt.query_map(rusqlite::params![kind], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    /// Lock or unlock a value. Returns the new state, so the caller does not
+    /// have to guess what a toggle did.
+    pub fn toggle_cleanup_lock(&self, kind: &str, value: &str) -> Result<bool> {
+        let removed = self.conn.execute(
+            "DELETE FROM cleanup_locks WHERE kind = ?1 AND value = ?2",
+            rusqlite::params![kind, value],
+        )?;
+        if removed > 0 {
+            return Ok(false);
+        }
+        self.conn.execute(
+            "INSERT OR IGNORE INTO cleanup_locks (kind, value) VALUES (?1, ?2)",
+            rusqlite::params![kind, value],
+        )?;
+        Ok(true)
+    }
+
+    pub fn list_pinned_letters(&self, kind: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT letter FROM cleanup_pinned_letters WHERE kind = ?1 ORDER BY letter",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![kind], |r| r.get::<_, String>(0))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(Into::into)
+    }
+
+    pub fn toggle_pinned_letter(&self, kind: &str, letter: &str) -> Result<bool> {
+        let removed = self.conn.execute(
+            "DELETE FROM cleanup_pinned_letters WHERE kind = ?1 AND letter = ?2",
+            rusqlite::params![kind, letter],
+        )?;
+        if removed > 0 {
+            return Ok(false);
+        }
+        self.conn.execute(
+            "INSERT OR IGNORE INTO cleanup_pinned_letters (kind, letter) VALUES (?1, ?2)",
+            rusqlite::params![kind, letter],
+        )?;
+        Ok(true)
+    }
+}
+
 // ── Backup and restore ───────────────────────────────────────────────────────
 
 impl CacheDb {
@@ -2602,6 +2661,34 @@ mod tests {
         let reloaded = db.get_smartlist("/lib.db", &created.id).unwrap().unwrap();
         assert_eq!(reloaded.clauses, new_clauses);
         assert_eq!(reloaded.parent_folder_id.as_deref(), Some("Lexicon"));
+    }
+
+    // ── cleanup locks ───────────────────────────────────────────────────────
+
+    #[test]
+    fn locking_a_value_toggles_and_reports_the_new_state() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.toggle_cleanup_lock("genre", "Drum & Bass").unwrap());
+        assert_eq!(db.list_cleanup_locks("genre").unwrap(), vec!["Drum & Bass"]);
+        assert!(!db.toggle_cleanup_lock("genre", "Drum & Bass").unwrap());
+        assert!(db.list_cleanup_locks("genre").unwrap().is_empty());
+    }
+
+    #[test]
+    fn locks_are_scoped_by_kind() {
+        // The same string can be a good genre and a misspelt artist.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.toggle_cleanup_lock("genre", "Ambient").unwrap();
+        assert!(db.list_cleanup_locks("artist").unwrap().is_empty());
+    }
+
+    #[test]
+    fn pinned_letters_toggle_and_persist_per_kind() {
+        let db = CacheDb::open_in_memory().unwrap();
+        assert!(db.toggle_pinned_letter("artist", "D").unwrap());
+        assert_eq!(db.list_pinned_letters("artist").unwrap(), vec!["D"]);
+        assert!(db.list_pinned_letters("genre").unwrap().is_empty());
+        assert!(!db.toggle_pinned_letter("artist", "D").unwrap());
     }
 
     // ── undo history ────────────────────────────────────────────────────────

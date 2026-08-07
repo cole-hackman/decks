@@ -1408,3 +1408,28 @@ export async function pickAndInspectBackup(): Promise<BackupSummary | null> {
 export async function restoreBackup(path: string): Promise<RestoreReport> {
   return invoke<RestoreReport>("restore_backup", { path });
 }
+
+// ── Genre / Artist Cleanup state ─────────────────────────────────────────────
+
+export async function listCleanupLocks(kind: string): Promise<string[]> {
+  return invoke<string[]>("list_cleanup_locks", { kind });
+}
+
+/** Returns the new lock state, so the caller need not guess what a toggle did. */
+export async function toggleCleanupLock(
+  kind: string,
+  value: string,
+): Promise<boolean> {
+  return invoke<boolean>("toggle_cleanup_lock", { kind, value });
+}
+
+export async function listPinnedLetters(kind: string): Promise<string[]> {
+  return invoke<string[]>("list_pinned_letters", { kind });
+}
+
+export async function togglePinnedLetter(
+  kind: string,
+  letter: string,
+): Promise<boolean> {
+  return invoke<boolean>("toggle_pinned_letter", { kind, letter });
+}

@@ -317,6 +317,34 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_undo_entries_run ON undo_entries(run_id, seq);
         ",
     ),
+    (
+        14,
+        "
+        -- Genre / Artist Cleanup state (Epic 5).
+        --
+        -- A lock marks a value the user has decided is correct, so a stray
+        -- Cmd+A or shift-click cannot sweep it into a rename. Scoped by `kind`
+        -- ('genre' | 'artist') because the same string can be a good genre and
+        -- a misspelt artist.
+        --
+        -- Not scoped by library_path: a value the user has declared canonical
+        -- is canonical for them, not for one database, and re-locking the same
+        -- fifty genres per library would defeat the point.
+        CREATE TABLE cleanup_locks (
+          kind  TEXT NOT NULL,
+          value TEXT NOT NULL,
+          PRIMARY KEY (kind, value)
+        );
+
+        -- Pinned letters for alphabet navigation, persisted across sessions
+        -- per the spec.
+        CREATE TABLE cleanup_pinned_letters (
+          kind   TEXT NOT NULL,
+          letter TEXT NOT NULL,
+          PRIMARY KEY (kind, letter)
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -526,6 +554,26 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM path_mappings", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn cleanup_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO cleanup_locks (kind, value) VALUES ('genre', 'Ambient');
+             INSERT INTO cleanup_pinned_letters (kind, letter) VALUES ('artist', 'D');",
+        )
+        .unwrap();
+        let locks: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cleanup_locks", [], |r| r.get(0))
+            .unwrap();
+        let letters: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cleanup_pinned_letters", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!((locks, letters), (1, 1));
     }
 
     #[test]

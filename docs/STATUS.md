@@ -1,5 +1,38 @@
 # Status
 
+## 2026-08-06 — Epic 5 (part 8): Genre / Artist Cleanup
+
+**Locking** is the interesting one, and it turns on where it is *not* scoped. By kind
+(`genre` | `artist`), because the same string can be a good genre and a misspelt artist. **Not** by
+library — a value the user has declared canonical is canonical for them, and re-locking the same
+fifty genres for every library would defeat the point of locking. Cache migration **v14**.
+
+The half that matters is `Cmd/Ctrl+A` selecting everything **unlocked**. Select-all is precisely
+the gesture most likely to sweep a good value into a rename, so a lock that did not protect against
+it would be decoration. Locking something already selected also deselects it — otherwise it sits
+there selected and unselectable, which reads as the lock not working.
+
+**Pinned letters** persist the same way. The letter bar only offers letters actually present, so it
+never advertises a jump to nothing; non-alphabetic values group under `#`.
+
+**Alt/Option-click filters the browser**, and the two modes differ honestly: genre has a real
+filter dimension, artist does not, so it goes through the search box — which searches artist among
+other fields, making the result a superset rather than an exact match. Named in the code and the
+spec rather than passed off as a filter.
+
+**Sort by track count (default) or name.** Count sorts descending with name as the tie-break, or
+equal counts shuffle between loads for no reason.
+
+**Not done: the extra artist fields** (`Remixer`, `Producer`, `Composer`, `Lyricist`). `Track` does
+not model them and the core `SELECT` does not read them — the same gap that puts `label`, `mix` and
+`colour` out of scope. They belong with whichever epic widens the track model, not bolted on here.
+
+One thing worth recording about the diff: I rewrote three dialog strings that were not mine to
+change and broke four existing tests doing it. The tests were right; the copy was restored.
+
+Verification: `cargo test --workspace` clean, clippy `-D warnings` clean, `cargo fmt --check`
+clean, `pnpm test` 475, typecheck, lint, `pnpm e2e` 26 — all green.
+
 ## 2026-08-06 — Epic 5 (part 7): Database Backup
 
 `WriteGuard` protects `master.db`. Nothing protected everything `decks` knows that Rekordbox does
