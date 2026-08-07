@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CustomTagsPanel } from "./CustomTagsPanel";
-import { listTagCategories, listTags } from "../ipc";
+import {
+  listTagCategories,
+  listTags,
+  previewMyTagImport,
+  importMyTags,
+} from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 
 vi.mock("../ipc", async () => {
@@ -14,6 +19,8 @@ vi.mock("../ipc", async () => {
     createTagCategory: vi.fn(),
     createTag: vi.fn(),
     deleteTag: vi.fn(),
+    previewMyTagImport: vi.fn(),
+    importMyTags: vi.fn(),
   };
 });
 
@@ -104,5 +111,130 @@ describe("CustomTagsPanel", () => {
     );
     const [, groups] = vi.mocked(onShowTracks).mock.calls[0];
     expect(groups).toEqual([["house", "techno"], ["peak"]]);
+  });
+
+  // ── MyTag import ───────────────────────────────────────────────────────────
+
+  it("does not offer the MyTag import with no library open", async () => {
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    render_();
+    expect(
+      screen.queryByRole("button", { name: "Check for MyTags" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("previews before importing anything", async () => {
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    vi.mocked(previewMyTagImport).mockResolvedValue({
+      new_categories: ["Genre"],
+      new_tags: [["Genre", "Techno"]],
+      existing_tags: 0,
+      new_links: 3,
+      unmatched_links: 0,
+    });
+    const user = userEvent.setup();
+    render_({ libraryPath: "/lib.db" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Check for MyTags" }),
+    );
+    const preview = await screen.findByTestId("mytag-preview");
+    expect(preview).toHaveTextContent("1 new category(ies)");
+    expect(preview).toHaveTextContent("3 new track link(s)");
+    expect(importMyTags).not.toHaveBeenCalled();
+  });
+
+  it("warns when the MyTag data points outside this library", async () => {
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    vi.mocked(previewMyTagImport).mockResolvedValue({
+      new_categories: [],
+      new_tags: [],
+      existing_tags: 4,
+      new_links: 0,
+      unmatched_links: 812,
+    });
+    const user = userEvent.setup();
+    render_({ libraryPath: "/lib.db" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Check for MyTags" }),
+    );
+    expect(
+      await screen.findByText(/812 link\(s\) point at tracks that are not/),
+    ).toBeInTheDocument();
+  });
+
+  it("imports on the second click and reports what it made", async () => {
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    vi.mocked(previewMyTagImport).mockResolvedValue({
+      new_categories: ["Genre"],
+      new_tags: [["Genre", "Techno"]],
+      existing_tags: 0,
+      new_links: 3,
+      unmatched_links: 0,
+    });
+    vi.mocked(importMyTags).mockResolvedValue({
+      categories_created: 1,
+      tags_created: 1,
+      links_created: 3,
+    });
+    const user = userEvent.setup();
+    render_({ libraryPath: "/lib.db" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Check for MyTags" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Import" }));
+    expect(await screen.findByTestId("mytag-done")).toHaveTextContent(
+      "Imported 1 category(ies), 1 tag(s) and 3 track link(s).",
+    );
+  });
+
+  it("says a re-import did nothing rather than claiming success", async () => {
+    // The import is idempotent; reporting "imported 0" as a win would be a lie
+    // about what happened.
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    vi.mocked(previewMyTagImport).mockResolvedValue({
+      new_categories: [],
+      new_tags: [],
+      existing_tags: 2,
+      new_links: 0,
+      unmatched_links: 0,
+    });
+    vi.mocked(importMyTags).mockResolvedValue({
+      categories_created: 0,
+      tags_created: 0,
+      links_created: 0,
+    });
+    const user = userEvent.setup();
+    render_({ libraryPath: "/lib.db" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Check for MyTags" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Import" }));
+    expect(await screen.findByTestId("mytag-done")).toHaveTextContent(
+      /nothing to do/,
+    );
+  });
+
+  it("surfaces a failed preview", async () => {
+    vi.mocked(listTagCategories).mockResolvedValue([]);
+    vi.mocked(listTags).mockResolvedValue([]);
+    vi.mocked(previewMyTagImport).mockRejectedValue(new Error("no such table"));
+    const user = userEvent.setup();
+    render_({ libraryPath: "/lib.db" });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Check for MyTags" }),
+    );
+    expect(await screen.findByTestId("mytag-error")).toHaveTextContent(
+      "no such table",
+    );
   });
 });

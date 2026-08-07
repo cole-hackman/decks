@@ -48,3 +48,19 @@ INSERT INTO djmdSongHistory (ID, HistoryID, ContentID, TrackNo) VALUES
     ('sh3', 'h2', '1', 1),
     ('sh4', 'h2', '3', 2),
     ('sh5', 'h3', '1', 1);
+
+-- MyTags: two categories, four tags, one deleted tag and one deleted link.
+INSERT INTO djmdMyTag (ID, Seq, Name, Attribute, ParentID, rb_local_deleted) VALUES
+    ('mt-genre',  1, 'Genre',      0, 'root',     0),
+    ('mt-vocals', 2, 'Vocals',     0, 'root',     0),
+    ('mt-techno', 1, 'Techno',     1, 'mt-genre', 0),
+    ('mt-house',  2, 'House',      1, 'mt-genre', 0),
+    ('mt-novox',  1, 'No Vocals',  1, 'mt-vocals', 0),
+    ('mt-gone',   3, 'Deleted Tag',1, 'mt-genre', 1);
+
+INSERT INTO djmdSongMyTag (ID, MyTagID, ContentID, rb_local_deleted) VALUES
+    ('smt1', 'mt-techno', '1', 0),
+    ('smt2', 'mt-novox',  '1', 0),
+    ('smt3', 'mt-house',  '2', 0),
+    ('smt4', 'mt-gone',   '2', 0),
+    ('smt5', 'mt-techno', '3', 1);

@@ -5,8 +5,10 @@ import {
   listTags,
   createTag,
   deleteTag,
+  previewMyTagImport,
+  importMyTags,
 } from "../ipc";
-import type { TagCategory, Tag } from "../types";
+import type { TagCategory, Tag, MyTagImportPreview } from "../types";
 import { PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 
 interface Props {
@@ -14,13 +16,29 @@ interface Props {
    *  hands the selected tag IDs back to the parent (which typically updates
    *  the library filter and switches view). */
   onShowTracks?: (tagIds: string[], tagGroups: string[][]) => void;
+  /** Needed to read Rekordbox's own MyTags. Absent when no library is open. */
+  libraryPath?: string | null;
 }
 
-export function CustomTagsPanel({ onShowTracks }: Props = {}) {
+export function CustomTagsPanel({ onShowTracks, libraryPath }: Props = {}) {
   const [categories, setCategories] = useState<TagCategory[]>([]);
   const [tags, setTags] = useState<Record<string, Tag[]>>({});
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  /**
+   * The MyTag import, previewed before it runs.
+   *
+   * The spec has Rekordbox MyTags import *automatically*. Here it is
+   * preview-then-apply like every other bulk operation: this merges a second
+   * taxonomy into the user's own tag tree, and doing that unannounced is how a
+   * tag list becomes unusable.
+   */
+  const [importPreview, setImportPreview] = useState<MyTagImportPreview | null>(
+    null,
+  );
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importDone, setImportDone] = useState<string | null>(null);
 
   /**
    * Selected ids grouped by the category they came from.
@@ -86,6 +104,38 @@ export function CustomTagsPanel({ onShowTracks }: Props = {}) {
     }
   };
 
+  const runPreview = async () => {
+    if (!libraryPath) return;
+    setImportError(null);
+    setImportDone(null);
+    try {
+      setImportPreview(await previewMyTagImport(libraryPath));
+    } catch (e) {
+      setImportError(String(e));
+    }
+  };
+
+  const runImport = async () => {
+    if (!libraryPath) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const result = await importMyTags(libraryPath);
+      setImportPreview(null);
+      setImportDone(
+        result.categories_created + result.tags_created + result.links_created >
+          0
+          ? `Imported ${result.categories_created} category(ies), ${result.tags_created} tag(s) and ${result.links_created} track link(s).`
+          : "Everything was already imported — nothing to do.",
+      );
+      await loadData();
+    } catch (e) {
+      setImportError(String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const toggleCat = (id: string) => {
     const next = new Set(expandedCats);
     if (next.has(id)) next.delete(id);
@@ -114,6 +164,68 @@ export function CustomTagsPanel({ onShowTracks }: Props = {}) {
           Category
         </button>
       </div>
+
+      {libraryPath && (
+        <section
+          className="mb-3 rounded-md border border-edge bg-base p-2 text-xs"
+          aria-label="Rekordbox MyTags"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-ink-secondary">
+              Rekordbox MyTags
+            </span>
+            <button
+              type="button"
+              onClick={runPreview}
+              className="rounded border border-edge px-2 py-0.5 text-ink-secondary hover:border-edge-strong hover:text-ink"
+            >
+              Check for MyTags
+            </button>
+          </div>
+
+          {importPreview && (
+            <div className="mt-2" data-testid="mytag-preview">
+              <p className="text-ink">
+                {importPreview.new_categories.length} new category(ies),{" "}
+                {importPreview.new_tags.length} new tag(s),{" "}
+                {importPreview.new_links} new track link(s).
+                {importPreview.existing_tags > 0 && (
+                  <span className="text-ink-muted">
+                    {" "}
+                    {importPreview.existing_tags} tag(s) already here will be
+                    reused.
+                  </span>
+                )}
+              </p>
+              {importPreview.unmatched_links > 0 && (
+                <p className="mt-1 text-[11px] text-amber-500">
+                  {importPreview.unmatched_links} link(s) point at tracks that
+                  are not in this library, and will be skipped.
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={importing}
+                onClick={runImport}
+                className="mt-2 rounded bg-accent px-2 py-0.5 text-xs font-medium text-base hover:bg-accent-hover disabled:opacity-50"
+              >
+                {importing ? "Importing…" : "Import"}
+              </button>
+            </div>
+          )}
+
+          {importDone && (
+            <p className="mt-2 text-ink-secondary" data-testid="mytag-done">
+              {importDone}
+            </p>
+          )}
+          {importError && (
+            <p className="mt-2 text-red-400" data-testid="mytag-error">
+              {importError}
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {categories.length === 0 ? (

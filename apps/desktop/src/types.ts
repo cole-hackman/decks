@@ -1292,3 +1292,22 @@ export interface CuePreset {
   /** 1–8 for the presets that carry a number key; null beyond that. */
   hotkey: number | null;
 }
+
+// ── MyTag import (Epic 5) ────────────────────────────────────────────────────
+
+export interface MyTagImportPreview {
+  new_categories: string[];
+  /** `[category, tag]` pairs. */
+  new_tags: [string, string][];
+  existing_tags: number;
+  new_links: number;
+  /** Links whose track is not in this library — a large number means the
+   *  MyTag data came from a different collection. */
+  unmatched_links: number;
+}
+
+export interface MyTagImportResult {
+  categories_created: number;
+  tags_created: number;
+  links_created: number;
+}
