@@ -16,6 +16,14 @@ export function useAudioPlayer(selectedTrack: Track | null) {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  /**
+   * Timestamp of the last natural end-of-track, or `null`.
+   *
+   * A monotonically increasing value rather than a boolean, so a consumer
+   * (the play queue) can tell two consecutive ends apart — a boolean would
+   * stay `true` and the second track would never advance.
+   */
+  const [endedAt, setEndedAt] = useState<number | null>(null);
   const stoppedRef = useRef(false);
 
   const play = useCallback(async (track: Track) => {
@@ -96,6 +104,7 @@ export function useAudioPlayer(selectedTrack: Track | null) {
   useEffect(() => {
     const unlistenPromise = listen("playback-ended", () => {
       setIsPlaying(false);
+      setEndedAt(Date.now());
     });
     return () => {
       void unlistenPromise.then((un) => un());
@@ -113,6 +122,7 @@ export function useAudioPlayer(selectedTrack: Track | null) {
     currentPath,
     currentTime,
     duration,
+    endedAt,
     play,
     pause,
     resume,
