@@ -42,7 +42,10 @@ export function useFilterContext(
     queryKey: ["tracks-with-missing-files", libraryPath],
     queryFn: () => listTracksWithMissingFiles(libraryPath!),
     enabled: libraryPath !== null && enableMissingFiles,
-    staleTime: Infinity,
+    // Five minutes, matching the shell's own memo. `Infinity` here would mean
+    // a file restored on disk stayed marked missing until the app restarted —
+    // the shell would happily re-scan, but nothing would ever ask it to.
+    staleTime: 5 * 60 * 1000,
   });
 
   const tagBindings = useQuery<Record<string, string[]>, Error>({

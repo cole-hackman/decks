@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { FolderSearch, Check } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { relocateScan, stageChange } from "../ipc";
+import {
+  applyMergeRelocate,
+  classifyRelocateTarget,
+  planMergeRelocate,
+  relocateScan,
+  stageChange,
+} from "../ipc";
 import type { RelocateCandidate } from "../types";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -13,6 +19,19 @@ export function RelocateBanner({ libraryPath }: Props) {
   const [scanning, setScanning] = useState(false);
   const [candidates, setCandidates] = useState<RelocateCandidate[]>([]);
   const [hasScanned, setHasScanned] = useState(false);
+  /**
+   * A relocate whose target file is already claimed by another library entry.
+   *
+   * Per `docs/lexicon/07-health.md`, that is not a refusal — it is a
+   * choose-which-to-keep merge, and it doubles as the mechanism for turning a
+   * streaming entry into a local file.
+   */
+  const [merge, setMerge] = useState<{
+    trackId: string;
+    newPath: string;
+    existingId: string;
+    existingLabel: string;
+  } | null>(null);
   const queryClient = useQueryClient();
 
   const handleScan = async () => {
@@ -38,12 +57,54 @@ export function RelocateBanner({ libraryPath }: Props) {
     }
   };
 
+  const afterStage = async () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["staged-changes", libraryPath] }),
+      queryClient.invalidateQueries({ queryKey: ["library", libraryPath] }),
+      queryClient.invalidateQueries({
+        queryKey: ["tracks-with-missing-files", libraryPath],
+      }),
+    ]);
+
+  const runMerge = async (keepMoving: boolean) => {
+    if (!merge) return;
+    try {
+      const plan = await planMergeRelocate(
+        libraryPath,
+        merge.trackId,
+        merge.existingId,
+        merge.newPath,
+        keepMoving,
+      );
+      await applyMergeRelocate(libraryPath, plan);
+      setCandidates((prev) => prev.filter((c) => c.track_id !== merge.trackId));
+      setMerge(null);
+      await afterStage();
+    } catch (err) {
+      console.error("Failed to merge relocation:", err);
+    }
+  };
+
   const handleApply = async (
     trackId: string,
     oldPath: string,
     newPath: string,
   ) => {
     try {
+      // Ask before staging. Two library rows pointing at one file is the state
+      // the spec's constraint exists to prevent, and the merge is the way out
+      // of it rather than an error message.
+      const target = await classifyRelocateTarget(libraryPath, trackId, newPath);
+      if (typeof target === "object" && "Occupied" in target) {
+        const { track_id, title, artist } = target.Occupied;
+        setMerge({
+          trackId,
+          newPath,
+          existingId: track_id,
+          existingLabel: artist ? `${artist} — ${title}` : title,
+        });
+        return;
+      }
       await stageChange({
         library_path: libraryPath,
         // Not a TrackMetadataEdit: "folder_path" is not a djmdContent column
@@ -62,13 +123,7 @@ export function RelocateBanner({ libraryPath }: Props) {
         confidence: 1.0,
       });
       setCandidates((prev) => prev.filter((c) => c.track_id !== trackId));
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["staged-changes", libraryPath] }),
-        queryClient.invalidateQueries({ queryKey: ["library", libraryPath] }),
-        queryClient.invalidateQueries({
-          queryKey: ["tracks-with-missing-files", libraryPath],
-        }),
-      ]);
+      await afterStage();
     } catch (err) {
       console.error("Failed to stage relocation:", err);
     }
@@ -76,6 +131,44 @@ export function RelocateBanner({ libraryPath }: Props) {
 
   return (
     <div className="flex shrink-0 flex-col border-b border-edge bg-surface/50">
+      {merge && (
+        <div
+          role="dialog"
+          aria-label="File already in library"
+          data-testid="relocate-merge"
+          className="border-b border-edge bg-base px-4 py-3 text-[12px]"
+        >
+          <p className="text-ink">
+            That file is already in your library as{" "}
+            <strong>{merge.existingLabel}</strong>. Keeping both would leave two
+            entries pointing at one file, so one of them has to go — the other
+            is replaced everywhere it appears in a playlist.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => runMerge(true)}
+              className="rounded bg-accent px-2 py-1 font-medium text-base hover:bg-accent-hover"
+            >
+              Keep the missing entry
+            </button>
+            <button
+              type="button"
+              onClick={() => runMerge(false)}
+              className="rounded border border-edge px-2 py-1 text-ink hover:border-edge-strong"
+            >
+              Keep {merge.existingLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMerge(null)}
+              className="ml-auto text-ink-muted hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-status-warn/20 text-status-warn">

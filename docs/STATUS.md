@@ -1,5 +1,44 @@
 # Status
 
+## 2026-08-07 — Find Lost Tracks, finished
+
+The two outstanding halves of Relocate: merging onto a file another entry already claims, and the
+5-minute re-check cadence.
+
+**The merge did not need new playlist logic, and deliberately does not have any.** Relocating track
+A onto track B's file means "these are the same track, keep one" — which is exactly what resolving
+a duplicate group does. `relocate_merge` builds the plan and hands it to
+`duplicates::plan_duplicate_resolution` / `resolve_duplicates`. A second implementation would drift,
+and it would drift first on the case that took longest to get right there: a playlist that already
+holds the keeper, where the loser is removed rather than swapped.
+
+Three decisions:
+
+- **Path comparison normalises separators and case.** Rekordbox stores whatever the OS handed it,
+  so `D:\Music\B.mp3` and `d:/music/b.mp3` are one file. Treating them as distinct would create
+  exactly the two-rows-one-file state the spec's constraint exists to prevent — a collision-check
+  that misses collisions is worse than none.
+- **Keeping the existing entry moves no path.** The file was already correctly attached to a row;
+  the missing row was the mistake. Only the other branch stages a `TrackRelocate`.
+- **That relocate records no old path.** The track is missing, so its stored path points at nothing
+  — writing it into the change would hand undo a known-broken path to restore.
+
+**The cadence is an in-memory memo**, which is what makes the spec's "restarting forces a re-check"
+free: a fresh process has nothing to serve. Exactly five minutes counts as **stale**, because "at
+most every 5 minutes" puts the boundary on the re-scanning side. A clock that moved backwards
+expires the memo rather than freezing it — a naive `now - then < window` treats a negative age as
+fresh forever. And forcing a check **invalidates** rather than bypassing, so the forced answer is
+also what everything else then sees; a bypass would leave the browser on a stale list while the
+Edit popup showed a fresh one.
+
+The frontend query's `staleTime` was `Infinity`, which meant a file restored on disk stayed marked
+missing until the app restarted — the shell would have re-scanned happily, but nothing ever asked.
+It now matches the shell's five minutes.
+
+**Next:** Automatic Actions (only auto-analyse of five is wired; several were blocked on fields
+`Track` now carries), the hidden-memory-cue round-trip for Cue Destination. Album art and
+`crates/enrichment` still need the provider decision.
+
 ## 2026-08-07 — Modified Sync gets a watermark; Full-Sync delete does not exist
 
 Two halves of one parity row, and only one of them was buildable.

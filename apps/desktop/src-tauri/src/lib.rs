@@ -9,12 +9,14 @@ mod cue_generator;
 mod cues;
 mod duplicates;
 mod history;
+mod missing_files;
 mod mixable;
 mod multi_edit;
 mod mytag_import;
 mod organizer;
 mod playlist_tools;
 mod recipes;
+mod relocate_merge;
 mod share;
 mod smartlists;
 mod sync_mappings;
@@ -1354,33 +1356,6 @@ async fn list_tracks_in_any_playlist(path: String) -> Result<Vec<String>, String
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&path))
             .map_err(|e| e.to_string())?;
         db.track_ids_in_any_playlist().map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn list_tracks_with_missing_files(
-    app: tauri::AppHandle,
-    path: String,
-) -> Result<Vec<String>, String> {
-    // A track that a Local Path Mapping resolves is not missing — reporting it
-    // would send the user relocating files that are already there.
-    let mappings = organizer::path_mappings(&app);
-    tauri::async_runtime::spawn_blocking(move || {
-        let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&path))
-            .map_err(|e| e.to_string())?;
-        let tracks = db.tracks().map_err(|e| e.to_string())?;
-        Ok(tracks
-            .into_iter()
-            .filter(|t| {
-                t.folder_path
-                    .as_deref()
-                    .map(|p| !mappings.resolve(p).exists())
-                    .unwrap_or(false)
-            })
-            .map(|t| t.id)
-            .collect())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2968,6 +2943,10 @@ pub fn run() {
             app.manage(std::sync::Mutex::new(
                 decks_core::rekordbox_db::WriteSession::new(),
             ));
+            // Missing-file scans are memoised for five minutes, per
+            // `docs/lexicon/07-health.md`. In memory rather than in the cache
+            // DB, which is what makes "restarting forces a re-check" free.
+            app.manage(missing_files::MissingCache::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -3127,7 +3106,8 @@ pub fn run() {
             smartlists::smartlist_compatibility,
             list_tracks_with_cues,
             list_tracks_in_any_playlist,
-            list_tracks_with_missing_files,
+            missing_files::list_tracks_with_missing_files,
+            missing_files::invalidate_missing_files,
             library_analytics,
             analyze_track,
             get_audio_waveform,
@@ -3135,6 +3115,9 @@ pub fn run() {
             get_row_waveforms,
             read_audio_tags,
             write_audio_tags,
+            relocate_merge::classify_relocate_target,
+            relocate_merge::plan_merge_relocate,
+            relocate_merge::apply_merge_relocate,
             relocate_scan,
             get_theme,
             set_theme,
