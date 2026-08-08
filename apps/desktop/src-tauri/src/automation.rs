@@ -1,10 +1,17 @@
 //! Automatic Actions (Epic 4) — background behaviours the user opts into once.
 //!
 //! Per `docs/lexicon/00-overview.md §Automatic Actions`. Five settings, of
-//! which `decks` can currently honour one; the rest are reported as
+//! which `decks` can currently honour two; the rest are reported as
 //! **unavailable with the reason**, rather than offered as toggles that quietly
 //! do nothing. A switch that does not switch anything is worse than a switch
 //! that says why it is off.
+//!
+//! The three that remain unavailable are blocked on genuinely absent work, and
+//! their reasons say which: structural drop detection, the Beatshift Fixer, and
+//! the enrichment providers. `AUTO_WRITE_TAGS` was on that list citing field
+//! mappings, which have existed since Epic 4 — a stale blocker outliving the
+//! thing that caused it, which is its own kind of lie about what the app can
+//! do.
 //!
 //! The recurring rule from the spec, which carries here: automation applies to
 //! tracks the user brought in, never to tracks imported from a DJ app.
@@ -60,8 +67,8 @@ fn definitions() -> Vec<(
         (
             AUTO_WRITE_TAGS,
             "Auto-write file tags",
-            "Write tags to the files whenever a change is detected.",
-            Some("Needs field mappings, so Lexicon-only fields project into real tag fields on the way out. Write Tags in the Files view does this manually today."),
+            "Write detected BPM and key back into an arriving file's tags. Only ever applied to tracks you brought in, never to tracks that came from Rekordbox — and only when the analysis is confident.",
+            None,
         ),
         (
             AUTO_FIND_TAGS,
@@ -146,15 +153,30 @@ mod tests {
     }
 
     #[test]
-    fn only_the_action_we_can_honour_is_available() {
-        // Deliberate: the other four are surfaced with a reason rather than
+    fn only_the_actions_we_can_honour_are_available() {
+        // Deliberate: the other three are surfaced with a reason rather than
         // offered as toggles that quietly do nothing.
         let available: Vec<_> = definitions()
             .into_iter()
             .filter(|(_, _, _, u)| u.is_none())
             .map(|(k, _, _, _)| k)
             .collect();
-        assert_eq!(available, vec![AUTO_ANALYZE]);
+        assert_eq!(available, vec![AUTO_ANALYZE, AUTO_WRITE_TAGS]);
+    }
+
+    /// A blocker that outlives its cause is its own kind of lie about the app.
+    #[test]
+    fn no_action_is_blocked_on_field_mappings_any_more() {
+        // Field mappings shipped in Epic 4, and the Rekordbox profile in a
+        // later one. `AUTO_WRITE_TAGS` was still citing them as missing.
+        for (key, _, _, unavailable) in definitions() {
+            if let Some(reason) = unavailable {
+                assert!(
+                    !reason.contains("field mappings"),
+                    "{key} still claims field mappings are missing"
+                );
+            }
+        }
     }
 
     #[test]

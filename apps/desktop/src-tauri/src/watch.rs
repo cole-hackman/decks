@@ -128,6 +128,51 @@ pub struct ImportResult {
     /// tracks" is on. Reported so the UI can say it happened rather than
     /// leaving the user wondering why the import took longer.
     pub analysed: Vec<String>,
+    /// Files whose tags were rewritten, because "Auto-write file tags" is on.
+    /// Reported separately from `analysed`: analysis is read-only, writing
+    /// touches the user's file, and the two should never be confused in a
+    /// summary line.
+    pub tagged: Vec<String>,
+    /// `(path, reason)` where a tag write was skipped or failed. Surfaced
+    /// rather than swallowed — a silent skip on a setting the user turned on
+    /// looks like the setting does not work.
+    pub tag_skipped: Vec<(String, String)>,
+}
+
+/// Below this, an analysis result is not written into the user's file.
+///
+/// Auto-writing means overwriting whatever BPM or key tag the file already
+/// carried, without anyone looking at it. A low-confidence detection is a
+/// guess, and ADR-0008 is explicit that a guess must not be presented — still
+/// less written — as fact. The threshold is deliberately high: the cost of not
+/// writing is that the user does it by hand, and the cost of writing wrongly is
+/// a corrupted tag they may never notice.
+const AUTO_WRITE_MIN_CONFIDENCE: f64 = 0.75;
+
+/// Write a confident analysis result back into the file's tags.
+///
+/// Returns `Ok(false)` when the result was not confident enough — a skip, not
+/// a failure, and reported as such.
+///
+/// Only BPM and key are written. Everything else in the file's tags came *from*
+/// the file moments earlier, so writing it back would be a no-op that still
+/// rewrites the user's file — and every rewrite is a chance to lose a frame
+/// `lofty` does not model.
+fn write_analysis_tags(
+    path: &Path,
+    analysis: &audio_analysis::AnalysisResult,
+) -> Result<bool, String> {
+    if analysis.confidence < AUTO_WRITE_MIN_CONFIDENCE {
+        return Ok(false);
+    }
+    let fields = audio_tags::TagWriteFields {
+        bpm: Some(analysis.bpm),
+        musical_key: Some(analysis.musical_key.clone()),
+        ..Default::default()
+    };
+    audio_tags::write_tag_fields(path, &fields)
+        .map(|_| true)
+        .map_err(|e| e.to_string())
 }
 
 /// Stage arrivals for import as `TrackCreate` changes.
@@ -137,10 +182,14 @@ pub struct ImportResult {
 /// since it has now been dealt with — otherwise the next scan offers it again
 /// and the user stages it twice.
 ///
-/// When "Auto-analyse new tracks" is on, BPM and key are detected here too.
+/// When "Auto-analyse new tracks" is on, BPM and key are detected here too, and
+/// with "Auto-write file tags" also on they are written back into the file.
 /// This is the one place the spec's rule bites: automation applies to tracks
 /// the user brought in, never to tracks that came from Rekordbox — and an
 /// arrival is by definition the former.
+///
+/// Tag writing requires analysis, because without it there is nothing new to
+/// write: the tags were read off this very file a few lines earlier.
 #[tauri::command]
 pub async fn stage_arrival_imports(
     app: tauri::AppHandle,
@@ -148,6 +197,10 @@ pub async fn stage_arrival_imports(
     paths: Vec<String>,
 ) -> Result<ImportResult, String> {
     let auto_analyse = crate::automation::is_enabled(&app, crate::automation::AUTO_ANALYZE);
+    // Writing tags without analysing first would have nothing new to write —
+    // the tags were just read off this very file.
+    let auto_write_tags =
+        auto_analyse && crate::automation::is_enabled(&app, crate::automation::AUTO_WRITE_TAGS);
     tauri::async_runtime::spawn_blocking(move || {
         let cache = cache_db(&app)?;
         let mut result = ImportResult::default();
@@ -191,7 +244,23 @@ pub async fn stage_arrival_imports(
                 // Analysis failing must not undo an import that already
                 // succeeded — a track with no BPM yet is still a track.
                 match audio_analysis::analyze_file_cached(Path::new(&path), &path, &cache) {
-                    Ok(_) => result.analysed.push(path.clone()),
+                    Ok(analysis) => {
+                        result.analysed.push(path.clone());
+                        if auto_write_tags {
+                            match write_analysis_tags(Path::new(&path), &analysis) {
+                                Ok(true) => result.tagged.push(path.clone()),
+                                Ok(false) => result.tag_skipped.push((
+                                    path.clone(),
+                                    format!(
+                                        "analysis confidence {:.0}% is below the {:.0}% needed to overwrite a tag",
+                                        analysis.confidence * 100.0,
+                                        AUTO_WRITE_MIN_CONFIDENCE * 100.0
+                                    ),
+                                )),
+                                Err(e) => result.tag_skipped.push((path.clone(), e)),
+                            }
+                        }
+                    }
                     Err(e) => tracing::warn!(path = %path, error = %e, "auto-analysis failed"),
                 }
             }
@@ -208,4 +277,51 @@ pub async fn stage_arrival_imports(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn analysis(confidence: f64) -> audio_analysis::AnalysisResult {
+        audio_analysis::AnalysisResult {
+            bpm: 128.0,
+            musical_key: "8A".into(),
+            confidence,
+            bpm_confidence: confidence,
+            key_confidence: confidence,
+            cached: false,
+        }
+    }
+
+    /// The guard that keeps auto-write honest.
+    #[test]
+    fn a_low_confidence_analysis_is_not_written_into_the_users_file() {
+        // Auto-writing overwrites whatever BPM or key tag the file carried,
+        // with nobody looking. A guess written as fact is exactly what ADR-0008
+        // forbids — and a wrong tag is one the user may never notice.
+        //
+        // The path is never touched, so a `false` here proves the confidence
+        // check short-circuits before any file access.
+        let missing = Path::new("/definitely/not/a/file.mp3");
+        assert_eq!(write_analysis_tags(missing, &analysis(0.4)), Ok(false));
+        assert_eq!(write_analysis_tags(missing, &analysis(0.74)), Ok(false));
+    }
+
+    #[test]
+    fn a_confident_analysis_gets_as_far_as_the_file() {
+        // At or above the threshold it stops being a skip and becomes a real
+        // write attempt — which fails here only because the path is fake.
+        let missing = Path::new("/definitely/not/a/file.mp3");
+        assert!(
+            write_analysis_tags(missing, &analysis(0.75)).is_err(),
+            "0.75 should have attempted the write rather than skipping"
+        );
+    }
+
+    #[test]
+    fn the_threshold_is_stated_rather_than_implied() {
+        // A magic number in a branch is a decision nobody can find later.
+        assert_eq!(AUTO_WRITE_MIN_CONFIDENCE, 0.75);
+    }
 }

@@ -521,6 +521,16 @@ export interface WatchScan {
 export interface ImportResult {
   staged: string[];
   failed: [string, string][];
+  /** Analysed on the way in, because "Auto-analyse new tracks" is on.
+   *  Optional: a shell built before this field existed simply omits it. */
+  analysed?: string[];
+  /** Files whose tags were rewritten, because "Auto-write file tags" is on.
+   *  Kept separate from `analysed`: analysis is read-only, writing touches the
+   *  user's file, and a summary should never blur the two. */
+  tagged?: string[];
+  /** `(path, reason)` where a tag write was skipped or failed — surfaced, not
+   *  swallowed, so a setting the user turned on never looks broken. */
+  tag_skipped?: [string, string][];
 }
 
 export interface AutomaticAction {
