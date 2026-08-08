@@ -46,6 +46,9 @@ beforeEach(() => {
   vi.mocked(stageArrivalImports).mockResolvedValue({
     staged: ["c1", "c2"],
     failed: [],
+    analysed: [],
+    tagged: [],
+    tag_skipped: [],
   });
 });
 
@@ -149,6 +152,9 @@ describe("WatchFolderPanel", () => {
     vi.mocked(stageArrivalImports).mockResolvedValue({
       staged: [],
       failed: [["/Watch/new track.mp3", "unsupported format"]],
+      analysed: [],
+      tagged: [],
+      tag_skipped: [],
     });
     renderPanel();
     await user.click(await screen.findByRole("button", { name: "Import all" }));
@@ -165,5 +171,65 @@ describe("WatchFolderPanel", () => {
     });
     expect(screen.queryByText(/folder gone/)).not.toBeInTheDocument();
     spy.mockRestore();
+  });
+
+  it("says when files were analysed and tagged, and keeps the two apart", async () => {
+    // Analysis reads the file; tagging rewrites it. A summary that blurred
+    // them would hide the fact that files on disk changed.
+    const user = userEvent.setup();
+    vi.mocked(stageArrivalImports).mockResolvedValue({
+      staged: ["c1", "c2"],
+      failed: [],
+      analysed: ["/Watch/a.mp3", "/Watch/b.mp3"],
+      tagged: ["/Watch/a.mp3"],
+      tag_skipped: [],
+    });
+
+    renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Import all" }));
+    expect(
+      await screen.findByText(/2 analysed, 1 tagged/),
+    ).toBeInTheDocument();
+  });
+
+  it("explains a skipped tag write instead of staying quiet about it", async () => {
+    // A setting the user turned on that silently does nothing looks broken.
+    const user = userEvent.setup();
+    vi.mocked(stageArrivalImports).mockResolvedValue({
+      staged: ["c1"],
+      failed: [],
+      analysed: ["/Watch/a.mp3"],
+      tagged: [],
+      tag_skipped: [["/Watch/a.mp3", "analysis confidence 40% is below the 75% needed to overwrite a tag"]],
+    });
+
+    renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Import all" }));
+    expect(
+      await screen.findByText(/below the 75% needed to overwrite a tag/),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing extra when neither automation is on", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Import all" }));
+    const toast = await screen.findByText(/Staged 2 new track\(s\)/);
+    expect(toast).not.toHaveTextContent(/analysed|tagged/);
+  });
+
+  it("survives a shell that does not know the new fields", async () => {
+    // An older shell resolves successfully without them. `.length` on
+    // undefined would take the whole import down — the same failure the
+    // cue-presets null once caused, which cost a bisect to find.
+    const user = userEvent.setup();
+    vi.mocked(stageArrivalImports).mockResolvedValue({
+      staged: ["c1"],
+      failed: [],
+    } as never);
+
+    renderPanel();
+    await user.click(await screen.findByRole("button", { name: "Import all" }));
+    expect(await screen.findByText(/Staged 1 new track/)).toBeInTheDocument();
   });
 });

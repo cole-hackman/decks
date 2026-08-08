@@ -1,5 +1,40 @@
 # Status
 
+## 2026-08-07 — Auto-write file tags, and a blocker that had outlived its cause
+
+Audited the four disabled Automatic Actions against what the last few PRs shipped. Three are still
+genuinely blocked — drop detection, the Beatshift Fixer, the enrichment providers. The fourth was
+not blocked at all.
+
+**`AUTO_WRITE_TAGS` claimed it needed field mappings.** Those shipped in Epic 4, and Write Tags has
+honoured them ever since; the Rekordbox profile landed earlier today. The blocker text had simply
+outlived its cause, and a stale blocker is its own kind of lie about what the app can do — it reads
+exactly like an honest "not yet" while being false. There is now a test asserting no action still
+claims field mappings are missing.
+
+So it ships. Three decisions:
+
+- **It requires auto-analysis to be on.** Without it there is nothing new to write — the tags were
+  read off that very file a few lines earlier, so writing them back would rewrite the user's file
+  to no effect.
+- **Only BPM and key.** Everything else came from the file. Every rewrite is a chance to lose a
+  frame `lofty` does not model, and there is no reason to spend that risk on a no-op.
+- **A confidence floor of 0.75, stated as a named constant.** Auto-writing overwrites whatever tag
+  the file carried with nobody looking. ADR-0008 forbids presenting a guess as fact; writing one
+  into the user's file is worse. Below the floor it is reported as a **skip with the reason** —
+  a setting you turned on that silently does nothing looks broken.
+
+The import summary now separates *analysed* from *tagged*. One reads the file, the other rewrites
+it, and a count that blurred the two would hide the fact that files on disk changed.
+
+**One divergence recorded rather than built:** the spec skips auto-tag-writing for bulk edits over
+1,000 tracks. `decks` needs no such rule, because auto-writing only fires on watch-folder arrivals
+— there is no bulk path that triggers it. If one is added, the cap comes with it.
+
+**Next:** the hidden-memory-cue round-trip for Cue Destination; folder-drop and drag-between in the
+playlists tree. Album art and `crates/enrichment` still need the provider decision, which also
+unblocks the last of the Automatic Actions.
+
 ## 2026-08-07 — Find Lost Tracks, finished
 
 The two outstanding halves of Relocate: merging onto a file another entry already claims, and the

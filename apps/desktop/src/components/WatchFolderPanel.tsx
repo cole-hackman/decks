@@ -103,9 +103,32 @@ export function WatchFolderPanel({ libraryPath }: Props) {
             message: `Staged ${result.staged.length}, failed ${result.failed.length}: ${result.failed[0][1]}`,
           });
         } else {
+          // Analysed and tagged are reported separately: one reads the file,
+          // the other rewrites it, and a summary that blurs them would hide
+          // the fact that files on disk changed.
+          // Guard the *shape*, not just a rejection. A shell built before
+          // these fields existed resolves successfully without them, and
+          // `.length` on undefined would take the whole import down — the same
+          // failure the cue-presets null once caused.
+          const analysed = result.analysed ?? [];
+          const tagged = result.tagged ?? [];
+          const tagSkipped = result.tag_skipped ?? [];
+          const extra = [
+            analysed.length > 0 ? `${analysed.length} analysed` : null,
+            tagged.length > 0 ? `${tagged.length} tagged` : null,
+          ].filter(Boolean);
           toast({
             variant: "success",
-            message: `Staged ${result.staged.length} new track(s). Export the XML and import it in Rekordbox — sync cannot add tracks.`,
+            message:
+              `Staged ${result.staged.length} new track(s)` +
+              (extra.length > 0 ? ` (${extra.join(", ")})` : "") +
+              ". Export the XML and import it in Rekordbox — sync cannot add tracks.",
+            // A skip on a setting the user turned on has to say why, or the
+            // setting looks broken.
+            detail:
+              tagSkipped.length > 0
+                ? `Tags not written for ${tagSkipped.length} file(s): ${tagSkipped[0][1]}`
+                : undefined,
           });
         }
         await rescan();

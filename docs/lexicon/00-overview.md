@@ -123,18 +123,40 @@ The recurring pattern — *automation applies to tracks the user brought in, nev
 from a DJ app* — is a good default and should carry into `decks`.
 
 *decks status* — **partial.** The settings group exists (`AutomaticActionsSection`, Settings), and
-**Auto Analyze New Tracks** works: importing a watch-folder arrival detects BPM and key on the way
-in, and analysis failing does not undo an import that already succeeded.
+**two of the five** work.
 
-The other four are surfaced as **disabled toggles that state what they need**, rather than hidden or
-offered as switches that quietly do nothing:
+**Auto Analyze New Tracks** — importing a watch-folder arrival detects BPM and key on the way in,
+and analysis failing does not undo an import that already succeeded.
+
+**Auto Write File (ID3) Tags** — a confident analysis result is written back into the arriving
+file's tags. Three decisions:
+
+- **It requires auto-analysis.** Without it there is nothing new to write: the tags were read off
+  that very file moments earlier.
+- **Only BPM and key are written.** Everything else came *from* the file, so writing it back would
+  be a no-op that still rewrites the user's file — and every rewrite risks losing a frame `lofty`
+  does not model.
+- **A confidence floor of 0.75.** Auto-writing overwrites whatever tag the file carried with nobody
+  looking, and ADR-0008 forbids presenting a guess as fact — writing one is worse. Below the floor
+  it is reported as a skip *with the reason*, because a setting the user turned on that silently
+  does nothing looks broken.
+
+This one had been listed as blocked on field mappings, which have existed since Epic 4. A blocker
+that outlives its cause is its own kind of lie about what the app can do, and there is now a test
+asserting no action still claims field mappings are missing.
+
+The other three are surfaced as **disabled toggles that state what they need**, rather than hidden
+or offered as switches that quietly do nothing:
 
 | Setting | Blocked on |
 |---|---|
 | Auto Generate Cues on Play | Automatic drop detection. Every anchor today comes from a cue the user placed, so there is nothing to generate from on a track with no cues — the setting would be a permanent no-op. |
 | Auto Re-encode New MP3/MP4/M4A | The Beatshift Fixer, not built. |
-| Auto Write File (ID3) Tags | Field mappings, so Lexicon-only fields project into real tag fields. Write Tags in the Files view does this manually today. |
 | Automatically Find Custom Tags | The enrichment providers, not wired up. |
+
+**A divergence worth naming:** the spec skips auto-tag-writing for bulk edits over 1,000 tracks.
+`decks` does not need the rule, because auto-writing only ever fires on watch-folder arrivals —
+there is no bulk-edit path that triggers it. If one is ever added, the cap comes with it.
 
 An unavailable action also reads as *off* at the point of use regardless of what is stored, so a
 setting enabled before its feature regressed cannot silently take effect.

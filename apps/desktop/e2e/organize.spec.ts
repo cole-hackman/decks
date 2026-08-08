@@ -174,7 +174,13 @@ test.beforeEach(async ({ page }) => {
             case "stage_arrival_imports": {
               const paths = args.paths as string[];
               ignored = [...ignored, ...paths];
-              return { staged: paths.map((_, i) => `c${i}`), failed: [] };
+              return {
+                staged: paths.map((_, i) => `c${i}`),
+                failed: [],
+                analysed: [],
+                tagged: [],
+                tag_skipped: [],
+              };
             }
             case "dismiss_arrivals":
               ignored = [...ignored, ...(args.paths as string[])];

@@ -2584,6 +2584,39 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (auto-write tags, and a stale blocker)
+
+The task was "check which Automatic Actions the recent work unblocked". The answer was one, but not
+for the reason I expected.
+
+Three of the four disabled actions are still honestly blocked: drop detection does not exist, the
+Beatshift Fixer does not exist, the enrichment providers are waiting on a decision from the user.
+The fourth, `AUTO_WRITE_TAGS`, said it needed field mappings — which shipped in **Epic 4**, months
+of work ago, and which `write_tags` has honoured the whole time.
+
+That is worth dwelling on. The blocker text was not wrong when written. It became wrong, silently,
+and then sat there reading exactly like an honest "we cannot do this yet". A user reading the
+settings panel would have believed the app was less capable than it was, and nothing in the tests
+cared. So there is now a test asserting that no action's reason mentions field mappings — narrow,
+but it is the specific lie that was told, and the general version ("blockers must be true") is not
+mechanically checkable.
+
+Building it raised the interesting question: what *is* an auto tag write, on an arrival? The tags
+were read off that file moments earlier, so writing them back achieves nothing while still
+rewriting the file. The answer is that the new information is the **analysis** — BPM and key that
+the file may not have carried, or carried wrongly. So auto-write requires auto-analyse, and writes
+only those two fields.
+
+Then the guard that matters. Auto-writing overwrites whatever tag the file had, with nobody looking
+at it. ADR-0008 says a guess must not be presented as fact; writing a guess into the user's file is
+strictly worse, because it survives the app. Hence a confidence floor, named rather than inlined so
+the decision is findable, and a **skip that reports its reason** rather than a silent no-op — the
+failure mode of a quiet skip is the user concluding the setting is broken and turning it off.
+
+Reporting `analysed` and `tagged` as separate counts was a late change and the right one. They were
+one number at first, and that number would have hidden the only part a user needs to know: files on
+disk were modified.
+
 ## Session — 2026-08-07 (Find Lost Tracks, finished)
 
 Two halves left on Relocate, and the interesting one was deciding not to write code.

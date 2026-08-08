@@ -150,7 +150,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
 | Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |
-| Automatic Actions settings group | partial | Group + auto-analyse work; other four disabled with reasons | 4 |
+| Automatic Actions settings group | partial | Group + **auto-analyse and auto-write-tags** work; other three disabled with reasons. Auto-write requires analysis, writes only BPM and key, and refuses below 0.75 confidence — overwriting a tag with a guess is worse than not writing. Its old blocker cited field mappings, which had shipped in Epic 4 | 4 |
 
 ## Health — `07-health.md`
 
