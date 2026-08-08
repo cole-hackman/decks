@@ -2584,6 +2584,47 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (Cue Destination, and a round-trip we do not need)
+
+The Cue Destination row read "no hidden-duplicate model, so the round-trip guarantee does not
+hold", which sounds like a gap. Reading the spec properly, it is not one.
+
+Lexicon's internal model has hot cues only. On import it collapses Rekordbox's memory cues into hot
+cues, hides the duplicates rather than deleting them, and on sync back restores the hidden ones to
+their original positions. That whole apparatus exists to undo a lossy conversion Lexicon performs on
+the way in.
+
+`decks` performs no such conversion. There is no import step: it reads `djmdCue` live, and a memory
+cue stays a memory cue. Nothing is collapsed, so nothing is hidden, so there is nothing to restore
+— the guarantee holds because the problem never arises. Building a hidden-duplicate ledger to
+satisfy the row would have been machinery for a problem we do not have, and it would have looked
+like diligence.
+
+The per-cue `M` toggle falls out the same way. It marks a Lexicon cue as *destined to become* a
+memory cue on the way out; in `decks` a cue already is one kind or the other, so the state cannot
+arise.
+
+What *was* missing is the bulk copy — `All to hot cue` / `All to memory cue` / `All to hot and
+memory cue`, which the spec describes as how you copy hot cues into memory cues wholesale. That is
+real and useful (hot cues do not show on every player, memory cues do), so `MirrorCues` ships as a
+cue recipe. `Both` skips any position that already carries both kinds: this is something people run
+after every session, and a second run doubling the cue list would be a nasty surprise.
+
+**Then the interesting part.** Wiring the recipe up found two silent bugs in `diff_cues`, and
+neither was reachable before:
+
+`diff_cues` walked the recipe's output and did `let Some(orig) = by_id.get(...) else { continue }`
+— so any cue the recipe *invented* was dropped on the floor. Every existing cue recipe only edits,
+reorders or deletes, so nothing had ever added one; `MirrorCues` is the first, and its preview came
+back empty. It looked exactly like the recipe not working.
+
+And nothing diffed `memory`, so converting a cue's kind also staged nothing. Same shape of bug,
+same reason nobody had hit it.
+
+Both are the kind that only appear when a new operation exercises a path the old ones never did,
+which is a decent argument for the diff being tested against the operation set rather than only
+per-operation.
+
 ## Session — 2026-08-07 (auto-write tags, and a stale blocker)
 
 The task was "check which Automatic Actions the recent work unblocked". The answer was one, but not

@@ -95,9 +95,24 @@ round-trip is carefully designed and worth copying exactly:
 - A per-cue `M` toggle (behind a DJ-app-specific setting) marks individual Lexicon cues as
   destined to become memory cues — but only honoured when Cue Destination is `Default`.
 
-*decks status* — **partial.** `CueDestination` (memory/hot/both) exists in
-`changes::applier::SyncOptions` and selects the `Kind` on inserted cues. There is no
-hidden-duplicate model, so the round-trip guarantee does not hold.
+*decks status* — **done, by not having half the problem.**
+
+`CueDestination` (memory/hot/both) in `changes::applier::SyncOptions` selects the `Kind` on
+inserted cues, and the `MirrorCues` recipe covers the sync options `All to hot cue` /
+`All to memory cue` / `All to hot and memory cue` — "which is how you copy hot cues into memory
+cues wholesale". `Both` is idempotent: a position that already exists as both kinds is left alone,
+because this is an operation people run after every session and a second run must not double the
+cue list.
+
+**The hidden-duplicate model is a divergence, not a gap.** Lexicon needs it because its internal
+model has hot cues only: it *collapses* memory cues into hot cues on import, so it has to remember
+what it hid in order to restore it on sync back. `decks` never imports — it reads `djmdCue` live
+and shows both kinds as they are — so nothing is ever collapsed, nothing is hidden, and there is
+nothing to restore. The round-trip guarantee holds trivially. Building a hidden-duplicate ledger
+here would be machinery for a problem we do not have.
+
+The per-cue `M` toggle is likewise unnecessary: a cue in `decks` already *is* a memory cue or a hot
+cue, so marking one as "destined to become" a memory cue is a state that cannot arise.
 
 *Epic* — **2**.
 

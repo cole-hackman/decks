@@ -163,4 +163,63 @@ describe("CueRecipesSection", () => {
     await user.click(screen.getByRole("button", { name: "Preview cues" }));
     expect(await screen.findByText(/library locked/)).toBeInTheDocument();
   });
+
+  it("offers copying cues between hot and memory, defaulting to both", async () => {
+    // Per docs/lexicon/01-interop.md §Cue Destination. `both` is the one
+    // people want: hot cues do not show on every player, memory cues do.
+    const user = userEvent.setup();
+    renderSection();
+    await user.selectOptions(
+      screen.getByLabelText("Cue operation"),
+      "mirror_cues",
+    );
+    expect(screen.getByLabelText("Cue destination")).toHaveValue("both");
+
+    await user.click(screen.getByRole("button", { name: /Preview cues/ }));
+    expect(vi.mocked(cueRecipePreview).mock.calls.at(-1)?.[2]).toEqual({
+      op: "mirror_cues",
+      target: "both",
+    });
+  });
+
+  it("counts added cues in the preview, not only edits and deletions", async () => {
+    // `diff_cues` used to drop any cue with no `before` to compare against, so
+    // a recipe that adds one showed an empty preview and looked like a no-op.
+    const user = userEvent.setup();
+    vi.mocked(cueRecipePreview).mockResolvedValue([
+      {
+        track_id: "t1",
+        track_title: "Some Track",
+        edits: [],
+        deletions: [],
+        additions: [{ cue_label: "1:05 Drop", payload: {} }],
+        skipped: null,
+      },
+    ]);
+
+    renderSection();
+    await user.selectOptions(
+      screen.getByLabelText("Cue operation"),
+      "mirror_cues",
+    );
+    await user.click(screen.getByRole("button", { name: /Preview cues/ }));
+    expect(await screen.findByText("+1 cue(s)")).toBeInTheDocument();
+  });
+
+  it("survives a shell that does not return the additions field", async () => {
+    const user = userEvent.setup();
+    vi.mocked(cueRecipePreview).mockResolvedValue([
+      {
+        track_id: "t1",
+        track_title: "Some Track",
+        edits: [],
+        deletions: [],
+        skipped: null,
+      } as never,
+    ]);
+
+    renderSection();
+    await user.click(screen.getByRole("button", { name: /Preview cues/ }));
+    expect(await screen.findByText("Some Track")).toBeInTheDocument();
+  });
 });

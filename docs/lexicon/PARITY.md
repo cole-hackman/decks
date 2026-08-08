@@ -14,7 +14,7 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
-| Interop & sync | 7 | 4 | 1 | 0 | 11 |
+| Interop & sync | 8 | 3 | 1 | 0 | 11 |
 | Library & browser | 15 | 2 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 3 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **57** | **23** | **14** | **2** | **16** |
+| **Total** | **58** | **22** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -58,7 +58,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Rekordbox XML emit | **done** | Round-trip tested | — |
 | Rekordbox direct DB write | partial | `WriteGuard` + applier; stricter than Lexicon (refuses while RB is open) | — |
 | Full / Playlist / Modified sync | partial | Modes exist and **Modified Sync is done** — a per-`(library, app)` watermark (cache v20), stamped only after a run that wrote, forward-only, and the mode is locked with a reason until a first sync. **Full-Sync delete is a deliberate divergence, not a gap**: it means "remove anything not in Lexicon", and `decks` has no library of its own to mirror from — it reads `master.db`. The nearest literal implementation would delete the user's collection | 6 |
-| Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
+| Cue Destination | **done** | Sets `Kind` on inserted cues, plus a `MirrorCues` recipe for the wholesale hot↔memory copy (idempotent — a position that is already both is left alone). **The hidden-duplicate round-trip is a divergence, not a gap**: Lexicon collapses memory cues into hot cues on import and must remember what it hid; `decks` never imports, so nothing is collapsed and there is nothing to restore | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
 | Colors → nearest | **done** | `Track` carries colour; `TrackMetadataEdit` writes `ColorID` against Rekordbox's fixed eight-colour palette. Off, an inexact colour is **left unchanged** and the skip is reported; on, it maps to the nearest and each mapping is named. Never creates a `djmdColor` row — a ninth colour renders on no CDJ | 4 |
@@ -170,7 +170,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Recipes: casing / field / text / number | **done** | 18 ops in `crates/recipes`, preview-then-stage | 5 |
 | Recipes: tag | **done** | Import from text (idempotent), add/remove/replace/clear | 5 |
 | Recipes: other (3 ops) | **done** | Mark as Incoming, Remove from All Playlists, Import Date from Filesystem | 5 |
-| Recipes: cue point (11 ops) | partial | 9 of 11 in `crates/recipes::cues`; Change Active Loops and Half/Double BPM need an unmodelled column and ANLZ writes | 5 |
+| Recipes: cue point (11 ops) | partial | 9 of 11 in `crates/recipes::cues`, plus `MirrorCues` beyond the spec's list; Change Active Loops and Half/Double BPM need an unmodelled column and ANLZ writes | 5 |
 | Recipes: beatgrid (3 ops) | **missing** | Depends on Epic 2 | 5 |
 | Import Tags From CSV | **done** | `csv_import`: Location or Artist+Title matching, per-row report, stages edits | 5 |
 | Undo History | **done** | Sync runs record inverses; undo re-stages them for review. Kept for 50 runs rather than 60 minutes | 5 |

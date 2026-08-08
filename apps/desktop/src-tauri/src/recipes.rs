@@ -411,8 +411,23 @@ pub struct CueRecipeTrack {
     pub track_title: String,
     pub edits: Vec<CueChange>,
     pub deletions: Vec<CueDeletion>,
+    /// Cues the recipe *created*, in the shape `apply_add_cue` inserts.
+    ///
+    /// Only `MirrorCues` produces these today. Before this existed, a recipe
+    /// that added a cue had it silently dropped by the diff — the preview
+    /// showed nothing and the operation looked like a no-op.
+    #[serde(default)]
+    pub additions: Vec<CueAddition>,
     /// Why the recipe did nothing on this track, when it did nothing.
     pub skipped: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CueAddition {
+    /// For the review row. The new cue has no id in the database yet.
+    pub cue_label: String,
+    /// The payload `TrackAddCue` takes.
+    pub payload: serde_json::Value,
 }
 
 fn cue_label(cue: &::recipes::RecipeCue) -> String {
@@ -493,17 +508,31 @@ fn colour_json(colour: Option<i64>) -> serde_json::Value {
 /// Ordering matters to the user, not to `djmdCue`: cues have no stored order,
 /// only hot-cue slot numbers. So a sort becomes a slot reassignment over the
 /// hot cues, and memory cues — which have no slot — are left where they are.
+#[allow(clippy::type_complexity)]
 fn diff_cues(
     track_id: &str,
     before: &[::recipes::RecipeCue],
     slots: &CueSlots,
     edits: &::recipes::CueEdits,
     reorders: bool,
-) -> (Vec<CueChange>, Vec<CueDeletion>) {
+) -> (Vec<CueChange>, Vec<CueDeletion>, Vec<CueAddition>) {
     let by_id: std::collections::HashMap<&str, &::recipes::RecipeCue> =
         before.iter().map(|c| (c.id.as_str(), c)).collect();
 
     let mut changes = Vec::new();
+    // A cue the recipe invented has no `before` to diff against, so it becomes
+    // an insert rather than an edit. Collected first so the loop below can keep
+    // assuming every cue it sees already exists.
+    let additions: Vec<CueAddition> = edits
+        .cues
+        .iter()
+        .filter(|c| !by_id.contains_key(c.id.as_str()))
+        .map(|c| CueAddition {
+            cue_label: cue_label(c),
+            payload: cue_snapshot(track_id, c, slots),
+        })
+        .collect();
+
     for (index, after) in edits.cues.iter().enumerate() {
         let Some(orig) = by_id.get(after.id.as_str()) else {
             continue;
@@ -537,6 +566,25 @@ fn diff_cues(
         );
         push("Color", colour_json(orig.color), colour_json(after.color));
 
+        // A cue that changed kind — `MirrorCues` converting hot to memory or
+        // back. Without this the conversion staged nothing and the recipe
+        // looked like it had done nothing.
+        if orig.memory != after.memory {
+            push(
+                "Kind",
+                serde_json::json!(if orig.memory {
+                    0
+                } else {
+                    slots.get(orig.id.as_str()).copied().unwrap_or(1)
+                }),
+                serde_json::json!(if after.memory {
+                    0
+                } else {
+                    slots.get(after.id.as_str()).copied().unwrap_or(1)
+                }),
+            );
+        }
+
         if reorders && !after.memory && index < HOT_CUE_SLOTS {
             // Slot numbers run 1..=8 in the recipe's new order. Anything past
             // the eighth keeps its slot — there is nowhere else to put it.
@@ -564,7 +612,7 @@ fn diff_cues(
         })
         .collect();
 
-    (changes, deletions)
+    (changes, deletions, additions)
 }
 
 /// A deleted cue, in the shape `apply_add_cue` inserts.
@@ -608,8 +656,12 @@ pub async fn cue_recipe_preview(
             }
             let grid = beat_grid(&library_path, &track);
             let edits = ::recipes::apply_cue_recipe(&recipe, &cues, &grid);
-            let (changes, deletions) = diff_cues(id, &cues, &slots, &edits, reorders);
-            if changes.is_empty() && deletions.is_empty() && edits.skipped.is_none() {
+            let (changes, deletions, additions) = diff_cues(id, &cues, &slots, &edits, reorders);
+            if changes.is_empty()
+                && deletions.is_empty()
+                && additions.is_empty()
+                && edits.skipped.is_none()
+            {
                 continue;
             }
             out.push(CueRecipeTrack {
@@ -617,6 +669,7 @@ pub async fn cue_recipe_preview(
                 track_title: track.title.clone(),
                 edits: changes,
                 deletions,
+                additions,
                 skipped: edits.skipped,
             });
         }
@@ -652,6 +705,27 @@ pub async fn cue_recipe_apply(
                         old_value: Some(edit.before.clone()),
                         new_value: Some(edit.after.clone()),
                         reason: Some("Cue recipe".to_string()),
+                        confidence: Some(1.0),
+                    })
+                    .map_err(|e| e.to_string())?;
+                staged.push(record.id);
+            }
+        }
+
+        // Additions before deletions, and before nothing else matters: an
+        // insert refers to the track, not to a cue row, so it cannot be
+        // invalidated by the edits above it.
+        for track in &tracks {
+            for addition in &track.additions {
+                let record = cache
+                    .stage_change(changes::NewChange {
+                        library_path: Some(library_path.clone()),
+                        kind: changes::ChangeKind::TrackAddCue,
+                        target_id: Some(track.track_id.clone()),
+                        field: None,
+                        old_value: None,
+                        new_value: Some(addition.payload.clone()),
+                        reason: Some(format!("Cue recipe — add {}", addition.cue_label)),
                         confidence: Some(1.0),
                     })
                     .map_err(|e| e.to_string())?;
@@ -979,10 +1053,11 @@ mod tests {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn diff_of(
         before: &[::recipes::RecipeCue],
         recipe: ::recipes::CueRecipe,
-    ) -> (Vec<CueChange>, Vec<CueDeletion>) {
+    ) -> (Vec<CueChange>, Vec<CueDeletion>, Vec<CueAddition>) {
         let reorders = matches!(recipe, ::recipes::CueRecipe::SortCues { .. });
         let edits = ::recipes::apply_cue_recipe(&recipe, before, &[]);
         let slots: CueSlots = before
@@ -1007,7 +1082,7 @@ mod tests {
     #[test]
     fn only_the_fields_a_recipe_touched_become_edits() {
         let cues = vec![rcue("a", 1000, Some("Intro"), Some(1))];
-        let (edits, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
+        let (edits, _, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
         assert_eq!(edits.len(), 1);
         assert_eq!(edits[0].field, "InMsec");
         assert_eq!(edits[0].after, serde_json::json!(1500));
@@ -1018,7 +1093,7 @@ mod tests {
         // `djmdCue.InMsec` is an integer column; staging "1500" would land as
         // text and the applier's json_to_sql has no way to know better.
         let cues = vec![rcue("a", 1000, None, None)];
-        let (edits, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
+        let (edits, _, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 500 });
         assert!(edits[0].after.is_number());
     }
 
@@ -1026,7 +1101,7 @@ mod tests {
     fn clearing_a_colour_stages_minus_one_not_null() {
         // Rekordbox spells "no colour" as -1.
         let cues = vec![rcue("a", 1000, None, Some(4))];
-        let (edits, _) = diff_of(
+        let (edits, _, _) = diff_of(
             &cues,
             ::recipes::CueRecipe::ChangeColours {
                 scheme: ::recipes::ColourScheme::None,
@@ -1040,7 +1115,7 @@ mod tests {
     #[test]
     fn only_a_sort_reassigns_hot_cue_slots() {
         let cues = vec![rcue("a", 2000, None, None), rcue("b", 1000, None, None)];
-        let (sorted, _) = diff_of(
+        let (sorted, _, _) = diff_of(
             &cues,
             ::recipes::CueRecipe::SortCues {
                 order: ::recipes::SortOrder::TimeAsc,
@@ -1048,14 +1123,14 @@ mod tests {
         );
         assert!(sorted.iter().any(|e| e.field == "Kind"));
 
-        let (shifted, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 1 });
+        let (shifted, _, _) = diff_of(&cues, ::recipes::CueRecipe::ShiftCues { offset_ms: 1 });
         assert!(shifted.iter().all(|e| e.field != "Kind"));
     }
 
     #[test]
     fn a_sort_that_changes_nothing_stages_nothing() {
         let cues = vec![rcue("a", 1000, None, None), rcue("b", 2000, None, None)];
-        let (edits, _) = diff_of(
+        let (edits, _, _) = diff_of(
             &cues,
             ::recipes::CueRecipe::SortCues {
                 order: ::recipes::SortOrder::TimeAsc,
@@ -1075,7 +1150,7 @@ mod tests {
             },
             rcue("h", 1000, None, None),
         ];
-        let (edits, _) = diff_of(
+        let (edits, _, _) = diff_of(
             &cues,
             ::recipes::CueRecipe::SortCues {
                 order: ::recipes::SortOrder::TimeAsc,
@@ -1087,7 +1162,7 @@ mod tests {
     #[test]
     fn deletions_carry_a_label_from_before_the_recipe_ran() {
         let cues = vec![rcue("a", 65_000, Some("Drop"), None)];
-        let (_, deletions) = diff_of(
+        let (_, deletions, _) = diff_of(
             &cues,
             ::recipes::CueRecipe::RemoveCuesByLabel {
                 text: "drop".into(),
@@ -1156,5 +1231,63 @@ mod tests {
         // which made the first import of a fresh library impossible.
         let cache = cache::CacheDb::open_in_memory().unwrap();
         assert!(ensure_imported_category(&cache).is_ok());
+    }
+
+    /// The bug this whole diff change exists to fix.
+    #[test]
+    fn a_recipe_that_adds_a_cue_stages_an_insert_rather_than_vanishing() {
+        // `diff_cues` skipped any cue with no `before` to compare against, so
+        // `MirrorCues` produced an empty preview and looked like a no-op.
+        let before = vec![rcue("a", 1000, Some("Drop"), None)];
+        let (_, _, additions) = diff_of(
+            &before,
+            ::recipes::CueRecipe::MirrorCues {
+                target: ::recipes::MirrorTarget::Both,
+            },
+        );
+        assert_eq!(additions.len(), 1);
+        assert_eq!(additions[0].payload["content_id"], "track-1");
+        assert_eq!(additions[0].payload["in_msec"], 1000);
+        // The copy is the memory-cue side of the pair.
+        assert_eq!(additions[0].payload["kind"], 0);
+    }
+
+    #[test]
+    fn converting_a_cue_between_kinds_stages_a_kind_edit() {
+        // Also silently dropped before: nothing diffed `memory`.
+        let before = vec![rcue("a", 1000, Some("Drop"), None)];
+        let (changes, _, additions) = diff_of(
+            &before,
+            ::recipes::CueRecipe::MirrorCues {
+                target: ::recipes::MirrorTarget::Memory,
+            },
+        );
+        assert!(additions.is_empty(), "a conversion adds no rows");
+        let kind = changes
+            .iter()
+            .find(|c| c.field == "Kind")
+            .expect("Kind edit");
+        assert_eq!(kind.before, serde_json::json!(1));
+        assert_eq!(kind.after, serde_json::json!(0));
+    }
+
+    #[test]
+    fn mirroring_a_track_that_already_has_both_kinds_stages_nothing() {
+        let before = vec![
+            rcue("a", 1000, Some("Drop"), None),
+            ::recipes::RecipeCue {
+                memory: true,
+                ..rcue("b", 1000, Some("Drop"), None)
+            },
+        ];
+        let (changes, deletions, additions) = diff_of(
+            &before,
+            ::recipes::CueRecipe::MirrorCues {
+                target: ::recipes::MirrorTarget::Both,
+            },
+        );
+        assert!(changes.is_empty());
+        assert!(deletions.is_empty());
+        assert!(additions.is_empty());
     }
 }
