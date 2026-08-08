@@ -1248,6 +1248,21 @@ export async function createFieldMapping(
   });
 }
 
+export interface ModifiedSyncStatus {
+  /** False until a sync has actually written something to this library. */
+  available: boolean;
+  /** Unix seconds, or null when no sync has run. Null and 0 are different
+   *  claims, and only null locks the mode. */
+  last_synced_at: number | null;
+}
+
+/** Whether Modified Sync is unlocked, and when the last sync was. */
+export async function modifiedSyncStatus(
+  libraryPath: string,
+): Promise<ModifiedSyncStatus> {
+  return invoke<ModifiedSyncStatus>("modified_sync_status", { libraryPath });
+}
+
 /** What the Rekordbox field mappings would write, without writing it. */
 export async function previewSyncMappings(
   libraryPath: string,

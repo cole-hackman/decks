@@ -1703,7 +1703,7 @@ struct PendingChange {
     updated_at: i64,
 }
 
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum SyncMode {
     #[default]
@@ -1746,6 +1746,12 @@ impl SyncOptions {
     }
 }
 
+/// The DJ app these watermarks belong to.
+///
+/// `decks` targets one today. The value is stored rather than assumed so a
+/// second app is a row, not a migration.
+pub(crate) const WATERMARK_APP: &str = "rekordbox";
+
 fn filter_for_mode(
     changes: Vec<changes::StagedChange>,
     mode: &SyncMode,
@@ -1764,10 +1770,72 @@ fn filter_for_mode(
             accepted.collect()
         }
         SyncMode::Modified => {
-            let since = opts.since_ts.unwrap_or(0);
+            // `since_ts` is resolved before this is called: an explicit value
+            // from the caller, otherwise the stored watermark. Reaching here
+            // with `None` means no sync has ever run, and Modified Sync is not
+            // available then — returning everything would silently make it a
+            // Full Sync, which is the opposite of what the mode promises.
+            let Some(since) = opts.since_ts else {
+                return Vec::new();
+            };
             accepted.filter(|c| c.updated_at >= since).collect()
         }
     }
+}
+
+/// Fill in `since_ts` for Modified Sync from the stored watermark.
+///
+/// An explicit `since_ts` from the caller wins — it is how a user asks for a
+/// narrower window than the last sync. Otherwise the watermark; and if there
+/// is no watermark, it stays `None`, which `filter_for_mode` reads as
+/// "Modified Sync is not available yet".
+fn resolve_since(
+    cache: &cache::store::CacheDb,
+    library_path: &str,
+    mode: &SyncMode,
+    mut options: SyncOptions,
+) -> SyncOptions {
+    if *mode == SyncMode::Modified && options.since_ts.is_none() {
+        options.since_ts = cache
+            .sync_watermark(library_path, WATERMARK_APP)
+            .unwrap_or(None);
+    }
+    options
+}
+
+/// Whether Modified Sync is available, and what its window would be.
+///
+/// Per `docs/lexicon/01-interop.md §Sync modes`, Modified Sync is "unlocked
+/// only after a first Full or Playlist sync". Surfaced as its own command so
+/// the UI can disable the mode with a reason rather than offering it and then
+/// syncing nothing — a mode that silently does nothing is worse than one that
+/// says why it cannot.
+#[tauri::command]
+async fn modified_sync_status(
+    app: tauri::AppHandle,
+    library_path: String,
+) -> Result<ModifiedSyncStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let last_synced_at = cache
+            .sync_watermark(&library_path, WATERMARK_APP)
+            .map_err(|e| e.to_string())?;
+        Ok(ModifiedSyncStatus {
+            available: last_synced_at.is_some(),
+            last_synced_at,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ModifiedSyncStatus {
+    /// False until a sync has actually written something to this library.
+    available: bool,
+    /// Unix seconds, or `None` when no sync has run. `None` and `0` are
+    /// different claims and only the first locks the mode.
+    last_synced_at: Option<i64>,
 }
 
 #[tauri::command]
@@ -1816,6 +1884,7 @@ async fn sync_preview(
         let all = cache
             .list_changes(Some(&library_path))
             .map_err(|e| e.to_string())?;
+        let options = resolve_since(&cache, &library_path, &mode, options);
         let filtered = filter_for_mode(all, &mode, &options);
 
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
@@ -1870,6 +1939,7 @@ async fn sync_execute(
         let all = cache
             .list_changes(Some(&library_path))
             .map_err(|e| e.to_string())?;
+        let options = resolve_since(&cache, &library_path, &mode, options);
         let filtered = filter_for_mode(all, &mode, &options);
 
         let id_filter: std::collections::HashSet<String> = change_ids.into_iter().collect();
@@ -1917,6 +1987,20 @@ async fn sync_execute(
             .collect();
         if let Err(e) = cache.record_undo_run(&library_path, &applied_changes) {
             tracing::warn!(error = %e, "failed to record undo history for this sync");
+        }
+
+        // Modified Sync's watermark, moved forward only on a run that actually
+        // wrote something. A sync that applied nothing has not established a
+        // new baseline, and stamping one would silently drop the changes it
+        // failed to write from the next Modified Sync's window.
+        if !res.applied.is_empty() {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            if let Err(e) = cache.set_sync_watermark(&library_path, WATERMARK_APP, now) {
+                tracing::warn!(error = %e, "failed to record the sync watermark");
+            }
         }
 
         Ok(res)
@@ -3082,6 +3166,7 @@ pub fn run() {
             get_playback_status,
             seek_audio,
             reveal_in_finder,
+            modified_sync_status,
             sync_check,
             sync_preview,
             sync_execute,
@@ -3814,5 +3899,99 @@ mod tests {
             .expect("delete supersedes the add");
         // pl1 should be absent from the export.
         assert!(!xml.contains("Doomed"));
+    }
+
+    fn accepted_at(id: &str, updated_at: i64) -> changes::StagedChange {
+        changes::StagedChange {
+            id: id.into(),
+            library_path: Some("/db".into()),
+            kind: ChangeKind::TrackMetadataEdit,
+            target_id: Some("t1".into()),
+            field: Some("Title".into()),
+            old_value: None,
+            new_value: None,
+            reason: None,
+            confidence: None,
+            status: ChangeStatus::Accepted,
+            created_at: 0,
+            updated_at,
+        }
+    }
+
+    fn opts_since(since_ts: Option<i64>) -> SyncOptions {
+        SyncOptions {
+            since_ts,
+            ..SyncOptions::default()
+        }
+    }
+
+    #[test]
+    fn modified_sync_keeps_only_changes_after_the_watermark() {
+        let all = vec![accepted_at("old", 100), accepted_at("new", 300)];
+        let got = filter_for_mode(all, &SyncMode::Modified, &opts_since(Some(200)));
+        assert_eq!(
+            got.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            vec!["new"]
+        );
+    }
+
+    #[test]
+    fn the_watermark_boundary_is_inclusive() {
+        // A change stamped at exactly the watermark has not been synced — the
+        // watermark is set after the write, so anything at that instant is
+        // still outstanding.
+        let all = vec![accepted_at("edge", 200)];
+        let got = filter_for_mode(all, &SyncMode::Modified, &opts_since(Some(200)));
+        assert_eq!(got.len(), 1);
+    }
+
+    /// The failure this whole change exists to prevent.
+    #[test]
+    fn modified_sync_with_no_watermark_syncs_nothing_rather_than_everything() {
+        // Before this, an absent `since_ts` defaulted to 0 and Modified Sync
+        // silently behaved as a Full Sync over the entire library — the exact
+        // opposite of what the mode promises.
+        let all = vec![accepted_at("a", 100), accepted_at("b", 300)];
+        let got = filter_for_mode(all, &SyncMode::Modified, &opts_since(None));
+        assert!(got.is_empty(), "{:?}", got.len());
+    }
+
+    #[test]
+    fn full_sync_is_unaffected_by_the_watermark() {
+        let all = vec![accepted_at("a", 100), accepted_at("b", 300)];
+        let got = filter_for_mode(all, &SyncMode::Full, &opts_since(None));
+        assert_eq!(got.len(), 2);
+    }
+
+    #[test]
+    fn an_explicit_since_beats_the_stored_watermark() {
+        // It is how a user asks for a narrower window than the last sync.
+        let cache = cache::store::CacheDb::open_in_memory().unwrap();
+        cache.set_sync_watermark("/db", WATERMARK_APP, 100).unwrap();
+        let resolved = resolve_since(&cache, "/db", &SyncMode::Modified, opts_since(Some(500)));
+        assert_eq!(resolved.since_ts, Some(500));
+    }
+
+    #[test]
+    fn an_absent_since_falls_back_to_the_watermark() {
+        let cache = cache::store::CacheDb::open_in_memory().unwrap();
+        cache.set_sync_watermark("/db", WATERMARK_APP, 100).unwrap();
+        let resolved = resolve_since(&cache, "/db", &SyncMode::Modified, opts_since(None));
+        assert_eq!(resolved.since_ts, Some(100));
+    }
+
+    #[test]
+    fn a_library_that_has_never_synced_resolves_to_no_window() {
+        let cache = cache::store::CacheDb::open_in_memory().unwrap();
+        let resolved = resolve_since(&cache, "/db", &SyncMode::Modified, opts_since(None));
+        assert_eq!(resolved.since_ts, None);
+    }
+
+    #[test]
+    fn full_sync_never_consults_the_watermark() {
+        let cache = cache::store::CacheDb::open_in_memory().unwrap();
+        cache.set_sync_watermark("/db", WATERMARK_APP, 100).unwrap();
+        let resolved = resolve_since(&cache, "/db", &SyncMode::Full, opts_since(None));
+        assert_eq!(resolved.since_ts, None);
     }
 }

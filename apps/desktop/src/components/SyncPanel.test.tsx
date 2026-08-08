@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SyncPanel } from "./SyncPanel";
 import {
+  modifiedSyncStatus,
   previewSyncMappings,
   stageSyncMappings,
   syncCheck,
@@ -18,6 +19,7 @@ vi.mock("../ipc", () => ({
   syncPreview: vi.fn(),
   previewSyncMappings: vi.fn(),
   stageSyncMappings: vi.fn(),
+  modifiedSyncStatus: vi.fn(),
 }));
 
 const ROW = {
@@ -41,6 +43,11 @@ beforeEach(() => {
     unchanged: 0,
   });
   vi.mocked(stageSyncMappings).mockResolvedValue({ staged: 2 });
+  // Most tests are on a library that has synced before.
+  vi.mocked(modifiedSyncStatus).mockResolvedValue({
+    available: true,
+    last_synced_at: 1770000000,
+  });
 });
 
 function render_() {
@@ -258,5 +265,49 @@ describe("SyncPanel", () => {
     expect(await screen.findByTestId("sync-mappings")).toHaveTextContent(
       /AlbumArt cannot be written/,
     );
+  });
+
+  it("locks Modified sync on a library that has never synced, and says why", async () => {
+    // A mode that silently syncs nothing looks like a bug in the app.
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    vi.mocked(modifiedSyncStatus).mockResolvedValue({
+      available: false,
+      last_synced_at: null,
+    });
+
+    render_();
+    await screen.findByText("Some Title");
+
+    const option = await screen.findByRole("option", { name: /Modified since/ });
+    expect(option).toBeDisabled();
+    expect(option).toHaveTextContent(/no sync yet/);
+  });
+
+  it("does not lock Modified sync when the status cannot be read", async () => {
+    // Unknown is not the same as unavailable: a host that does not know the
+    // command should not have the mode disabled on its behalf.
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    vi.mocked(modifiedSyncStatus).mockRejectedValue(new Error("unknown command"));
+
+    render_();
+    await screen.findByText("Some Title");
+    expect(
+      await screen.findByRole("option", { name: /Modified since/ }),
+    ).not.toBeDisabled();
+  });
+
+  it("shows the window Modified sync would use", async () => {
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    render_();
+    await screen.findByText("Some Title");
+
+    const modeSelect = screen
+      .getByRole("option", { name: /Modified since/ })
+      .closest("select")!;
+    await userEvent.selectOptions(modeSelect, "modified");
+    expect(await screen.findByText(/^Since /)).toBeInTheDocument();
   });
 });

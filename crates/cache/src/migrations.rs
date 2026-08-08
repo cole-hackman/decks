@@ -493,6 +493,30 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE UNIQUE INDEX idx_tags_hotkey ON tags(hotkey) WHERE hotkey IS NOT NULL;
         ",
     ),
+    (
+        20,
+        "
+        -- Modified Sync's watermark. Per `docs/lexicon/01-interop.md
+        -- §Sync modes`: Modified Sync selects what changed since the last sync,
+        -- is tracked per DJ app, and is unlocked only after a first Full or
+        -- Playlist sync.
+        --
+        -- Keyed by (library_path, app). `decks` targets one app today, so the
+        -- app column is always 'rekordbox' — but the spec's unit is the app,
+        -- not the database, and adding the column now costs nothing while
+        -- retrofitting it later would be a migration over live rows.
+        --
+        -- The absence of a row is meaningful: it is what 'no sync has happened
+        -- yet' looks like, and it is why Modified Sync can say it is not
+        -- available rather than silently behaving like a Full Sync.
+        CREATE TABLE sync_watermarks (
+          library_path TEXT NOT NULL,
+          app          TEXT NOT NULL,
+          synced_at    INTEGER NOT NULL,
+          PRIMARY KEY (library_path, app)
+        );
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -1019,6 +1043,41 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM tags WHERE hotkey IS NULL", [], |r| {
                 r.get(0)
             })
+            .unwrap();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn sync_watermarks_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO sync_watermarks (library_path, app, synced_at)
+             VALUES ('/db', 'rekordbox', 1770000000);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_watermarks", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_watermark_is_per_library_and_per_app() {
+        // Two libraries, or the same library synced to two apps, are separate
+        // facts — one watermark for both would make a sync to one app look
+        // like a sync to the other.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO sync_watermarks (library_path, app, synced_at) VALUES
+               ('/a', 'rekordbox', 1),
+               ('/b', 'rekordbox', 2),
+               ('/a', 'serato',    3);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_watermarks", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 3);
     }

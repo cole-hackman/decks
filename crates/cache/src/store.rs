@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use changes::field_mappings::{FieldMapping, FieldMappings, MappingSource};
 use changes::{ChangeKind, ChangeStatus};
 use file_organizer::{PathMapping, PathMappings};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use smartlists::{Clause, Combinator, Smartlist};
 use std::path::Path;
@@ -895,6 +895,52 @@ impl CacheDb {
             )?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    // ── Sync watermarks ────────────────────────────────────────────────────
+
+    /// When this library was last synced to `app`, or `None` if never.
+    ///
+    /// `None` is load-bearing rather than a missing value: it is what "no sync
+    /// has happened yet" looks like, and it is what lets Modified Sync say it
+    /// is unavailable instead of quietly behaving like a Full Sync over the
+    /// whole library.
+    pub fn sync_watermark(&self, library_path: &str, app: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT synced_at FROM sync_watermarks
+                  WHERE library_path = ?1 AND app = ?2",
+                rusqlite::params![library_path, app],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Record a completed sync.
+    ///
+    /// Moves **forward only**. A sync that somehow reports an earlier timestamp
+    /// than one already recorded must not rewind the watermark, because that
+    /// would make the next Modified Sync re-propose changes the user has
+    /// already dealt with.
+    pub fn set_sync_watermark(&self, library_path: &str, app: &str, synced_at: i64) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sync_watermarks (library_path, app, synced_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(library_path, app) DO UPDATE SET
+               synced_at = MAX(sync_watermarks.synced_at, excluded.synced_at)",
+            rusqlite::params![library_path, app, synced_at],
+        )?;
+        Ok(())
+    }
+
+    /// Forget the watermark, which re-locks Modified Sync for this library.
+    pub fn clear_sync_watermark(&self, library_path: &str, app: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM sync_watermarks WHERE library_path = ?1 AND app = ?2",
+            rusqlite::params![library_path, app],
+        )?;
         Ok(())
     }
 
@@ -4157,5 +4203,50 @@ mod tests {
             .map(|c| c.name)
             .collect();
         assert_eq!(names, vec!["Mood", "Genre"]);
+    }
+
+    #[test]
+    fn a_library_with_no_sync_has_no_watermark() {
+        // Not zero — "never synced" and "synced at the epoch" are different
+        // claims, and only the first should lock Modified Sync.
+        let db = CacheDb::open_in_memory().unwrap();
+        assert_eq!(db.sync_watermark("/db", "rekordbox").unwrap(), None);
+    }
+
+    #[test]
+    fn a_watermark_round_trips() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.set_sync_watermark("/db", "rekordbox", 1770000000)
+            .unwrap();
+        assert_eq!(
+            db.sync_watermark("/db", "rekordbox").unwrap(),
+            Some(1770000000)
+        );
+    }
+
+    #[test]
+    fn a_watermark_never_moves_backwards() {
+        // Rewinding would make the next Modified Sync re-propose changes the
+        // user has already dealt with.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.set_sync_watermark("/db", "rekordbox", 200).unwrap();
+        db.set_sync_watermark("/db", "rekordbox", 100).unwrap();
+        assert_eq!(db.sync_watermark("/db", "rekordbox").unwrap(), Some(200));
+    }
+
+    #[test]
+    fn watermarks_are_scoped_to_the_library_and_the_app() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.set_sync_watermark("/a", "rekordbox", 10).unwrap();
+        assert_eq!(db.sync_watermark("/b", "rekordbox").unwrap(), None);
+        assert_eq!(db.sync_watermark("/a", "serato").unwrap(), None);
+    }
+
+    #[test]
+    fn clearing_a_watermark_relocks_modified_sync() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.set_sync_watermark("/db", "rekordbox", 10).unwrap();
+        db.clear_sync_watermark("/db", "rekordbox").unwrap();
+        assert_eq!(db.sync_watermark("/db", "rekordbox").unwrap(), None);
     }
 }

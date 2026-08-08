@@ -57,7 +57,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Rekordbox 6/7 direct DB read | **done** | SQLCipher reader, ANLZ parser | — |
 | Rekordbox XML emit | **done** | Round-trip tested | — |
 | Rekordbox direct DB write | partial | `WriteGuard` + applier; stricter than Lexicon (refuses while RB is open) | — |
-| Full / Playlist / Modified sync | partial | Modes exist; no per-app modified watermark, no Full-Sync delete | 6 |
+| Full / Playlist / Modified sync | partial | Modes exist and **Modified Sync is done** — a per-`(library, app)` watermark (cache v20), stamped only after a run that wrote, forward-only, and the mode is locked with a reason until a first sync. **Full-Sync delete is a deliberate divergence, not a gap**: it means "remove anything not in Lexicon", and `decks` has no library of its own to mirror from — it reads `master.db`. The nearest literal implementation would delete the user's collection | 6 |
 | Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
