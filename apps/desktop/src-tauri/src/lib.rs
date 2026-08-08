@@ -2963,6 +2963,7 @@ pub fn run() {
             playlist_tools::apply_playlist_merge,
             playlist_tools::preview_playlist_sort,
             playlist_tools::apply_playlist_sort,
+            playlist_tools::apply_playlist_move,
             playlist_tools::preview_cross_reference,
             playlist_tools::preview_playlist_prefix,
             playlist_tools::apply_playlist_prefix,

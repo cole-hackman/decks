@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeftIcon } from "lucide-react";
 import { usePlaylistDetail, usePlaylists } from "../hooks/usePlaylists";
 import { findDuplicates } from "../lib/playlist-dedupe";
 import { TrackTimeline } from "./TrackTimeline";
+import { useToast } from "./Toast";
+import { applyPlaylistMove } from "../ipc";
+import { canDropInto, siblingsOf } from "../lib/playlist-tree";
 import type { Playlist, Track } from "../types";
 
 function formatDuration(secs: number | null): string {
@@ -46,6 +50,7 @@ interface TreeNode {
 function isFolder(p: Playlist): boolean {
   return p.kind === "Folder";
 }
+
 
 /** Build a hierarchical tree from a flat list. Playlists whose parent_id
  *  is missing from the list are promoted to root. */
@@ -112,6 +117,8 @@ export function PlaylistPanel({
   focusPlaylistId = null,
 }: Props) {
   const [filter, setFilter] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [didInitExpanded, setDidInitExpanded] = useState(false);
@@ -119,6 +126,50 @@ export function PlaylistPanel({
   const { data: playlists = [], isLoading, error } = usePlaylists(libraryPath);
 
   const tree = useMemo(() => buildTree(playlists), [playlists]);
+
+  /** The row being dragged, and the folder currently under the pointer. */
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+  /**
+   * Stage a move into `targetId`.
+   *
+   * Staged, not written — the tree redraws from `master.db`, so the row does
+   * not appear to move until Sync applies it. That is the honest behaviour for
+   * a change that has not happened yet, and it matches every other edit here.
+   */
+  const dropInto = useCallback(
+    async (targetId: string) => {
+      const dragged = draggingId;
+      setDraggingId(null);
+      setDropTargetId(null);
+      if (!dragged || !libraryPath) return;
+      if (!canDropInto(dragged, targetId, playlists)) return;
+
+      const moving = playlists.find((p) => p.id === dragged);
+      try {
+        await applyPlaylistMove(
+          libraryPath,
+          dragged,
+          targetId,
+          moving?.parent_id ?? null,
+          // Last within the destination, which is where a drop onto a folder
+          // reads as putting something.
+          siblingsOf(targetId, playlists).length + 1,
+        );
+        toast({
+          variant: "success",
+          message: "Move staged — apply it in Sync to move it in Rekordbox.",
+        });
+        await queryClient.invalidateQueries({
+          queryKey: ["staged-changes", libraryPath],
+        });
+      } catch (e) {
+        toast({ variant: "error", message: String(e) });
+      }
+    },
+    [draggingId, libraryPath, playlists, queryClient, toast],
+  );
 
   // On first load with real data, expand top-level folders so the user
   // can see their playlists without clicking.
@@ -242,6 +293,24 @@ export function PlaylistPanel({
                     isFolder={folder}
                     isOpen={isOpen}
                     isSelected={!folder && selectedId === p.id}
+                    isDropTarget={dropTargetId === p.id}
+                    onDragStart={() => setDraggingId(p.id)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropTargetId(null);
+                    }}
+                    onDragOver={() => {
+                      // Only highlight somewhere the drop would actually be
+                      // accepted — a target that lights up and then refuses is
+                      // worse than one that never lit up.
+                      if (
+                        draggingId &&
+                        canDropInto(draggingId, p.id, playlists)
+                      ) {
+                        setDropTargetId(p.id);
+                      }
+                    }}
+                    onDrop={() => void dropInto(p.id)}
                     onClick={() => {
                       if (folder) toggleFolder(p.id);
                       else setSelectedId(p.id);
@@ -316,13 +385,23 @@ function PlaylistRow({
   isFolder,
   isOpen,
   isSelected,
+  isDropTarget,
   onClick,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
 }: {
   node: TreeNode;
   isFolder: boolean;
   isOpen: boolean;
   isSelected: boolean;
+  isDropTarget: boolean;
   onClick: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDragOver: () => void;
+  onDrop: () => void;
 }) {
   const { playlist: p, depth, leafCount } = node;
   const indent = depth * 12;
@@ -332,6 +411,18 @@ function PlaylistRow({
     <button
       type="button"
       onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop();
+      }}
+      data-drop-target={isDropTarget || undefined}
       aria-expanded={isFolder ? isOpen : undefined}
       className={[
         "flex w-full items-center gap-1.5 px-2 py-1 text-left text-[13px] transition-colors duration-150",
@@ -340,6 +431,7 @@ function PlaylistRow({
           : isFolder
             ? "text-ink hover:bg-elevated/60"
             : "text-ink-secondary hover:bg-elevated/60 hover:text-ink",
+        isDropTarget ? "ring-1 ring-inset ring-accent" : "",
       ].join(" ")}
       style={{ paddingLeft: indent + 6 }}
     >

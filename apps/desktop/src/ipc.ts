@@ -440,6 +440,29 @@ export async function listTracksWithMissingFiles(
   return invoke<string[]>("list_tracks_with_missing_files", { path, force });
 }
 
+/**
+ * Move a playlist or folder into a different folder.
+ *
+ * Staged, not written — the applier refuses a non-folder destination and a
+ * folder moved into its own descendant, and `old_parent_id` is what makes the
+ * move undoable.
+ */
+export async function applyPlaylistMove(
+  libraryPath: string,
+  playlistId: string,
+  parentId: string | null,
+  oldParentId: string | null,
+  seq?: number,
+): Promise<string> {
+  return invoke<string>("apply_playlist_move", {
+    libraryPath,
+    playlistId,
+    parentId,
+    oldParentId,
+    seq,
+  });
+}
+
 export type RelocateTarget =
   | "Free"
   | { Occupied: { track_id: string; title: string; artist: string | null } };

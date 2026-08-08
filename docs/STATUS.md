@@ -1,5 +1,40 @@
 # Status
 
+## 2026-08-07 — Playlists move between folders
+
+The playlists tree's last named gaps: folder-drop and drag-between. Both come down to one missing
+change kind — `PlaylistReorder` writes `Seq` within a parent and **deliberately refuses** to change
+that parent, because a reorder that silently restructured the tree would be a nasty surprise.
+
+So `PlaylistMove` is its own kind, and it carries its own refusals — `djmdPlaylist` enforces
+neither, and getting either wrong corrupts the tree:
+
+- **The destination must be a folder.** Rekordbox nests under folders only; a playlist parented to
+  a playlist is a shape nothing can render.
+- **A folder cannot go inside itself or any descendant.** That detaches the whole subtree from the
+  root: it still exists, and it is unreachable from the tree forever.
+
+Three smaller decisions:
+
+- **The UI mirrors both refusals rather than trusting the applier to catch them.** A drop that sync
+  would reject should not look like it worked until the user opens the review table, so a folder
+  only highlights when the drop would actually be accepted.
+- **The ancestor walk goes upward from the destination**, not downward from the dragged folder — a
+  tree is far wider than it is deep — and both the Rust and TypeScript versions carry a `seen` set,
+  because a database that already contains a cycle must not hang the sync or the render.
+- **`old_parent_id` rides on the change.** Without it `changes::undo` blocks the inverse and the
+  tree cannot be put back, which for a drag — the easiest edit in the app to make by accident — is
+  the one place undo really matters.
+
+The move is **staged, not written**: the tree redraws from `master.db`, so the row does not appear
+to move until Sync applies it. That is the honest behaviour for a change that has not happened yet.
+
+Library & browser is now 16 done / 1 partial.
+
+**Next:** the track table's remaining gap is a drag source, which would also unblock the Favorite
+Playlists drag target. Beyond that the `partial` rows need ANLZ *writes* — worth establishing
+whether that is feasible at all before committing to Beatgrid editing or the last two cue recipes.
+
 ## 2026-08-07 — Cue Destination, and a round-trip we do not need
 
 Closed the Cue Destination row, mostly by working out that half of it is a problem `decks` does not

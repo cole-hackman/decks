@@ -234,6 +234,45 @@ pub async fn apply_playlist_sort(
     .map_err(|e| e.to_string())?
 }
 
+/// Move a playlist or folder into a different folder.
+///
+/// The drag-between half of the tree. `PlaylistReorder` refuses to change a
+/// parent on purpose — a reorder that restructured the tree would be a nasty
+/// surprise — so this is its own change kind, with its own refusals in the
+/// applier (destination must be a folder; a folder cannot go inside itself or
+/// a descendant).
+///
+/// `old_parent_id` rides along so the move is undoable. Without it,
+/// `changes::undo` blocks the inverse and the tree cannot be put back.
+#[tauri::command]
+pub async fn apply_playlist_move(
+    app: tauri::AppHandle,
+    library_path: String,
+    playlist_id: String,
+    parent_id: Option<String>,
+    old_parent_id: Option<String>,
+    seq: Option<i64>,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let cache = cache_db(&app)?;
+        let mut new_value = serde_json::json!({ "parent_id": parent_id });
+        if let Some(seq) = seq {
+            new_value["seq"] = serde_json::json!(seq);
+        }
+        stage(
+            &cache,
+            &library_path,
+            changes::ChangeKind::PlaylistMove,
+            Some(playlist_id),
+            new_value,
+            Some(serde_json::json!({ "parent_id": old_parent_id })),
+            "Move playlist",
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // ── Cross Reference ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
