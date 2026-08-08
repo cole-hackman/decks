@@ -2584,6 +2584,49 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (Find Lost Tracks, finished)
+
+Two halves left on Relocate, and the interesting one was deciding not to write code.
+
+Merging a missing track onto a file another entry already claims means removing one of the two rows
+and replacing it everywhere it appears in a playlist. I started writing that, got as far as "walk
+the playlists, collect memberships, watch out for the playlist that already holds the keeper" —
+and recognised it, because that is `duplicates::plan_duplicate_resolution`, written for Epic 5 and
+already carrying the awkward case. So `relocate_merge` builds a plan and hands the playlist half
+straight to it. The only genuinely new logic is which of the two entries survives and whether a
+path moves.
+
+The path comparison mattered more than it looks. Rekordbox stores whatever the OS handed it, so the
+same file can be `D:\Music\B.mp3` in one row and `d:/music/b.mp3` in another. A collision check
+that compares those as strings reports "free" and then creates the exact state the spec's
+constraint exists to prevent — two rows pointing at one file. Normalising separators and case is
+three lines, and skipping them would have made the feature actively harmful.
+
+Keeping the *existing* entry turns out to need no relocate at all, which took a moment to see. The
+found file is already correctly attached to a library row; the row that was wrong is the missing
+one, and it is the one going away. Only the keep-the-missing-entry branch stages anything. And that
+change records no `old_value` — the track is missing, so its stored path points at nothing, and
+putting it in the change would give the undo entry a known-broken path to restore.
+
+**The cadence.** `list_tracks_with_missing_files` stats one file per track on every call, and the
+browser asks for it whenever the missing-file filter is in play. The five-minute memo lives in
+memory rather than in the cache DB, and that is not laziness: "restarting forces a re-check" is
+half the spec's requirement, and an in-memory memo gives it for nothing.
+
+Two details I would have got wrong without writing them down. Exactly five minutes is **stale**,
+not fresh — "at most every 5 minutes" means the window must never be longer than it claims, so the
+boundary belongs on the re-scanning side. And a backwards clock (NTP, a VM resuming) makes
+`now - scanned_at` negative, which `age < FRESHNESS` treats as fresh *forever*; the range check
+`(0..FRESHNESS).contains(&age)` does not.
+
+Forcing a re-check invalidates rather than passing a bypass flag. A bypass would give the caller a
+fresh answer while leaving the memo stale, so the Edit popup would say the file is there and the
+browser would keep showing the orange triangle.
+
+One bug found while wiring it: the frontend query had `staleTime: Infinity`, so a file restored on
+disk stayed marked missing until the app restarted. The shell would have re-scanned; nothing ever
+asked it to.
+
 ## Session — 2026-08-07 (Modified Sync's watermark, and a delete that cannot exist)
 
 One parity row, two halves, and only one of them should be built.

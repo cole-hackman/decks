@@ -426,10 +426,77 @@ export async function listTracksInAnyPlaylist(path: string): Promise<string[]> {
   return invoke<string[]>("list_tracks_in_any_playlist", { path });
 }
 
+/**
+ * Track ids whose file is not on disk.
+ *
+ * Memoised in the shell for five minutes, per the spec's re-check cadence.
+ * `force` skips the memo *and* refreshes it, so a forced check does not leave
+ * the rest of the UI looking at an older answer.
+ */
 export async function listTracksWithMissingFiles(
   path: string,
+  force = false,
 ): Promise<string[]> {
-  return invoke<string[]>("list_tracks_with_missing_files", { path });
+  return invoke<string[]>("list_tracks_with_missing_files", { path, force });
+}
+
+export type RelocateTarget =
+  | "Free"
+  | { Occupied: { track_id: string; title: string; artist: string | null } };
+
+/** Does another track already point at this file? Asked before relocating, so
+ *  the UI can offer a merge rather than refusing outright. */
+export async function classifyRelocateTarget(
+  libraryPath: string,
+  trackId: string,
+  newPath: string,
+): Promise<RelocateTarget> {
+  return invoke<RelocateTarget>("classify_relocate_target", {
+    libraryPath,
+    trackId,
+    newPath,
+  });
+}
+
+export interface MergeRelocatePlan {
+  keeper_id: string;
+  loser_id: string;
+  relocate_to: string | null;
+  resolution: unknown;
+}
+
+/** Which entry survives, and what happens to the playlists. */
+export async function planMergeRelocate(
+  libraryPath: string,
+  movingId: string,
+  existingId: string,
+  newPath: string,
+  keepMoving: boolean,
+): Promise<MergeRelocatePlan> {
+  return invoke<MergeRelocatePlan>("plan_merge_relocate", {
+    libraryPath,
+    movingId,
+    existingId,
+    newPath,
+    keepMoving,
+  });
+}
+
+/** Stage the relocate and hand the playlist rewriting to the duplicates path. */
+export async function applyMergeRelocate(
+  libraryPath: string,
+  plan: MergeRelocatePlan,
+): Promise<{ archived: string[]; staged: string[] }> {
+  return invoke<{ archived: string[]; staged: string[] }>(
+    "apply_merge_relocate",
+    { libraryPath, plan },
+  );
+}
+
+/** Make the next missing-file check re-scan — the spec's "opening a track's
+ *  Edit popup forces a re-check". */
+export async function invalidateMissingFiles(path: string): Promise<void> {
+  return invoke<void>("invalidate_missing_files", { path });
 }
 
 export async function healthOrphanScan(path: string): Promise<Track[]> {

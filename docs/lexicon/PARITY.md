@@ -20,12 +20,12 @@ regardless of how much of Lexicon they represent.
 | Analysis | 2 | 4 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
-| Health | 2 | 1 | 1 | 0 | 0 |
+| Health | 3 | 0 | 1 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **56** | **24** | **14** | **2** | **16** |
+| **Total** | **57** | **23** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -157,7 +157,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Find Duplicates | **done** | 3 strategies, duration bounds, preselection, bulk Prefer, review step, playlist re-pointing. Interruptible scan and manual merge outstanding | 5 |
-| Find Lost Tracks / Relocate | partial | Fuzzy match + prefix rewriting, all-tracks mode, extension change; backup rides on `WriteGuard`. Merge-with-existing and the 5-min re-check cadence outstanding | 5 |
+| Find Lost Tracks / Relocate | **done** | Fuzzy match + prefix rewriting, all-tracks mode, extension change, backup on `WriteGuard`, **merge-with-existing** (playlist rewriting delegated to `duplicates` rather than reimplemented) and the **5-minute re-check cadence** (in-memory, so a restart forces a re-scan; force invalidates rather than bypasses) | 5 |
 | Find Broken Tracks | **done** | Real decode check, two depths, per-playlist report. Deleting from disk deliberately not offered | 5 |
 | Find Tags & Album Art | **missing** | `crates/enrichment` is a 10-line stub | 4 |
 

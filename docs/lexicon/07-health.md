@@ -101,8 +101,7 @@ or restarting forces a re-check. Listing all missing files is done with an
 `Is file missing` smartlist rule rather than a bespoke view — a nice illustration of the smartlist
 engine paying for itself.
 
-*decks status* — **the advanced path is done; the single-track merge case and the re-check cadence
-are not.**
+*decks status* — **done.**
 
 `crates/relocate` already did fuzzy filename + size matching through the `RelocateBanner`.
 `relocate::rewrite` adds the deterministic half, at **Files → Rewrite Paths**: a source prefix, a
@@ -132,8 +131,29 @@ not reported as entirely missing before the user has typed anything.
 Rewrites stage as `TrackRelocate` and go through review and Sync — whose write guard takes the
 "optional automatic backup" the spec recommends, except that here it is not optional.
 
-Still missing: the **single-track merge-with-existing** case (relocating onto a file already in the
-library, replacing the other entry across every playlist) and the **5-minute re-check cadence**.
+**Merge-with-existing** is done. Relocating onto a file another entry already claims is not
+refused — it is a choose-which-to-keep merge, which is also how a streaming entry becomes a local
+file. Three decisions:
+
+- **The playlist rewriting is `duplicates`', not a second copy.** Merging two entries into one is
+  exactly what resolving a duplicate group does, and a parallel implementation would drift — most
+  likely on the case that took longest to get right there, a playlist that already holds the keeper.
+- **Path comparison normalises separators and case.** Rekordbox stores whatever the OS handed it,
+  so `D:\Music\B.mp3` and `d:/music/b.mp3` are one file. Treating them as distinct would create
+  precisely the two-rows-one-file state the spec's constraint exists to prevent.
+- **Keeping the *existing* entry moves no path at all.** The file was already correctly attached to
+  a library row; the missing row was the mistake. Only the keep-the-missing-entry branch stages a
+  `TrackRelocate`, and it records no old path — the stored one points at nothing, and writing it
+  into the change would give undo a known-broken path to restore.
+
+**The 5-minute re-check cadence** is done too, as an in-memory per-library memo. In memory rather
+than in the cache DB, which is what makes the spec's "restarting forces a re-check" free: a fresh
+process has nothing to serve and scans. Exactly five minutes old counts as **stale**, because "at
+most every 5 minutes" puts the boundary on the re-scanning side. A clock that moved backwards
+expires the memo rather than freezing it, which a naive `now - then < window` test would not.
+Forcing a check **invalidates** rather than bypassing, so a forced re-check also refreshes what
+everything else sees — a bypass would give the Edit popup a fresh answer while the browser kept
+showing a stale one.
 
 *Epic* — **5**.
 
