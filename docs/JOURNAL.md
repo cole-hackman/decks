@@ -3057,3 +3057,51 @@ the point: a screen reader announcing "0.42" reads out a number on no published 
 
 ### Parity
 61 done / 19 partial / 14 missing / 2 blocked / 16 deferred. `GAPS.md` open question 2 closed.
+
+## Session — 2026-08-08 — Epic 4/6: enrichment
+
+### Plan
+The user made both outstanding decisions: MusicBrainz + Cover Art Archive by default with Discogs
+opt-in, and "integrate all the ones you can" for streaming. Took enrichment first — better
+specified, and it gates more rows.
+
+### The constraint that shaped the design
+The container's network policy denies `musicbrainz.org` (403 on CONNECT). I could not integration
+test. Rather than treat that as a blocker, made the transport a trait (`enrichment::http::Http`)
+with a table-driven fake — which turns out to be the right design regardless, because it also makes
+the network surface enumerable and the cache-first guarantee assertable on the request log.
+
+The honest position on what remains unverified: both providers' field paths are written against
+documented schemas and have never seen a live response. That ships, where ANLZ writing did not,
+because the failure modes are not comparable — tolerant parsing means schema drift costs proposals,
+while a bad ANLZ write costs the user their file.
+
+### Decisions
+- **MusicBrainz default, Discogs opt-in** (ADR-0016). A default source requiring registration is
+  not a default. Discogs earns its slot on label/catalogue/year for dance records.
+- **Rate limits live in the crate.** A limit each call site must remember is one a call site will
+  forget. The limiter holds its lock across the sleep, or N waiters wake together and burst.
+- **Backfill, never overwrite** — including over whitespace, which real libraries are full of.
+- **Every proposal names its provider**, and it reaches the staged change's reason (ADR-0008).
+- **A no-match is cached too.** A library of bootlegs is the case most likely to be re-run.
+- **Cache keyed by (provider, query), not by library.** Who released a record does not depend on
+  whose library is asking.
+- **No album-art option in the UI.** The downloader works; nothing can embed the result. A checkbox
+  that downloads and discards is the stub logic CLAUDE.md forbids. Asserted absent by test.
+- **A fresh thread for the async lookup in agent-tools**, not `block_on` — the MCP HTTP server
+  calls `execute` from inside a runtime, where `block_on` panics.
+
+### Two things I corrected
+The GAPS bullet said the providers could not be *written* here. Half wrong, and the design is the
+disproof — 85 crate tests without a socket. Rewrote it to say precisely what is unverified.
+
+I briefed the UI subagent for an album-art checkbox and then decided against it while the agent was
+running. Stripped it from the panel and the test afterwards, and added a test pinning its absence
+with the reason.
+
+### Verification
+`cargo fmt --check`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`
+(clean incl. `decks-desktop`), `pnpm test` (831), `pnpm typecheck`, `pnpm lint`, `pnpm e2e` (59).
+
+### Parity
+61 done / 21 partial / 12 missing / 2 blocked / 16 deferred. Epic 7 streaming next.

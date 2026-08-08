@@ -413,3 +413,86 @@ would change when the library changed around it); Spotify's numbers (endpoint cl
 Essentia's or madmom's models (non-free weights, ADR-0012); shipping the field NULL and marking the
 row a divergence (six read surfaces already consume it, and a permanently empty column is worse
 than a documented approximation).
+
+## ADR-0016 — Enrichment Providers: MusicBrainz + Cover Art Archive, Discogs opt-in
+
+**Date:** 2026-08-08
+**Status:** Accepted
+
+**Context:** `docs/lexicon/07-health.md §Find Tags & Album Art` is the last large `missing` row, and
+`crates/enrichment` was a ten-line stub. Lexicon fills these fields from **SonoVault** (its own
+backend, not a public API) and **Spotify** (`audio-features`, deprecated 2024-11-27 and returning
+403 to applications registered since). Neither is available to us, so the sources had to be chosen
+rather than copied.
+
+This is also the first feature where the library leaves the machine, which makes it the first place
+the `CLAUDE.md` privacy rule has to be structural rather than aspirational.
+
+**Decision:**
+
+- **MusicBrainz is the default**, because it needs no account, no key and no registration, and its
+  data is CC0. A default source the user must go and register for is not a default; it is a dead
+  feature with a settings page.
+- **Cover Art Archive** pairs with it: the archive is keyed by MusicBrainz release MBID, so a
+  successful metadata lookup already carries everything an art lookup needs and no second search
+  happens.
+- **Discogs is an opt-in second source**, because it requires a personal access token. It earns its
+  place by being strongest exactly where MusicBrainz is weakest — label, catalogue and release year
+  for electronic and dance records, which is most of a Rekordbox library. **The token lives in the
+  OS keychain** under `discogs_token`, through the `get_api_key` / `set_api_key` commands that
+  already exist. The `enrichment` crate never touches storage; it takes a token as an argument.
+- **No Spotify, and no faked equivalents.** Energy comes from our own analysis (ADR-0015).
+  Danceability, Popularity and Happiness have no honest source and are **not** invented.
+
+**How the privacy rule is enforced, structurally:**
+
+- Every outbound request goes through the `enrichment::http::Http` trait. Grepping for its
+  implementors enumerates the crate's entire network surface — today, one type in one file behind
+  an optional `reqwest` feature.
+- `Service::lookup` consults the cache before any provider, so a repeated lookup never leaves the
+  machine twice. This is `CLAUDE.md`'s "those go through a local cache first", and it is asserted
+  on the **request log** rather than on the returned value — returning the same answer twice would
+  not prove the network was skipped.
+- What is sent is an artist and a title. A test asserts no path, no library identifier and no
+  volume name ever appears in a request URL.
+- A **no-match is cached too**. Without it, a library of bootlegs pays the full rate-limited round
+  trip on every re-run, which is the case most likely to be re-run.
+
+**Rate limits are terms of use, not tuning knobs.** MusicBrainz documents one request per second
+and a User-Agent identifying the application with contact information; clients ignoring either get
+blocked, and a blocked client means the feature stops working with no visible cause. Both are
+enforced in the crate rather than left to call sites, because a limit each call site must remember
+is a limit one call site will forget.
+
+**Enrichment backfills; it never overwrites.** A field the library already holds is never proposed
+over, and every proposal names the provider that claimed it (ADR-0008). A whitespace-only value
+counts as empty — Rekordbox libraries are full of those, and treating `"   "` as curation would
+make the feature do nothing on a real collection.
+
+**Genre handling follows the manual's own good idea:** the single-value Genre field gets the *main*
+genre only, and everything else becomes Custom Tags. For MusicBrainz the main genre is the
+most-voted tag (tags with zero votes are dropped, so one person's typo cannot become somebody's
+Genre); for Discogs it is the first *style*, because "Deep House" is more useful than "Electronic",
+which is true of nearly every record in a DJ library.
+
+**Known limitation, stated rather than hidden:** the field paths for both providers are written
+against their documented schemas and are **not** verified against a live response, because this
+container's network policy denies `musicbrainz.org` (recorded in `GAPS.md` §Environment blockers
+with the one command that checks them). Every parse is tolerant by construction — an absent or
+renamed field yields `None` for that value rather than an error — so the failure mode of schema
+drift is *fewer proposals*, never a wrong value written into a library. That asymmetry is why this
+ships unverified and ANLZ writing does not: there, the failure mode is a corrupted user file.
+
+**Album art is fetched but not yet embedded.** `cover_art` downloads and identifies the image (MIME
+sniffed from magic bytes, not from a header, because an ID3 picture frame with a wrong MIME is one
+players silently refuse to show), and refuses WAV up front per the manual's caveat that Rekordbox
+cannot store art on it at all. Writing the picture into the file needs picture support in
+`crates/audio-tags`, which does not exist yet. **There is deliberately no album-art option in the
+UI until there is**, because a checkbox that downloads an image and discards it is exactly the stub
+logic `CLAUDE.md` forbids in production paths.
+
+**Alternatives rejected:** Discogs as the default (needs a token, so the out-of-the-box experience
+would be a settings page); scraping Beatport or Bandcamp (no public API, and terms that a
+GPL-3 tool should not be quietly violating on the user's behalf); shipping the row as a divergence
+(MusicBrainz is a genuinely good fit and the only reason to skip it was that nobody had written the
+client).

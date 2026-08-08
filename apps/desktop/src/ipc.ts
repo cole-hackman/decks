@@ -109,6 +109,9 @@ import type {
   PathRewrite,
   RewritePreview,
   RewriteSpec,
+  EnrichPreview,
+  EnrichRequest,
+  TrackProposal,
 } from "./types";
 import type {
   ChatMessage,
@@ -2133,4 +2136,29 @@ export async function importMyTags(
   libraryPath: string,
 ): Promise<MyTagImportResult> {
   return invoke<MyTagImportResult>("import_mytags", { libraryPath });
+}
+
+/**
+ * Look up metadata for a selection. Writes nothing — the result is a set of
+ * proposals the user picks from, and `enrichStage` turns the accepted ones into
+ * staged changes.
+ */
+export async function enrichPreview(req: EnrichRequest): Promise<EnrichPreview> {
+  return invoke<EnrichPreview>("enrich_preview", { req });
+}
+
+/**
+ * Stage the accepted proposals. Takes them back rather than re-running the
+ * lookup, so what is staged is what the user was shown.
+ */
+export async function enrichStage(
+  libraryPath: string,
+  accepted: TrackProposal[],
+): Promise<string[]> {
+  return invoke<string[]>("enrich_stage", { libraryPath, accepted });
+}
+
+/** Forget every cached provider answer. Returns how many were dropped. */
+export async function enrichClearCache(): Promise<number> {
+  return invoke<number>("enrich_clear_cache");
 }

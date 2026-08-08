@@ -1386,3 +1386,42 @@ export interface MyTagImportResult {
   tags_created: number;
   links_created: number;
 }
+
+/** Mirrors `enrichment::FieldProposal`. */
+export interface FieldProposal {
+  field: string;
+  before: string | null;
+  after: string;
+  /** Which provider claimed this. Never elided — ADR-0008. */
+  source: string;
+  confidence: number;
+}
+
+/** Mirrors `enrichment::TrackProposal`. */
+export interface TrackProposal {
+  track_id: string;
+  proposals: FieldProposal[];
+  /** Subgenres destined for custom tags, kept apart from `proposals` because
+   *  they are written through a different mechanism. */
+  tags: string[];
+  /** Distinguishes "nothing found" from "nothing to change" — they look
+   *  identical otherwise, and one means the user should fix their tags. */
+  no_match: boolean;
+}
+
+/** Mirrors `enrich::EnrichRequest`. */
+export interface EnrichRequest {
+  library_path: string;
+  track_ids: string[];
+  original_release?: boolean;
+  use_discogs?: boolean;
+}
+
+/** Mirrors `enrich::EnrichPreview`. */
+export interface EnrichPreview {
+  tracks: TrackProposal[];
+  /** Tracks whose tags were too thin to search with at all. */
+  unsearchable: string[];
+  /** Provider failures, verbatim — one source being down is not "no match". */
+  errors: string[];
+}

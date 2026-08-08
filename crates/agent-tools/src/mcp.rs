@@ -233,6 +233,32 @@ pub fn tool_definitions() -> Vec<Value> {
             ),
         ),
         tool_definition(
+            "library_find_tags",
+            "Look up missing metadata (genre, year, label, album) for a track from MusicBrainz, and Discogs when a token is given. Returns proposals only; nothing is written. Answers are cached locally and rate-limited to the providers' terms.",
+            object_schema(
+                &[
+                    (
+                        "library_path",
+                        string_schema("Path to the Rekordbox master.db file."),
+                    ),
+                    ("track_id", string_schema("Rekordbox content ID.")),
+                    (
+                        "original_release",
+                        string_schema(
+                            "Optional. Strip remix/remaster text from the title and resolve to the earliest release.",
+                        ),
+                    ),
+                    (
+                        "discogs_token",
+                        string_schema(
+                            "Optional Discogs personal access token. Without it, Discogs is not consulted.",
+                        ),
+                    ),
+                ],
+                &["library_path", "track_id"],
+            ),
+        ),
+        tool_definition(
             "library_scan_and_propose_missing",
             "Scan tracks with missing BPM or key, analyze them with stratum-dsp, and stage TrackMetadataEdit changes for each result.",
             object_schema(
@@ -491,6 +517,18 @@ pub fn tool_request_from_name_and_arguments(name: &str, arguments: Value) -> Res
         "library_analyze_track" | "library.analyze_track" => Ok(ToolRequest::LibraryAnalyzeTrack {
             library_path: required_string(arguments, "library_path")?,
             track_id: required_string(arguments, "track_id")?,
+        }),
+        "library_find_tags" | "library.find_tags" => Ok(ToolRequest::LibraryFindTags {
+            library_path: required_string(arguments, "library_path")?,
+            track_id: required_string(arguments, "track_id")?,
+            original_release: arguments
+                .get("original_release")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            discogs_token: arguments
+                .get("discogs_token")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
         }),
         "library_scan_and_propose_missing" | "library.scan_and_propose_missing" => {
             Ok(ToolRequest::LibraryScanAndProposeMissing {

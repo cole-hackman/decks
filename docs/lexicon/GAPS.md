@@ -44,8 +44,11 @@ Playlist Tools) with identical text. Not a transcription error on our side.
 Verified in the Claude Code container on 2026-08-06, and relevant to whoever picks these up next:
 
 - **Metadata APIs are unreachable.** `musicbrainz.org` returns `403` through the agent proxy, so
-  the enrichment providers cannot be written *or* verified here — only on a machine with open
-  egress. Response parsers written against invented shapes would be untestable production code.
+  provider responses cannot be *verified* here. An earlier revision of this bullet also said they
+  could not be **written** here, and that turned out to be wrong: making the transport a seam
+  (`enrichment::http::Http`) leaves query construction, parsing, rate limiting and caching fully
+  testable without a socket, and they are — 85 tests. What is genuinely unverified is only whether
+  the live services return the documented shape. Detail and the unblocking check are below.
 - **There is no audio to calibrate against.** `fixtures/audio/` contains only `.gitkeep`; real
   fixtures are gitignored by design. Energy, Danceability and beatshift detection all need real
   encoder-padded, genre-varied audio before their numbers mean anything.
@@ -79,6 +82,30 @@ Verified in the Claude Code container on 2026-08-06, and relevant to whoever pic
   (`scripts/real-library-smoke.sh`), extended to write one `PQTZ` section into a copy of a real
   ANLZ file and then open that copy in Rekordbox. That is a fifteen-minute check on a machine with
   Rekordbox installed, and it converts all four rows at once.
+
+### The enrichment providers cannot be reached from this container
+
+The agent network policy denies `musicbrainz.org` (`CONNECT` answered 403), and by extension
+`coverartarchive.org` and `api.discogs.com` were never exercised either. The MusicBrainz and
+Discogs response parsers are therefore written against the providers' **documented** schemas and
+have not seen a live response.
+
+This is a smaller risk than it sounds, and deliberately so. Every parse is tolerant by
+construction: an absent or renamed field yields `None` for that value rather than an error, so
+schema drift costs *proposals*, never a wrong value written into a library. Compare the ANLZ case
+above, where the failure mode is a corrupted user file — that asymmetry is the whole reason one
+ships unverified and the other does not.
+
+**The unblocking check**, on any machine with ordinary network access:
+
+```sh
+curl -sS -A "decks/0.1.0 ( https://github.com/cole-hackman/decks )" \
+  "https://musicbrainz.org/ws/2/recording?query=recording:%22Around%20the%20World%22%20AND%20artist:%22Daft%20Punk%22&fmt=json&limit=1"
+```
+
+Compare the shape against `musicbrainz::parse_search`'s expectations — `recordings[]`, `score`,
+`artist-credit[].name` / `.joinphrase`, `tags[].name` / `.count`, `releases[].date`,
+`releases[].label-info[].label.name`. The equivalents for Discogs are in `discogs::parse_search`.
 
 ## Open questions for the project owner
 

@@ -517,6 +517,36 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         );
         ",
     ),
+    (
+        21,
+        "
+        -- Enrichment responses, cached locally.
+        --
+        -- `CLAUDE.md`: the library never leaves the machine except through
+        -- enrichment APIs the user explicitly enables, 'and those go through a
+        -- local cache first'. This table is that cache — the structural half of
+        -- the promise, not a speed optimisation. It is also what keeps us
+        -- inside MusicBrainz's one-request-per-second terms on a bulk run.
+        --
+        -- Keyed by (provider, query_key) and NOT by library_path: the answer to
+        -- 'who released Around the World' does not depend on whose library is
+        -- asking, and scoping it per library would re-fetch the same rows for a
+        -- user with two databases.
+        --
+        -- `candidates` is the provider's parsed answer as JSON, which may be an
+        -- empty array. That is meaningful: a cached no-match is what stops a
+        -- library of bootlegs paying the full rate-limited round trip on every
+        -- re-run, which is the case most likely to be re-run.
+        CREATE TABLE enrichment_cache (
+          provider   TEXT    NOT NULL,
+          query_key  TEXT    NOT NULL,
+          candidates TEXT    NOT NULL,
+          fetched_at INTEGER NOT NULL,
+          PRIMARY KEY (provider, query_key)
+        );
+        CREATE INDEX idx_enrichment_cache_fetched ON enrichment_cache(fetched_at);
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -1060,6 +1090,41 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sync_watermarks", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn enrichment_cache_table_exists_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO enrichment_cache (provider, query_key, candidates, fetched_at)
+             VALUES ('MusicBrainz', 'a\u{1}t', '[]', 1770000000);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM enrichment_cache", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn an_enrichment_entry_is_per_provider_not_per_library() {
+        // The answer to "who released Around the World" does not depend on
+        // whose library is asking. Scoping it per library would re-fetch every
+        // row for a user with two databases, against a rate-limited service.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO enrichment_cache (provider, query_key, candidates, fetched_at) VALUES
+               ('MusicBrainz', 'k1', '[]', 1),
+               ('Discogs',     'k1', '[]', 2),
+               ('MusicBrainz', 'k2', '[]', 3);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM enrichment_cache", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 3);
     }
 
     #[test]

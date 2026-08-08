@@ -240,7 +240,37 @@ pairing. Keeps the single-value genre field clean while retaining detail.
 
 *Album art caveat* — Rekordbox does not support album art on WAV files at all.
 
-*decks status* — **missing.** `crates/enrichment` is a stub (10 LOC placeholder). No album art
-anywhere in the product.
+*decks status* — **partial**, and the tag half is done. See **ADR-0016** for the provider choice.
+
+**MusicBrainz by default**, because it needs no account or key and its data is CC0 — a default
+source the user has to register for is not a default. **Cover Art Archive** pairs with it, keyed by
+the release MBID a metadata match already carries. **Discogs opt-in** with a token in the OS
+keychain, earning its place where MusicBrainz is weakest: label, catalogue and year for dance
+records.
+
+Neither of Lexicon's own sources was available: SonoVault is not a public API, and Spotify's
+`audio-features` is deprecated and 403s for applications registered since 2024-11-27. Energy comes
+from our own analysis (ADR-0015); Danceability, Popularity and Happiness have no honest source and
+are not invented.
+
+Three behaviours worth naming:
+
+- **Backfill only.** A field the library already holds is never proposed over — including when it
+  holds whitespace, which Rekordbox libraries are full of.
+- **Every proposal names its provider** (ADR-0008), and that attribution reaches the staged
+  change's reason, so a diff reviewed a week later still says who claimed it.
+- **The genre split is the manual's own good idea**, implemented as described: main genre to the
+  Genre field, everything else to Custom Tags. Zero-vote MusicBrainz tags are dropped so one
+  person's typo cannot become somebody's Genre; Discogs *styles* beat its broad *genres*, because
+  "Deep House" is more useful than "Electronic".
+
+Reachable from the track context menu, and from `library_find_tags` in chat, MCP and the CLI.
+
+**Album art fetches but does not embed.** `enrichment::cover_art` downloads the front cover and
+identifies it from magic bytes rather than a header — an ID3 picture frame with a wrong MIME is one
+players silently refuse to show — and refuses WAV up front, per the caveat above. Writing the
+picture into the file needs picture support in `crates/audio-tags`, which does not exist yet, so
+**no UI option offers album art**: a checkbox that downloads an image and discards it is the stub
+logic `CLAUDE.md` forbids.
 
 *Epic* — **4**.
