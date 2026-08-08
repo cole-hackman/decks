@@ -2584,6 +2584,43 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (Field Mappings reach the library)
+
+The last non-deferred `Field Mappings` gap: mappings applied to Rekordbox, not only to file tags.
+
+Most of the work was deciding what "applied during sync" should mean. The obvious reading is that
+the applier transforms values on the way through — Energy becomes part of Comment as the write
+happens. That is wrong, and it took writing it down to see why: a mapping rewrites Comment or Genre
+across the *whole library*. It is the largest-blast-radius edit this application can make, and it
+would have been the only bulk operation that skipped the review table. The staged-change pipeline
+exists precisely for this shape of change.
+
+So `preview_sync_mappings` computes what the mappings would write, and `stage_sync_mappings` puts
+those edits into `staged_changes` as ordinary `TrackMetadataEdit` rows. They then flow through
+review, exclusion, `WriteGuard` and the backup like anything else. The command that stages them
+writes nothing to `master.db` at all.
+
+The guard that makes it usable in practice: a mapping producing the value already in the field is
+not a change. Without it, the first sync writes `Energy 08` into every comment and the second sync
+proposes writing `Energy 08` into every comment again — a review table containing the entire
+library, with the two edits you actually care about somewhere in it.
+
+Targets come from `changes::applier::writes_field`, which #35 exported for exactly this reason. The
+alternative was a second hand-kept list of writable columns in the mappings UI, which would drift,
+and the drift would show up as a mapping the user configured that quietly did nothing at sync time.
+Anything outside the allowlist is *named* in the preview instead of dropped, because a mapping that
+disappears without explanation reads as data loss.
+
+Two profiles rather than one list, too. An audio file has no Rating frame worth writing;
+`djmdContent` has no album-art column. Sharing the list would advertise targets that do nothing on
+one side or the other. The target picker resets when you switch destination rather than trying to
+preserve the selection — a target valid for one is often absent from the other, and silently
+keeping a stale one is how you end up with a configured mapping that never fires.
+
+One deliberate absence: `MappingInput`'s danceability, popularity and happiness stay unset rather
+than defaulting to zero. They are blocked upstream (ADR-0012, Spotify's withdrawn endpoint), and a
+zero we never measured written into a comment is a guess presented as a fact.
+
 ## Session — 2026-08-07 (Custom Tags, finished)
 
 Four gaps, one migration, and one genuine bug uncovered.

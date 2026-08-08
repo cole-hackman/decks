@@ -53,7 +53,7 @@ modified-sync watermark and no delete semantics for Full Sync.
 | **Key Conversion** | Original / Open Key / musical notation | done (`key_format.rs`), plus Camelot |
 | **Don't Touch My Grids** | Never modify existing beatgrids in the app. **New tracks still receive Lexicon's grid.** | partial — only skips BPM `TrackMetadataEdit`; no grid writes exist to skip |
 | **Colors → nearest** | Map Lexicon's larger palette to the app's nearest supported colour. **Off means no colour is written when there's no exact match** | **done** — `TrackMetadataEdit` writes `ColorID`, resolving against Rekordbox's fixed eight-colour palette. Off, an inexact colour is left unchanged and the skip is surfaced as a warning; on, it maps to the nearest palette entry and every mapping is named in the warnings. A colour outside the palette never creates a `djmdColor` row: that table is what the hardware can display, not a vocabulary we may extend |
-| **Field Mappings** | See below | missing |
+| **Field Mappings** | See below | **done** |
 | **All smartlists to playlists** | Materialise smartlists | **plumbed but ignored** |
 
 ### Cue Destination — the Rekordbox memory-cue problem
@@ -131,8 +131,24 @@ Migration v11 also **drops the dead `field_mappings` table from v5**: nothing ev
 and its `(library_path, source_field)` primary key allowed one target per source, which cannot
 express combining.
 
-Missing: per-DJ-app profiles (only ID3 is configurable, though the schema is ready) and applying
-mappings during sync.
+Mappings now apply to the **Rekordbox library** as well, under a second profile. Two decisions
+there:
+
+- **Previewed and staged, never applied directly.** A mapping rewrites Comment or Genre across the
+  whole library — the most destructive shape of edit this app makes. Every other bulk operation
+  goes through the staged-change pipeline so the user sees the diff and can reject rows, and there
+  is no case for this being the exception. "Apply mappings on sync" therefore means *stage the
+  edits sync will write*, and they reach `master.db` through the same review and `WriteGuard` as
+  anything else.
+- **A mapping that reproduces the current value is not a change.** Without that, the second sync
+  stages the entire library again and buries the edits that matter.
+
+Targets come from the applier's own allowlist rather than a second hand-kept list, so a target the
+UI offers is one sync will actually write; a mapping onto anything else is named in the preview
+rather than dropped, because a mapping that silently vanishes looks like data loss.
+
+Still missing: profiles for other DJ apps — deferred with the rest of the non-Rekordbox adapters,
+though the schema has been ready since v11.
 
 *Epic* — **4** (shares machinery with Write Tags).
 

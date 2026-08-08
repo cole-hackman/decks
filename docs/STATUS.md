@@ -1,5 +1,38 @@
 # Status
 
+## 2026-08-07 — Field Mappings reach the library
+
+Mappings have projected Energy and Custom Tags into ID3 frames since Epic 4. They now reach
+`master.db` too, under a second profile — which closes the last `Field Mappings` gap that was not
+a deferred non-Rekordbox adapter.
+
+The decision that shaped it: **previewed and staged, never applied directly.** "Apply mappings on
+sync" could have meant transforming values inside the applier, and that would have been wrong. A
+mapping rewrites Comment or Genre across the entire library; it is the most destructive shape of
+edit this app can make. Every other bulk operation here goes through the staged-change pipeline so
+the user sees the diff and can reject rows, and there is no argument for this one being the
+exception. So it means *stage the edits sync will write* — they land in the review table and reach
+the database through the same `WriteGuard` as everything else.
+
+Three supporting calls:
+
+- **A mapping that reproduces the current value is not a change.** Without that guard the second
+  sync stages the whole library again and buries the edits that matter.
+- **Targets come from `changes::applier::writes_field`**, not a second hand-kept list, so a target
+  the UI offers is one sync will actually write. A mapping onto anything else is named in the
+  preview rather than dropped — a mapping that silently vanishes looks like data loss.
+- **Two profiles, not one list applied twice.** An audio file has no Rating frame worth writing and
+  `djmdContent` has no album-art column. A shared list would offer targets that do nothing on one
+  side, and the target picker resets when the destination changes for the same reason.
+
+Danceability, Popularity and Happiness are deliberately left absent from `MappingInput` rather than
+defaulted: they are blocked upstream (ADR-0012), and writing a zero we did not measure would be a
+guess presented as a fact.
+
+**Next:** the per-app modified watermark and Full-Sync delete for `Full / Playlist / Modified
+sync`; Find Lost Tracks' merge-with-existing; more of the Automatic Actions group. Album art and
+`crates/enrichment` still need the provider decision.
+
 ## 2026-08-07 — Custom Tags, finished
 
 The four remaining Custom Tags gaps, closed together because they share a migration: category

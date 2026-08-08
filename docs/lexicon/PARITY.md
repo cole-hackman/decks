@@ -14,7 +14,7 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
-| Interop & sync | 6 | 5 | 1 | 0 | 11 |
+| Interop & sync | 7 | 4 | 1 | 0 | 11 |
 | Library & browser | 15 | 2 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 3 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **55** | **25** | **14** | **2** | **16** |
+| **Total** | **56** | **24** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -63,7 +63,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
 | Colors → nearest | **done** | `Track` carries colour; `TrackMetadataEdit` writes `ColorID` against Rekordbox's fixed eight-colour palette. Off, an inexact colour is **left unchanged** and the skip is reported; on, it maps to the nearest and each mapping is named. Never creates a `djmdColor` row — a ninth colour renders on no CDJ | 4 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
-| Field Mappings | partial | Engine + ID3 profile done, per-category tag sources and the Colour source now actually populated; no per-DJ-app profiles, still not applied during sync | 4 |
+| Field Mappings | **done** | Engine, ID3 profile **and** a Rekordbox profile applied to the library. Per-category tag sources and the Colour source populated. Library mappings are **previewed and staged**, not written directly — a mapping rewrites Comment or Genre library-wide, and that goes through review like every other bulk edit. Profiles for non-Rekordbox apps stay `deferred` with the rest of those adapters | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
 | Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues | 4 |
 | Serato / Traktor / VirtualDJ / Engine / djay / Apple Music / M3U / USB / DIRECT2CDJ | deferred | 11 items | — |
