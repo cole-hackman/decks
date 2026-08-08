@@ -1,5 +1,39 @@
 # Status
 
+## 2026-08-07 — Cue Destination, and a round-trip we do not need
+
+Closed the Cue Destination row, mostly by working out that half of it is a problem `decks` does not
+have.
+
+**The half that was real** is the sync options `All to hot cue` / `All to memory cue` /
+`All to hot and memory cue` — the spec calls it "how you copy hot cues into memory cues wholesale",
+and it is the standard Rekordbox workflow, because hot cues do not show on every player and memory
+cues do. That is now a `MirrorCues` cue recipe. `Both` is **idempotent**: a position that already
+exists as both kinds is left alone, because this is an operation people run after every session and
+a second run must not double the cue list.
+
+**The half that is a divergence** is the hidden-duplicate round-trip. Lexicon's internal model has
+hot cues only, so it *collapses* memory cues into hot cues on import and has to remember what it hid
+in order to restore it on sync back. `decks` never imports — it reads `djmdCue` live and shows both
+kinds as they are. Nothing is collapsed, nothing is hidden, nothing needs restoring. Building the
+ledger would be machinery for a problem we do not have, and the per-cue `M` toggle is likewise a
+state that cannot arise here: a cue already *is* one kind or the other.
+
+**Two real bugs surfaced while wiring it up**, both in `diff_cues`, both silent:
+
+- **A recipe that *adds* a cue had it dropped.** The diff walked the result list and skipped
+  anything with no `before` to compare against, so `MirrorCues` produced an empty preview and
+  looked like a no-op. Additions now stage as `TrackAddCue`.
+- **A cue that changed *kind* staged nothing.** Nothing diffed the `memory` flag, so converting
+  hot→memory silently did nothing too.
+
+Neither could have been caught by the existing recipes, because none of them added a cue or changed
+a kind — the new operation is the first to do either, and it found both.
+
+**Next:** the playlists tree's folder-drop and drag-between; the last two cue recipes need an
+unmodelled `djmdCue` column and ANLZ writes, so check feasibility before committing. Album art and
+`crates/enrichment` still need the provider decision.
+
 ## 2026-08-07 — Auto-write file tags, and a blocker that had outlived its cause
 
 Audited the four disabled Automatic Actions against what the last few PRs shipped. Three are still

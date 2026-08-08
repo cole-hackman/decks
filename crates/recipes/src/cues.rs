@@ -153,6 +153,36 @@ pub enum CueRecipe {
         /// Beats per snap: 1, 2, 4 (a bar), 16, 64.
         resolution_beats: u32,
     },
+    /// Copy cues into the other Rekordbox cue kind.
+    ///
+    /// Per `docs/lexicon/01-interop.md §Cue Destination`: the sync options
+    /// `All to hot cue` / `All to memory cue` / `All to hot and memory cue`,
+    /// "which is how you copy hot cues into memory cues wholesale". This is the
+    /// half of Cue Destination that `decks` can act on — see the doc comment on
+    /// [`MirrorTarget`] for the half it does not need.
+    MirrorCues {
+        target: MirrorTarget,
+    },
+}
+
+/// Which kind a track's cues should exist as after `MirrorCues`.
+///
+/// **`decks` needs no hidden-duplicate model.** Lexicon collapses memory cues
+/// into hot cues on import and must remember what it hid so it can restore them
+/// on sync back. `decks` never imports — it reads `djmdCue` live and shows both
+/// kinds as they are — so there is nothing hidden and nothing to restore. The
+/// round-trip guarantee is one we get by not having the problem, and the
+/// buildable half of the feature is this bulk copy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MirrorTarget {
+    /// Every cue becomes a hot cue. Memory cues are converted, not duplicated.
+    Hot,
+    /// Every cue becomes a memory cue.
+    Memory,
+    /// Every cue exists as **both**. This is the one people actually want:
+    /// hot cues do not show on every player, memory cues do.
+    Both,
 }
 
 /// What a cue recipe produced.
@@ -387,6 +417,38 @@ pub fn apply_cue_recipe(recipe: &CueRecipe, cues: &[RecipeCue], grid: &[i64]) ->
                 }
             }
         }
+
+        CueRecipe::MirrorCues { target } => match target {
+            MirrorTarget::Hot => out.iter_mut().for_each(|c| c.memory = false),
+            MirrorTarget::Memory => out.iter_mut().for_each(|c| c.memory = true),
+            MirrorTarget::Both => {
+                // A position that already exists as both kinds is left alone.
+                // Without this, running the recipe twice doubles the cue list —
+                // and a bulk operation people run after every session has to be
+                // safe to run again.
+                let mut added = Vec::new();
+                for cue in &out {
+                    let twin_exists = out.iter().any(|other| {
+                        other.position_ms == cue.position_ms && other.memory != cue.memory
+                    });
+                    if twin_exists {
+                        continue;
+                    }
+                    added.push(RecipeCue {
+                        // A new row, so a new id. The applier inserts anything
+                        // it has not seen; reusing the id would make this an
+                        // edit of the original instead of a copy.
+                        id: format!("{}-mirror", cue.id),
+                        memory: !cue.memory,
+                        ..cue.clone()
+                    });
+                }
+                if added.is_empty() {
+                    skipped = Some("every cue already exists as both kinds".into());
+                }
+                out.extend(added);
+            }
+        },
     }
 
     CueEdits {
@@ -911,5 +973,94 @@ mod tests {
             serde_json::from_str::<Vec<CueRecipe>>(&json).unwrap(),
             recipes
         );
+    }
+
+    fn hot(id: &str, ms: i64) -> RecipeCue {
+        RecipeCue {
+            id: id.into(),
+            position_ms: ms,
+            loop_end_ms: None,
+            name: Some("Drop".into()),
+            color: Some(4),
+            memory: false,
+        }
+    }
+
+    fn mem(id: &str, ms: i64) -> RecipeCue {
+        RecipeCue {
+            memory: true,
+            ..hot(id, ms)
+        }
+    }
+
+    fn mirror(target: MirrorTarget, cues: &[RecipeCue]) -> CueEdits {
+        apply_cue_recipe(&CueRecipe::MirrorCues { target }, cues, &[])
+    }
+
+    #[test]
+    fn mirroring_to_memory_converts_rather_than_duplicating() {
+        let out = mirror(MirrorTarget::Memory, &[hot("a", 1000), mem("b", 2000)]);
+        assert_eq!(out.cues.len(), 2);
+        assert!(out.cues.iter().all(|c| c.memory));
+    }
+
+    #[test]
+    fn mirroring_to_hot_converts_rather_than_duplicating() {
+        let out = mirror(MirrorTarget::Hot, &[hot("a", 1000), mem("b", 2000)]);
+        assert_eq!(out.cues.len(), 2);
+        assert!(out.cues.iter().all(|c| !c.memory));
+    }
+
+    #[test]
+    fn mirroring_to_both_copies_each_cue_into_the_other_kind() {
+        // The one people actually want: hot cues do not show on every player,
+        // memory cues do.
+        let out = mirror(MirrorTarget::Both, &[hot("a", 1000)]);
+        assert_eq!(out.cues.len(), 2);
+        assert!(out.cues.iter().any(|c| c.memory));
+        assert!(out.cues.iter().any(|c| !c.memory));
+        // The copy keeps everything but the kind and the id.
+        let copy = out.cues.iter().find(|c| c.memory).unwrap();
+        assert_eq!(copy.position_ms, 1000);
+        assert_eq!(copy.name.as_deref(), Some("Drop"));
+        assert_eq!(copy.color, Some(4));
+        assert_ne!(copy.id, "a");
+    }
+
+    /// The guard that makes this safe to run after every session.
+    #[test]
+    fn mirroring_to_both_is_idempotent() {
+        // Without it, a second run doubles the cue list — and this is a bulk
+        // operation people run repeatedly.
+        let once = mirror(MirrorTarget::Both, &[hot("a", 1000)]);
+        let twice = mirror(MirrorTarget::Both, &once.cues);
+        assert_eq!(twice.cues.len(), once.cues.len());
+    }
+
+    #[test]
+    fn a_position_that_already_has_both_kinds_is_left_alone() {
+        let out = mirror(MirrorTarget::Both, &[hot("a", 1000), mem("b", 1000)]);
+        assert_eq!(out.cues.len(), 2);
+        assert_eq!(
+            out.skipped.as_deref(),
+            Some("every cue already exists as both kinds")
+        );
+    }
+
+    #[test]
+    fn mirroring_carries_a_loop_across() {
+        let mut loop_cue = hot("a", 1000);
+        loop_cue.loop_end_ms = Some(3000);
+        let out = mirror(MirrorTarget::Both, &[loop_cue]);
+        let copy = out.cues.iter().find(|c| c.memory).unwrap();
+        assert_eq!(copy.loop_end_ms, Some(3000));
+    }
+
+    #[test]
+    fn mirroring_an_empty_cue_list_deletes_nothing_and_says_so() {
+        let out = mirror(MirrorTarget::Both, &[]);
+        assert!(out.cues.is_empty());
+        assert!(out.deleted.is_empty());
+        assert!(out.skipped.is_some());
     }
 }

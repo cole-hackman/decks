@@ -4,6 +4,7 @@ import { useToast } from "./Toast";
 import type {
   CueColourScheme,
   CueDeleteMode,
+  CueMirrorTarget,
   CueRecipe,
   CueRecipeTrack,
   CueSortOrder,
@@ -21,6 +22,20 @@ const OPS: { value: Op; label: string }[] = [
   { value: "remove_cues_by_label", label: "Remove cues by label" },
   { value: "shift_cues", label: "Shift cues" },
   { value: "quantize_cues", label: "Quantize cues" },
+  { value: "mirror_cues", label: "Copy between hot and memory cues" },
+];
+
+/**
+ * Per `docs/lexicon/01-interop.md §Cue Destination` — the sync options
+ * "All to hot cue / All to memory cue / All to hot and memory cue".
+ *
+ * `both` is the one people actually want: hot cues do not show on every
+ * player, memory cues do.
+ */
+const MIRROR_TARGETS: { value: CueMirrorTarget; label: string }[] = [
+  { value: "both", label: "Both — keep each cue as hot and memory" },
+  { value: "hot", label: "All to hot cues" },
+  { value: "memory", label: "All to memory cues" },
 ];
 
 const DELETE_MODES: { value: CueDeleteMode; label: string }[] = [
@@ -86,6 +101,7 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
   const [label, setLabel] = useState("");
   const [offsetMs, setOffsetMs] = useState(0);
   const [resolution, setResolution] = useState(4);
+  const [mirrorTarget, setMirrorTarget] = useState<CueMirrorTarget>("both");
   const [preview, setPreview] = useState<CueRecipeTrack[] | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -115,6 +131,8 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
         return { op, offset_ms: offsetMs };
       case "quantize_cues":
         return { op, resolution_beats: resolution };
+      case "mirror_cues":
+        return { op, target: mirrorTarget };
     }
   }, [
     op,
@@ -129,6 +147,7 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
     label,
     offsetMs,
     resolution,
+    mirrorTarget,
   ]);
 
   const runPreview = useCallback(async () => {
@@ -147,7 +166,10 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
   const actionable = useMemo(
     () =>
       (preview ?? []).filter(
-        (t) => t.edits.length > 0 || t.deletions.length > 0,
+        (t) =>
+          t.edits.length > 0 ||
+          t.deletions.length > 0 ||
+          (t.additions?.length ?? 0) > 0,
       ),
     [preview],
   );
@@ -362,6 +384,26 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
           </label>
         )}
 
+        {op === "mirror_cues" && (
+          <label>
+            <span className="mb-1 block text-muted">Cues should exist as</span>
+            <select
+              aria-label="Cue destination"
+              className="rounded border border-border bg-surface px-2 py-1 text-xs"
+              value={mirrorTarget}
+              onChange={(e) =>
+                setMirrorTarget(e.target.value as CueMirrorTarget)
+              }
+            >
+              {MIRROR_TARGETS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <button
           type="button"
           disabled={busy || trackIds.length === 0}
@@ -398,6 +440,11 @@ export function CueRecipesSection({ libraryPath, trackIds }: Props) {
                       {t.edits.length > 0 && (
                         <span className="rounded bg-sky-500/15 px-1 text-sky-400">
                           {t.edits.length} edit(s)
+                        </span>
+                      )}
+                      {(t.additions?.length ?? 0) > 0 && (
+                        <span className="rounded bg-emerald-500/15 px-1 text-emerald-400">
+                          +{t.additions!.length} cue(s)
                         </span>
                       )}
                       {t.deletions.length > 0 && (

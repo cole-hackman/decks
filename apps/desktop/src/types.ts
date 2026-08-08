@@ -737,7 +737,11 @@ export type CueRecipe =
   | { op: "remove_cue_text" }
   | { op: "remove_cues_by_label"; text: string }
   | { op: "shift_cues"; offset_ms: number }
-  | { op: "quantize_cues"; resolution_beats: number };
+  | { op: "quantize_cues"; resolution_beats: number }
+  | { op: "mirror_cues"; target: CueMirrorTarget };
+
+/** Which kind a track's cues should exist as after `mirror_cues`. */
+export type CueMirrorTarget = "hot" | "memory" | "both";
 
 /** One `djmdCue` column edit, ready to stage. Values are typed, not stringified. */
 export interface CueChange {
@@ -758,7 +762,15 @@ export interface CueRecipeTrack {
   track_title: string;
   edits: CueChange[];
   deletions: CueDeletion[];
+  /** Cues the recipe created — only `mirror_cues` produces these today.
+   *  Optional: a shell built before this field existed simply omits it. */
+  additions?: CueAddition[];
   skipped: string | null;
+}
+
+export interface CueAddition {
+  cue_label: string;
+  payload: unknown;
 }
 
 /**

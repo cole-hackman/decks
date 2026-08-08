@@ -29,7 +29,8 @@ pub mod text;
 use serde::{Deserialize, Serialize};
 
 pub use cues::{
-    apply_cue_recipe, ColourScheme, CueEdits, CueRecipe, DeleteMode, RecipeCue, SortOrder,
+    apply_cue_recipe, ColourScheme, CueEdits, CueRecipe, DeleteMode, MirrorTarget, RecipeCue,
+    SortOrder,
 };
 pub use fields::{diff, FieldChange, TrackFields};
 pub use tags::{apply_tag_recipe, parse_hashtags, TagChange, TagRecipe};
