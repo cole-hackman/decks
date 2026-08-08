@@ -49,10 +49,7 @@ pub fn strip_version(title: &str) -> (String, Vec<String>) {
     let mut work = title.trim().to_string();
     let mut removed = Vec::new();
 
-    loop {
-        let Some(group) = trailing_group(&work) else {
-            break;
-        };
+    while let Some(group) = trailing_group(&work) {
         if !looks_like_version(&group.inner) {
             break;
         }
