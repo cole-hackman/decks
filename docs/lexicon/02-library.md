@@ -251,11 +251,25 @@ single category can be the source instead. **Rekordbox is limited to 4 MyTag cat
 filtered set), `Enter` toggles, `Esc` saves and closes. Individual tags can be assigned a number,
 and that number bound to a hotkey.
 
-*decks status* — **partial, and well advanced.** Categories, tags, CRUD, usage-count badges, a
-picker modal, bulk apply, the `T` shortcut, tag filter dimensions, inline chips, the
-OR-within/AND-across selection semantics, **MyTag import** and **hashtag import** all exist.
-Missing: category colours, drag-to-reorder/move (backend `move_tag` exists; blocked on a
-`reorder_tags` command), per-tag number hotkeys, and Field-Mapper export.
+*decks status* — **done.** Categories, tags, CRUD, usage-count badges, a picker modal, bulk apply,
+the `T` shortcut, tag filter dimensions, inline chips, the OR-within/AND-across selection
+semantics, **MyTag import**, **hashtag import**, **category colours**, **reorder** and **per-tag
+number hotkeys** all exist, and the Field Mapper exports tags both wholesale and per category.
+
+Three decisions in the last of those:
+
+- **Reorder takes the whole new order, not a (tag, position) pair.** A drag produces a complete
+  order anyway, and applying it wholesale means there is never a window where two tags share a
+  `seq` — which shifting everything down by one would have.
+- **Reorder is on the keyboard too.** `Alt`+`←`/`→` moves the focused chip. A drag is a mouse
+  gesture, and a list whose order can only be changed with a mouse cannot be changed at all by
+  someone not using one. Plain arrows are left to the browser so tabbing still works.
+- **A hotkey is global, and assigning a taken one steals it.** The alternative — refusing — sends
+  the user hunting through every category for whichever tag holds `3`. The theft is visible
+  immediately, because the other tag's number is simply gone.
+
+A category colour is optional and stays optional: `NULL` is the normal state, and clearing one is
+offered as its own choice rather than being reachable only by picking a different colour.
 
 **Correction to an earlier entry.** This section previously listed hashtag import as missing. It
 was not: `recipes::parse_hashtags` plus the tag-recipe preview/apply path had covered it since

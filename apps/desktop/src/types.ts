@@ -75,6 +75,8 @@ export interface TagCategory {
   id: string;
   name: string;
   seq: number;
+  /** `#rrggbb`, or null for no colour. Absent is the normal state. */
+  color: string | null;
 }
 
 export interface Tag {
@@ -85,6 +87,9 @@ export interface Tag {
   /** Number of track ↔ tag bindings across all libraries. Surfaced as a "(N)"
    *  badge in the Custom Tags panel. */
   usage_count: number;
+  /** 1–9, bound to the number row in the tag popup. Global across the whole
+   *  tag tree, so no two tags share one. */
+  hotkey: number | null;
 }
 
 /** Mirrors `audio_tags::TrackTags`. */

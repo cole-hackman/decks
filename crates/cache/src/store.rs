@@ -652,6 +652,13 @@ pub struct TagCategory {
     pub id: String,
     pub name: String,
     pub seq: i64,
+    /// `#rrggbb`, or `None` for no colour.
+    ///
+    /// Absent is the normal state, not a missing value — most categories will
+    /// never carry one, and a default would make every existing category
+    /// silently claim a colour the user never picked.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -666,18 +673,24 @@ pub struct Tag {
     /// never exceed total library track count, which fits comfortably.
     #[serde(default)]
     pub usage_count: u32,
+    /// 1–9, bound to the number row in the tag popup. Unique across the whole
+    /// tag tree: the hotkey is global, so two tags claiming `3` would make one
+    /// of them unreachable.
+    #[serde(default)]
+    pub hotkey: Option<i64>,
 }
 
 impl CacheDb {
     pub fn list_tag_categories(&self) -> Result<Vec<TagCategory>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, name, seq FROM tag_categories ORDER BY seq, name")?;
+            .prepare("SELECT id, name, seq, color FROM tag_categories ORDER BY seq, name")?;
         let rows = stmt.query_map([], |r| {
             Ok(TagCategory {
                 id: r.get(0)?,
                 name: r.get(1)?,
                 seq: r.get(2)?,
+                color: r.get(3)?,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -699,6 +712,7 @@ impl CacheDb {
             id,
             name: name.to_owned(),
             seq,
+            color: None,
         })
     }
 
@@ -721,7 +735,8 @@ impl CacheDb {
     pub fn list_tags(&self, category_id: Option<&str>) -> Result<Vec<Tag>> {
         let mut tags = Vec::new();
         let with_count = "SELECT t.id, t.category_id, t.name, t.seq, \
-             (SELECT COUNT(*) FROM track_tags tt WHERE tt.tag_id = t.id) AS usage_count \
+             (SELECT COUNT(*) FROM track_tags tt WHERE tt.tag_id = t.id) AS usage_count, \
+             t.hotkey \
              FROM tags t";
         if let Some(cat_id) = category_id {
             let sql = format!("{with_count} WHERE t.category_id = ?1 ORDER BY t.seq, t.name");
@@ -734,6 +749,7 @@ impl CacheDb {
                     name: r.get(2)?,
                     seq: r.get(3)?,
                     usage_count: r.get::<_, u32>(4)?,
+                    hotkey: r.get(5)?,
                 });
             }
         } else {
@@ -747,6 +763,7 @@ impl CacheDb {
                     name: r.get(2)?,
                     seq: r.get(3)?,
                     usage_count: r.get::<_, u32>(4)?,
+                    hotkey: r.get(5)?,
                 });
             }
         }
@@ -770,6 +787,7 @@ impl CacheDb {
             name: name.to_owned(),
             seq,
             usage_count: 0,
+            hotkey: None,
         })
     }
 
@@ -800,10 +818,91 @@ impl CacheDb {
         Ok(())
     }
 
+    /// Set or clear a category's colour.
+    ///
+    /// `None` clears it, and clearing is a legitimate end state rather than a
+    /// failure to choose — most categories will never carry a colour.
+    pub fn set_tag_category_color(&self, id: &str, color: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE tag_categories SET color = ?1 WHERE id = ?2",
+            rusqlite::params![color, id],
+        )?;
+        Ok(())
+    }
+
+    /// Bind a tag to a number-row hotkey, or clear it with `None`.
+    ///
+    /// The hotkey is **global**, not per category, so assigning one that is
+    /// already taken steals it from the other tag rather than failing. Failing
+    /// would leave the user hunting through every category for whichever tag
+    /// holds `3`; stealing is visible immediately — the old tag's badge is
+    /// simply gone — and is what a keyboard shortcut assignment normally means.
+    ///
+    /// Both statements run in one transaction: a steal that cleared the old
+    /// binding and then failed to set the new one would lose a hotkey the user
+    /// had and give nothing back.
+    pub fn set_tag_hotkey(&self, id: &str, hotkey: Option<i64>) -> Result<()> {
+        if let Some(n) = hotkey {
+            if !(1..=9).contains(&n) {
+                anyhow::bail!("hotkey must be 1–9, got {n}");
+            }
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        if let Some(n) = hotkey {
+            tx.execute(
+                "UPDATE tags SET hotkey = NULL WHERE hotkey = ?1 AND id != ?2",
+                rusqlite::params![n, id],
+            )?;
+        }
+        tx.execute(
+            "UPDATE tags SET hotkey = ?1 WHERE id = ?2",
+            rusqlite::params![hotkey, id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Rewrite the order of the tags within one category.
+    ///
+    /// Takes the **whole** ordered list rather than a (tag, position) pair.
+    /// A drag produces a new complete order, and applying it wholesale means
+    /// there is no window in which two tags share a `seq` — which a
+    /// shift-everything-down-by-one approach would have.
+    ///
+    /// Ids not in the category are ignored rather than moved into it; moving
+    /// between categories is `move_tag`'s job, and doing it implicitly here
+    /// would make a reorder silently restructure the tree.
+    pub fn reorder_tags(&self, category_id: &str, ordered_ids: &[String]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (seq, id) in ordered_ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE tags SET seq = ?1 WHERE id = ?2 AND category_id = ?3",
+                rusqlite::params![seq as i64, id, category_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Rewrite the order of the categories themselves. Same whole-list contract
+    /// as [`reorder_tags`](Self::reorder_tags).
+    pub fn reorder_tag_categories(&self, ordered_ids: &[String]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (seq, id) in ordered_ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE tag_categories SET seq = ?1 WHERE id = ?2",
+                rusqlite::params![seq as i64, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn get_track_tags(&self, library_path: &str, track_id: &str) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare(
             "SELECT t.id, t.category_id, t.name, t.seq,
-                    (SELECT COUNT(*) FROM track_tags tt2 WHERE tt2.tag_id = t.id) AS usage_count
+                    (SELECT COUNT(*) FROM track_tags tt2 WHERE tt2.tag_id = t.id) AS usage_count,
+                    t.hotkey
              FROM tags t
              JOIN track_tags tt ON t.id = tt.tag_id
              WHERE tt.library_path = ?1 AND tt.track_id = ?2
@@ -816,6 +915,7 @@ impl CacheDb {
                 name: r.get(2)?,
                 seq: r.get(3)?,
                 usage_count: r.get::<_, u32>(4)?,
+                hotkey: r.get(5)?,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -3892,5 +3992,170 @@ mod tests {
         db.set_cue_preset_order(&["ghost".to_string(), one])
             .unwrap();
         assert_eq!(db.list_cue_presets().unwrap().len(), 1);
+    }
+
+    fn tag_tree() -> CacheDb {
+        let db = CacheDb::open_in_memory().unwrap();
+        let genre = db.create_tag_category("Genre").unwrap();
+        for name in ["Techno", "House", "Disco"] {
+            db.create_tag(&genre.id, name).unwrap();
+        }
+        db.create_tag_category("Mood").unwrap();
+        db
+    }
+
+    fn category(db: &CacheDb, name: &str) -> TagCategory {
+        db.list_tag_categories()
+            .unwrap()
+            .into_iter()
+            .find(|c| c.name == name)
+            .unwrap()
+    }
+
+    fn tag(db: &CacheDb, name: &str) -> Tag {
+        db.list_tags(None)
+            .unwrap()
+            .into_iter()
+            .find(|t| t.name == name)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_category_colour_round_trips_and_can_be_cleared() {
+        let db = tag_tree();
+        let genre = category(&db, "Genre");
+        assert_eq!(genre.color, None, "a new category has no colour");
+
+        db.set_tag_category_color(&genre.id, Some("#e5484d"))
+            .unwrap();
+        assert_eq!(category(&db, "Genre").color.as_deref(), Some("#e5484d"));
+
+        // Clearing is a legitimate end state, not a failure to choose.
+        db.set_tag_category_color(&genre.id, None).unwrap();
+        assert_eq!(category(&db, "Genre").color, None);
+    }
+
+    #[test]
+    fn a_tag_hotkey_round_trips_and_can_be_cleared() {
+        let db = tag_tree();
+        let techno = tag(&db, "Techno");
+        assert_eq!(techno.hotkey, None);
+
+        db.set_tag_hotkey(&techno.id, Some(3)).unwrap();
+        assert_eq!(tag(&db, "Techno").hotkey, Some(3));
+
+        db.set_tag_hotkey(&techno.id, None).unwrap();
+        assert_eq!(tag(&db, "Techno").hotkey, None);
+    }
+
+    #[test]
+    fn assigning_a_taken_hotkey_steals_it_rather_than_failing() {
+        // The alternative is an error that sends the user hunting through every
+        // category for whichever tag holds `3`. Stealing is visible at once —
+        // the old tag's badge is simply gone.
+        let db = tag_tree();
+        let techno = tag(&db, "Techno");
+        let house = tag(&db, "House");
+        db.set_tag_hotkey(&techno.id, Some(3)).unwrap();
+        db.set_tag_hotkey(&house.id, Some(3)).unwrap();
+
+        assert_eq!(tag(&db, "House").hotkey, Some(3));
+        assert_eq!(tag(&db, "Techno").hotkey, None, "the old binding is gone");
+    }
+
+    #[test]
+    fn reassigning_a_tags_own_hotkey_is_not_a_theft_from_itself() {
+        let db = tag_tree();
+        let techno = tag(&db, "Techno");
+        db.set_tag_hotkey(&techno.id, Some(3)).unwrap();
+        db.set_tag_hotkey(&techno.id, Some(3)).unwrap();
+        assert_eq!(tag(&db, "Techno").hotkey, Some(3));
+    }
+
+    #[test]
+    fn a_hotkey_outside_the_number_row_is_refused() {
+        let db = tag_tree();
+        let techno = tag(&db, "Techno");
+        assert!(db.set_tag_hotkey(&techno.id, Some(0)).is_err());
+        assert!(db.set_tag_hotkey(&techno.id, Some(10)).is_err());
+        assert_eq!(tag(&db, "Techno").hotkey, None);
+    }
+
+    #[test]
+    fn reordering_tags_applies_the_whole_new_order() {
+        let db = tag_tree();
+        let genre = category(&db, "Genre");
+        let (techno, house, disco) = (tag(&db, "Techno"), tag(&db, "House"), tag(&db, "Disco"));
+
+        db.reorder_tags(
+            &genre.id,
+            &[disco.id.clone(), techno.id.clone(), house.id.clone()],
+        )
+        .unwrap();
+
+        let names: Vec<String> = db
+            .list_tags(Some(&genre.id))
+            .unwrap()
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        assert_eq!(names, vec!["Disco", "Techno", "House"]);
+    }
+
+    #[test]
+    fn a_reorder_never_leaves_two_tags_sharing_a_position() {
+        // The whole-list contract is what buys this: a shift-by-one approach
+        // has a window where two tags hold the same seq and the list order is
+        // undefined.
+        let db = tag_tree();
+        let genre = category(&db, "Genre");
+        let (techno, house, disco) = (tag(&db, "Techno"), tag(&db, "House"), tag(&db, "Disco"));
+        db.reorder_tags(&genre.id, &[house.id, disco.id, techno.id])
+            .unwrap();
+
+        let mut seqs: Vec<i64> = db
+            .list_tags(Some(&genre.id))
+            .unwrap()
+            .into_iter()
+            .map(|t| t.seq)
+            .collect();
+        seqs.sort();
+        assert_eq!(seqs, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn reordering_ignores_ids_from_another_category() {
+        // Moving between categories is `move_tag`'s job. Doing it implicitly
+        // here would make a reorder silently restructure the tree.
+        let db = tag_tree();
+        let genre = category(&db, "Genre");
+        let mood = category(&db, "Mood");
+        let chill = db.create_tag(&mood.id, "Chill").unwrap();
+        let techno = tag(&db, "Techno");
+
+        db.reorder_tags(&genre.id, &[chill.id.clone(), techno.id])
+            .unwrap();
+
+        assert_eq!(
+            db.list_tags(Some(&mood.id)).unwrap().len(),
+            1,
+            "Chill should not have moved out of Mood"
+        );
+        assert_eq!(tag(&db, "Chill").category_id, mood.id);
+    }
+
+    #[test]
+    fn categories_reorder_too() {
+        let db = tag_tree();
+        let (genre, mood) = (category(&db, "Genre"), category(&db, "Mood"));
+        db.reorder_tag_categories(&[mood.id, genre.id]).unwrap();
+
+        let names: Vec<String> = db
+            .list_tag_categories()
+            .unwrap()
+            .into_iter()
+            .map(|c| c.name)
+            .collect();
+        assert_eq!(names, vec!["Mood", "Genre"]);
     }
 }

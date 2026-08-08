@@ -7,9 +7,33 @@ import {
   deleteTag,
   previewMyTagImport,
   importMyTags,
+  setTagCategoryColor,
+  setTagHotkey,
+  reorderTags,
 } from "../ipc";
 import type { TagCategory, Tag, MyTagImportPreview } from "../types";
+import { indexOfId, moveWithin } from "../lib/reorder";
 import { PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+
+/**
+ * The colours a category may carry, per `docs/lexicon/02-library.md
+ * §Custom Tags`: "Categories carry a colour".
+ *
+ * Deliberately the same eight as Rekordbox's track palette. A category colour
+ * is a visual grouping, not a value that syncs anywhere — but offering a
+ * different set would invite the reasonable assumption that the two relate.
+ */
+const CATEGORY_COLOURS: { name: string; hex: string }[] = [
+  { name: "Pink", hex: "#ff6b9d" },
+  { name: "Red", hex: "#e5484d" },
+  { name: "Orange", hex: "#f76b15" },
+  { name: "Yellow", hex: "#f5d90a" },
+  { name: "Green", hex: "#46a758" },
+  { name: "Aqua", hex: "#12a5b8" },
+  { name: "Blue", hex: "#3e63dd" },
+  { name: "Purple", hex: "#8e4ec6" },
+];
+
 
 interface Props {
   /** Optional — when provided, the panel renders a "Show tracks" button that
@@ -143,6 +167,74 @@ export function CustomTagsPanel({ onShowTracks, libraryPath }: Props = {}) {
     setExpandedCats(next);
   };
 
+  /** Which category's colour menu is open, if any. */
+  const [colourMenuFor, setColourMenuFor] = useState<string | null>(null);
+  /** The tag id currently being dragged, so a drop knows what moved. */
+  const [draggingTagId, setDraggingTagId] = useState<string | null>(null);
+
+  const applyColour = async (categoryId: string, hex: string | null) => {
+    setColourMenuFor(null);
+    await setTagCategoryColor(categoryId, hex);
+    await loadData();
+  };
+
+  const applyHotkey = async (tagId: string, value: string) => {
+    // The hotkey is global, so the backend takes it from whichever tag held it.
+    await setTagHotkey(tagId, value === "" ? null : Number(value));
+    await loadData();
+  };
+
+  /**
+   * Commit a drag as a whole new order for the category.
+   *
+   * Optimistic: the chips reorder before the write lands, because a list that
+   * snaps back for a moment after every drop reads as a failed drag. `loadData`
+   * afterwards is what makes a genuine failure visible.
+   */
+  const dropTag = async (categoryId: string, overTagId: string) => {
+    const dragged = draggingTagId;
+    setDraggingTagId(null);
+    if (!dragged || dragged === overTagId) return;
+
+    const current = tags[categoryId] ?? [];
+    const next = moveWithin(
+      current,
+      indexOfId(current, dragged),
+      indexOfId(current, overTagId),
+    );
+    if (next === current) return;
+
+    setTags((prev) => ({ ...prev, [categoryId]: next }));
+    await reorderTags(
+      categoryId,
+      next.map((t) => t.id),
+    );
+    await loadData();
+  };
+
+  /**
+   * Keyboard reorder, because a drag-only list is unreachable without a mouse.
+   *
+   * `Alt` + arrow moves the focused chip one place. Plain arrows are left to
+   * the browser so tabbing through chips still works.
+   */
+  const nudgeTag = async (
+    categoryId: string,
+    tagId: string,
+    delta: number,
+  ) => {
+    const current = tags[categoryId] ?? [];
+    const from = indexOfId(current, tagId);
+    const next = moveWithin(current, from, from + delta);
+    if (next === current) return;
+    setTags((prev) => ({ ...prev, [categoryId]: next }));
+    await reorderTags(
+      categoryId,
+      next.map((t) => t.id),
+    );
+    await loadData();
+  };
+
   const toggleTagSelection = (tagId: string) => {
     setSelectedTagIds((prev) => {
       const next = new Set(prev);
@@ -252,9 +344,55 @@ export function CustomTagsPanel({ onShowTracks, libraryPath }: Props = {}) {
                       ) : (
                         <ChevronRightIcon className="h-4 w-4" />
                       )}
+                      <span
+                        aria-hidden
+                        className="h-3 w-1 rounded-full"
+                        style={{ backgroundColor: cat.color ?? "transparent" }}
+                      />
                       {cat.name}
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setColourMenuFor((c) => (c === cat.id ? null : cat.id))
+                          }
+                          aria-label={`Colour for ${cat.name}`}
+                          title="Category colour"
+                          className="h-4 w-4 rounded-full border border-edge-strong"
+                          style={
+                            cat.color ? { backgroundColor: cat.color } : undefined
+                          }
+                        />
+                        {colourMenuFor === cat.id && (
+                          <div
+                            data-testid={`colour-menu-${cat.id}`}
+                            className="absolute right-0 z-10 mt-1 flex w-40 flex-wrap gap-1 rounded border border-edge bg-elevated p-2 shadow"
+                          >
+                            {CATEGORY_COLOURS.map((c) => (
+                              <button
+                                key={c.hex}
+                                type="button"
+                                aria-label={c.name}
+                                title={c.name}
+                                onClick={() => applyColour(cat.id, c.hex)}
+                                className="h-5 w-5 rounded-full border border-edge-strong"
+                                style={{ backgroundColor: c.hex }}
+                              />
+                            ))}
+                            {/* No colour is a real end state, not a failure to
+                                choose — most categories will never have one. */}
+                            <button
+                              type="button"
+                              onClick={() => applyColour(cat.id, null)}
+                              className="mt-1 w-full rounded px-1 py-0.5 text-[11px] text-ink-muted hover:text-ink"
+                            >
+                              No colour
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleAddTag(cat.id)}
                         className="text-ink-muted hover:text-accent"
@@ -270,36 +408,70 @@ export function CustomTagsPanel({ onShowTracks, libraryPath }: Props = {}) {
                       {catTags.length === 0 ? (
                         <div className="text-xs text-ink-faint">No tags.</div>
                       ) : (
-                        // NOTE: drag-to-move tag chips between categories (and
-                        // within-category reorder) is deferred — the backend
-                        // `move_tag` IPC exists, but reorder still needs a new
-                        // `reorder_tags` command before we wire @dnd-kit.
-                        <div className="flex flex-wrap gap-2">
+                        <div
+                          className="flex flex-wrap gap-2"
+                          data-testid={`tags-${cat.id}`}
+                        >
                           {catTags.map((tag) => {
                             const selected = selectedTagIds.has(tag.id);
                             return (
-                              <button
+                              <div
                                 key={tag.id}
-                                type="button"
-                                onClick={() => toggleTagSelection(tag.id)}
+                                draggable
+                                onDragStart={() => setDraggingTagId(tag.id)}
+                                onDragEnd={() => setDraggingTagId(null)}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => dropTag(cat.id, tag.id)}
                                 className={[
                                   "flex items-center gap-1 rounded border px-2 py-1 text-xs",
                                   selected
                                     ? "border-accent bg-accent/10 text-accent-hover"
                                     : "border-edge bg-elevated text-ink hover:border-edge-strong",
+                                  draggingTagId === tag.id ? "opacity-50" : "",
                                 ].join(" ")}
                               >
-                                <span>{tag.name}</span>
-                                {tag.usage_count > 0 && (
-                                  <span className="text-[10px] text-ink-muted">
-                                    ({tag.usage_count})
-                                  </span>
-                                )}
-                                <span
-                                  role="button"
-                                  tabIndex={-1}
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTagSelection(tag.id)}
+                                  // Drag is a mouse gesture, so the same move
+                                  // has to exist on the keyboard or the chip
+                                  // order is unreachable without one.
+                                  onKeyDown={(e) => {
+                                    if (!e.altKey) return;
+                                    if (e.key === "ArrowRight") {
+                                      e.preventDefault();
+                                      void nudgeTag(cat.id, tag.id, 1);
+                                    } else if (e.key === "ArrowLeft") {
+                                      e.preventDefault();
+                                      void nudgeTag(cat.id, tag.id, -1);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1"
+                                >
+                                  <span>{tag.name}</span>
+                                  {tag.usage_count > 0 && (
+                                    <span className="text-[10px] text-ink-muted">
+                                      ({tag.usage_count})
+                                    </span>
+                                  )}
+                                </button>
+                                <select
+                                  aria-label={`Hotkey for ${tag.name}`}
+                                  title="Number-row hotkey"
+                                  value={tag.hotkey ?? ""}
+                                  onChange={(e) => applyHotkey(tag.id, e.target.value)}
+                                  className="ml-1 rounded border border-edge bg-base px-0.5 text-[10px] text-ink-muted"
+                                >
+                                  <option value="">–</option>
+                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                                    <option key={n} value={n}>
+                                      {n}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
                                     if (confirm(`Delete tag ${tag.name}?`)) {
                                       await deleteTag(tag.id);
                                       await loadData();
@@ -309,8 +481,8 @@ export function CustomTagsPanel({ onShowTracks, libraryPath }: Props = {}) {
                                   aria-label={`Delete ${tag.name}`}
                                 >
                                   &times;
-                                </span>
-                              </button>
+                                </button>
+                              </div>
                             );
                           })}
                         </div>

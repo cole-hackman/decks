@@ -242,6 +242,10 @@ pub async fn write_tags_bulk(
                             .collect()
                     })
                     .unwrap_or_default(),
+                // Left unset until `Track` carried a colour, which meant the
+                // `Colour` mapping the settings UI offered produced nothing at
+                // all — a control that did not do what it said.
+                colour_name: track.color.clone(),
                 ..Default::default()
             };
             apply_mappings(

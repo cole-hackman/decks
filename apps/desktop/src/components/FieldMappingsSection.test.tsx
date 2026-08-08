@@ -6,6 +6,7 @@ import {
   createFieldMapping,
   deleteFieldMapping,
   listFieldMappings,
+  listTagCategories,
   mappableTagTargets,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
@@ -16,6 +17,7 @@ vi.mock("../ipc", () => ({
   createFieldMapping: vi.fn(),
   deleteFieldMapping: vi.fn(),
   mappableTagTargets: vi.fn(),
+  listTagCategories: vi.fn(),
 }));
 
 const ROWS: FieldMappingRow[] = [
@@ -33,6 +35,10 @@ beforeEach(() => {
   vi.mocked(listFieldMappings).mockResolvedValue(ROWS);
   vi.mocked(mappableTagTargets).mockResolvedValue(["Comment", "Genre"]);
   vi.mocked(createFieldMapping).mockResolvedValue("r3");
+  vi.mocked(listTagCategories).mockResolvedValue([
+    { id: "genre", name: "Genre", seq: 0, color: null },
+    { id: "mood", name: "Mood", seq: 1, color: null },
+  ]);
   vi.mocked(deleteFieldMapping).mockResolvedValue(true);
 });
 
@@ -114,5 +120,36 @@ describe("FieldMappingsSection", () => {
     expect(
       await screen.findByText(/a target field is required/),
     ).toBeInTheDocument();
+  });
+
+  it("offers each tag category as a source in its own right", async () => {
+    // Per the spec, "a single category can be the source instead" of all tags.
+    // The engine has always supported it; it was never offered.
+    renderSection();
+    const select = await screen.findByLabelText("Mapping source");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("option", { name: "Tag category: Genre" }),
+      ).toBeInTheDocument(),
+    );
+
+    await userEvent.selectOptions(select, "category:mood");
+    await userEvent.click(screen.getByRole("button", { name: /^Add/ }));
+
+    // Stored by *name*, not id: a renamed category then stops matching rather
+    // than silently exporting a different set under the old label.
+    expect(vi.mocked(createFieldMapping)).toHaveBeenCalledWith(
+      { kind: "tag_category", name: "Mood" },
+      "Comment",
+      false,
+    );
+  });
+
+  it("still works when the tag tree cannot be read", async () => {
+    // No categories just means no per-category sources, not a broken panel.
+    vi.mocked(listTagCategories).mockRejectedValue(new Error("no cache"));
+    renderSection();
+    expect(await screen.findByLabelText("Mapping source")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Energy" })).toBeInTheDocument();
   });
 });

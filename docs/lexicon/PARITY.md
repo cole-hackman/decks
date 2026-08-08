@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
 | Interop & sync | 6 | 5 | 1 | 0 | 11 |
-| Library & browser | 14 | 3 | 1 | 0 | 0 |
+| Library & browser | 15 | 2 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **54** | **26** | **14** | **2** | **16** |
+| **Total** | **55** | **25** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -63,7 +63,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
 | Colors → nearest | **done** | `Track` carries colour; `TrackMetadataEdit` writes `ColorID` against Rekordbox's fixed eight-colour palette. Off, an inexact colour is **left unchanged** and the skip is reported; on, it maps to the nearest and each mapping is named. Never creates a `djmdColor` row — a ninth colour renders on no CDJ | 4 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
-| Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
+| Field Mappings | partial | Engine + ID3 profile done, per-category tag sources and the Colour source now actually populated; no per-DJ-app profiles, still not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
 | Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues | 4 |
 | Serato / Traktor / VirtualDJ / Engine / djay / Apple Music / M3U / USB / DIRECT2CDJ | deferred | 11 items | — |
@@ -85,7 +85,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
 | Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
-| Custom Tags | partial | OR-within/AND-across selection, MyTag import and hashtag import (into a reserved `Imported Tags` category) now done. Still missing category colours, drag-reorder, per-tag hotkeys, Field-Mapper export | 5 |
+| Custom Tags | **done** | OR-within/AND-across selection, MyTag and hashtag import, category colours, drag **and keyboard** reorder (`reorder_tags`), per-tag number hotkeys (global, so assigning a taken one steals it), and Field-Mapper export both for all tags and per category | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
 | Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |

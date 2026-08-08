@@ -3,6 +3,7 @@ import {
   createFieldMapping,
   deleteFieldMapping,
   listFieldMappings,
+  listTagCategories,
   mappableTagTargets,
 } from "../ipc";
 import { useToast } from "./Toast";
@@ -37,6 +38,15 @@ export function FieldMappingsSection({ className }: Props) {
   const [rows, setRows] = useState<FieldMappingRow[]>([]);
   const [targets, setTargets] = useState<string[]>([]);
   const [source, setSource] = useState("energy");
+  /**
+   * Categories offered as sources in their own right.
+   *
+   * Per `docs/lexicon/02-library.md §Custom Tags`: "a single category can be
+   * the source instead" of all tags. Exporting only Genre into the comment is
+   * a different intent from exporting everything, and one the engine has
+   * always supported — it was just never offered.
+   */
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [target, setTarget] = useState("");
   const [overwrite, setOverwrite] = useState(false);
 
@@ -65,18 +75,36 @@ export function FieldMappingsSection({ className }: Props) {
         setTargets([]);
       }
     })();
+    void (async () => {
+      try {
+        const cats = await listTagCategories();
+        setCategories(Array.isArray(cats) ? cats : []);
+      } catch {
+        // A tag tree we cannot read just means no per-category sources, not a
+        // broken settings panel.
+        setCategories([]);
+      }
+    })();
   }, [refresh]);
 
   const add = useCallback(async () => {
-    const chosen = SOURCES.find((s) => s.value === source);
+    // Category sources carry the category *name*, not its id — the mapping is
+    // stored and matched by name, so a renamed category stops matching rather
+    // than silently exporting the wrong set under the old label.
+    const categoryName = source.startsWith("category:")
+      ? categories.find((c) => c.id === source.slice("category:".length))?.name
+      : undefined;
+    const chosen: MappingSource | undefined = categoryName
+      ? { kind: "tag_category", name: categoryName }
+      : SOURCES.find((s) => s.value === source)?.source;
     if (!chosen || target === "") return;
     try {
-      await createFieldMapping(chosen.source, target, overwrite);
+      await createFieldMapping(chosen, target, overwrite);
       await refresh();
     } catch (e) {
       toast({ variant: "error", message: String(e) });
     }
-  }, [source, target, overwrite, refresh, toast]);
+  }, [source, target, overwrite, categories, refresh, toast]);
 
   return (
     <section className={className} aria-label="Field mappings">
@@ -132,6 +160,11 @@ export function FieldMappingsSection({ className }: Props) {
             {SOURCES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
+              </option>
+            ))}
+            {categories.map((c) => (
+              <option key={c.id} value={`category:${c.id}`}>
+                Tag category: {c.name}
               </option>
             ))}
           </select>
