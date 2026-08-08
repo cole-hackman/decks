@@ -2584,6 +2584,72 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (merging the stack, then widening `Track`)
+
+Two things this session, and the first made the second cheap.
+
+**The stack landed.** Twenty-four draft PRs, #10 through #33, each stacked on the one below and
+none of them merged since the initiative started. The user declined to review any of them and said
+so plainly, which is the decision I had been waiting on — the gate was review, and they removed it.
+Merged bottom-up as merge commits rather than squashes: squashing #10 would have rewritten the base
+that #11 was built on, and every descendant would have conflicted. Merge commits keep the parent
+chain intact and each subsequent PR applied clean.
+
+Then I ran the full definition of done against merged `main` rather than trusting the individual
+branch results — the branches were green against *their* bases, which is not the same claim. It
+passed: 54 Rust test binaries, 752 frontend tests, 59 Playwright specs, fmt and clippy clean.
+
+**Then the field widening.** I had been describing this as "Epic 4" in conversation, which was
+loose — Epic 4 is 9/13 done and the widening is not one of its line items. It was unowned work
+that six parity rows depended on. Naming that honestly mattered more than the fix.
+
+`Track` gains Label, Remixer, Mix, Colour and Date added. The interesting part is not the fields,
+it is that the core `SELECT` stopped being a constant.
+
+Every track query in the app shares one `SELECT`. Adding five column names to it would have been a
+one-line change and a bad one: naming a column that a given library does not have fails the
+*entire* query, so a user on an older or oddly-migrated Rekordbox database would have opened
+`decks` to an empty browser. Not a missing Label column — no tracks at all. So the SELECT is now
+built per connection: each of the five is probed with `PRAGMA table_info` and degrades to `NULL`.
+Tables are checked too, because `LEFT JOIN djmdLabel` against a database with no such table is a
+hard error however carefully the select list is written. There is a test that builds a
+pre-widening schema and asserts the tracks still come back — that test is the actual deliverable.
+
+`cues` had grown the same probing helpers months ago for `djmdCue`'s renamed columns. They moved
+into `queries::columns` rather than being copied, which is how it should have been the first time.
+
+Three smaller calls:
+
+- Colour is read as a **name**, not an id, and Rekordbox keeps that name in `djmdColor.Commnt`
+  rather than `Name`. Both are `COALESCE`d and the seed leaves each null on a different row so the
+  fallback is genuinely exercised in both directions.
+- Date added is compared **lexicographically and never parsed**. The column is a date in some
+  libraries and a full timestamp in others. ISO-8601 sorts correctly as text, and `equals` as a
+  prefix match means `2025-03` reads as "during March 2025" — which is what a person means about a
+  date, and which parsing to a fixed precision would destroy.
+- `Value::TextRange` is deliberately distinct from `Value::Range`. Feeding a numeric range to a
+  date `between` fails closed rather than coercing a timestamp into a float. There is a test for
+  exactly that, because the coercion would have been silent.
+
+**A correction I owed.** `Danceability / Popularity / Happiness` sat in the matrix as `missing`,
+which reads as "we have not got to it". ADR-0012 had already established otherwise months ago:
+Lexicon takes all three from Spotify's `audio-features` endpoint, which was deprecated on
+2024-11-27 and 403s for any application registered since — and Popularity is a catalog metric that
+no amount of local DSP can produce. That is `blocked`. The Mixable panel was repeating the same
+error in the UI, telling users the fields were missing "because the library does not carry them
+yet"; it now says the endpoint was withdrawn. A status that overstates what is reachable is the
+same failure as a guess presented as fact.
+
+`Colors → nearest` moved the opposite way — it was `blocked` on a colour field that now exists, so
+it is `partial`: read, shown and matched on, but still not written, because no change kind sets
+`ColorID`.
+
+Mixable Tracks went from 9 of 13 rules to 11. `Match colour` refuses to match anything when the
+source track has no colour, rather than matching everything — "the same colour as this" where
+this has none is not a set worth returning, and returning all of them would look like the rule was
+simply off.
+
+
 ## Session — 2026-08-06 (rustfmt, and a gap in the definition of done)
 
 CI resumed and failed `cargo fmt --all -- --check` on the Rust (windows) job for #32. Real, and

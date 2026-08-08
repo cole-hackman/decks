@@ -14,10 +14,10 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
-| Interop & sync | 5 | 5 | 1 | 1 | 11 |
+| Interop & sync | 5 | 6 | 1 | 0 | 11 |
 | Library & browser | 14 | 3 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
-| Analysis | 2 | 4 | 4 | 1 | 0 |
+| Analysis | 2 | 4 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 2 | 1 | 1 | 0 | 0 |
@@ -25,10 +25,11 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **53** | **26** | **15** | **2** | **16** |
+| **Total** | **53** | **27** | **14** | **2** | **16** |
 
-The shape of the work: `decks` has broad shallow coverage of library *hygiene* and almost nothing
-of library *editing*, *automation*, or *set preparation*.
+The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
+What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
+where `crates/enrichment` is still a stub and album art does not exist at all.
 
 **How to read these numbers.** They are self-reported against a matrix written from Lexicon's
 manual, not from Lexicon itself. Three specific limits apply:
@@ -41,9 +42,12 @@ manual, not from Lexicon itself. Three specific limits apply:
 - `done` means "parity or better *on the behaviour the manual describes*". Several `done` rows
   carry a divergence in their Notes — read the row, not the count.
 
-The `blocked` column is new: two rows cannot be built as specified (`Colors → nearest` has no
-`Track` colour field to map to; the Camelot/Open Key posture is a licensing decision, not code).
-They were previously miscounted as `partial` and `missing`.
+`blocked` means the row cannot be built as specified, for a reason outside the codebase — not that
+it is merely unbuilt. Two rows sit there: the Camelot/Open Key posture is a licensing decision
+rather than code, and Danceability / Popularity / Happiness depend on a Spotify endpoint that was
+withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any circumstances.
+`Colors → nearest` left this column when `Track` gained a colour field; it is now `partial`,
+read-only until a change kind writes `ColorID`.
 
 ---
 
@@ -58,7 +62,7 @@ They were previously miscounted as `partial` and `missing`.
 | Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
-| Colors → nearest | **blocked** | `Track` has no colour field and no change kind writes `ColorID` — nothing to map. Not offered as a toggle rather than shipped inert | 6 |
+| Colors → nearest | partial | `Track` now carries colour, so the browser shows it and rules match on it. Still **read-only**: no change kind writes `ColorID`, so the Sync toggle stays unexposed rather than shipping inert | 4 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
 | Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
@@ -69,7 +73,7 @@ They were previously miscounted as `partial` and `missing`.
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
-| Virtualized track table | partial | Resizable, sortable, inline column search, multi-select | — |
+| Virtualized track table | partial | Resizable, sortable, inline column search, multi-select, inline cell editing. Label / Mix / Remixer / Colour / Added columns added with the `Track` widening | — |
 | Search operators (`None`, `>`, `<`, ranges, `!`) | **done** | `smartlists::search` parses the box into rules the same evaluator runs — one implementation, not two | 1 |
 | Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
 | Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
@@ -86,7 +90,7 @@ They were previously miscounted as `partial` and `missing`.
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
 | Album art | **missing** | Absent from the product entirely | 4 |
 | Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |
-| Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Extra artist fields need a wider `Track` | 5 |
+| Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Remixer is now modelled; composer and original-artist still are not | 5 |
 
 ## Smartlists — `03-smartlists.md`
 
@@ -106,9 +110,9 @@ They were previously miscounted as `partial` and `missing`.
 | Key detection | partial | Chroma-based; single algorithm | 6 |
 | **Camelot → Open Key posture** | **decision needed** | Lexicon avoids Camelot for licensing; we use it everywhere incl. a "Mixed In Key" palette | see GAPS |
 | Energy | partial | Cached + displayed; no defined scale, no deliberate fill | 4 |
-| Danceability / Popularity / Happiness | **missing** | | 4 |
+| Danceability / Popularity / Happiness | **blocked** | Lexicon sources all three from Spotify's `audio-features` endpoint, deprecated 2024-11-27 and 403 for applications registered since (ADR-0012). Danceability is approximable from onset density; **Popularity is a catalog metric that cannot be computed locally at all**. Previously mislabelled `missing`, which implied it was merely unbuilt | 4 |
 | Auto-analyze on add | **missing** | | 4 |
-| Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 9 of 13 rules, `Use as next track`, saveable templates. The 4 missing rules (colour, date added, Popularity/Danceability/Happiness) need fields `Track` does not carry | 6 |
+| Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 11 of 13 rules, `Use as next track`, saveable templates. `Match colour` and `Recently added` ship now that `Track` carries the fields. The 2 that remain (Popularity/Danceability/Happiness) are blocked upstream, not unbuilt | 4, 6 |
 | Key Mixing Mode | **done** | Global setting; Harmonically Compatible and Fuzzy, shared with the compatible-key set the panel shows | 6 |
 | Beatshift Fixer | **missing** | | 4 |
 

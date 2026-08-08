@@ -354,6 +354,11 @@ mod tests {
             bit_rate: Some(320),
             release_year: Some(2024),
             dj_play_count: Some(3),
+            label: None,
+            remixer: None,
+            mix: None,
+            color: None,
+            date_added: None,
             energy: Some(7.0),
         }
     }

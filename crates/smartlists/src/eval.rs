@@ -84,6 +84,7 @@ fn rule_matches(rule: &Rule, track: &Track, ctx: &EvalContext) -> bool {
             crate::model::FieldKind::Number => {
                 number_rule_matches(rule, number_field(rule.field, track))
             }
+            crate::model::FieldKind::Date => date_rule_matches(rule, date_field(rule.field, track)),
             _ => false,
         },
     }
@@ -97,7 +98,55 @@ fn text_field(field: Field, t: &Track) -> Option<&str> {
         Field::Genre => t.genre.as_deref(),
         Field::Comment => t.comment.as_deref(),
         Field::FilePath => t.folder_path.as_deref(),
+        Field::Label => t.label.as_deref(),
+        Field::Remixer => t.remixer.as_deref(),
+        Field::Mix => t.mix.as_deref(),
+        Field::Color => t.color.as_deref(),
         _ => None,
+    }
+}
+
+fn date_field(field: Field, t: &Track) -> Option<&str> {
+    match field {
+        Field::DateAdded => t.date_added.as_deref(),
+        _ => None,
+    }
+}
+
+/// Date comparison over ISO-8601 strings.
+///
+/// Lexicographic, not parsed. ISO-8601 sorts correctly as text by design, and
+/// a rule written as `2025-01` legitimately matches the whole month by prefix —
+/// which parsing to a fixed precision would take away. The cost is that a
+/// library storing dates in some other format compares nonsensically; that is
+/// visible in the live match count rather than silent.
+fn date_rule_matches(rule: &Rule, value: Option<&str>) -> bool {
+    match rule.op {
+        Operator::IsNone => return is_blank(value),
+        Operator::IsNotNone => return !is_blank(value),
+        _ => {}
+    }
+    let Some(actual) = value.map(str::trim) else {
+        return false;
+    };
+    if let (Operator::Between, Value::TextRange(lo, hi)) = (rule.op, &rule.value) {
+        let (lo, hi) = (lo.trim(), hi.trim());
+        return actual >= lo && actual <= hi;
+    }
+    let Value::Text(expected) = &rule.value else {
+        return false;
+    };
+    let expected = expected.trim();
+    match rule.op {
+        // Equality is a prefix match so `2025` means "during 2025" rather than
+        // "the instant 2025", which is never what someone means about a date.
+        Operator::Equals => actual.starts_with(expected),
+        Operator::NotEquals => !actual.starts_with(expected),
+        Operator::GreaterThan => actual > expected,
+        Operator::LessThan => actual < expected,
+        Operator::GreaterOrEqual => actual >= expected,
+        Operator::LessOrEqual => actual <= expected,
+        _ => false,
     }
 }
 
@@ -261,7 +310,24 @@ mod tests {
             bit_rate: None,
             release_year: Some(2020),
             dj_play_count: Some(5),
+            label: None,
+            remixer: None,
+            mix: None,
+            color: None,
+            date_added: None,
             energy: Some(0.8),
+        }
+    }
+
+    /// A track carrying the fields Epic 4 added, for the rules that use them.
+    fn track_with_new_fields(id: &str) -> Track {
+        Track {
+            label: Some("Drumcode".into()),
+            remixer: Some("Adam Beyer".into()),
+            mix: Some("Extended Mix".into()),
+            color: Some("Red".into()),
+            date_added: Some("2025-03-14T09:00:00Z".into()),
+            ..track(id)
         }
     }
 
@@ -579,5 +645,132 @@ mod tests {
         let ctx = EvalContext::default();
         let sl = one(Field::Genre, Operator::Equals, Value::Text("House".into()));
         assert_eq!(evaluate(&sl, &tracks, &ctx), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn label_remixer_mix_and_colour_match_as_text() {
+        let t = track_with_new_fields("1");
+        let ctx = EvalContext::default();
+        for (field, value) in [
+            (Field::Label, "drumcode"),
+            (Field::Remixer, "adam"),
+            (Field::Mix, "Extended"),
+            (Field::Color, "red"),
+        ] {
+            assert!(
+                matches(
+                    &one(field, Operator::Contains, Value::Text(value.into())),
+                    &t,
+                    &ctx
+                ),
+                "{field:?} should match {value:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_track_with_no_label_does_not_match_a_label_rule() {
+        // Absent is not empty-string: `Contains` must not match everything.
+        let t = track("1");
+        assert!(!matches(
+            &one(Field::Label, Operator::Contains, Value::Text("any".into())),
+            &t,
+            &EvalContext::default()
+        ));
+        assert!(matches(
+            &one(Field::Label, Operator::IsNone, Value::None),
+            &t,
+            &EvalContext::default()
+        ));
+    }
+
+    #[test]
+    fn date_added_equality_is_a_prefix_match() {
+        // "added in March 2025" is what someone means; an exact-instant match
+        // would be useless against a full timestamp.
+        let t = track_with_new_fields("1");
+        let ctx = EvalContext::default();
+        assert!(matches(
+            &one(
+                Field::DateAdded,
+                Operator::Equals,
+                Value::Text("2025-03".into())
+            ),
+            &t,
+            &ctx
+        ));
+        assert!(!matches(
+            &one(
+                Field::DateAdded,
+                Operator::Equals,
+                Value::Text("2025-04".into())
+            ),
+            &t,
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn date_added_orders_lexicographically() {
+        let t = track_with_new_fields("1");
+        let ctx = EvalContext::default();
+        assert!(matches(
+            &one(
+                Field::DateAdded,
+                Operator::GreaterThan,
+                Value::Text("2025-01-01".into())
+            ),
+            &t,
+            &ctx
+        ));
+        assert!(matches(
+            &one(
+                Field::DateAdded,
+                Operator::LessThan,
+                Value::Text("2026-01-01".into())
+            ),
+            &t,
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn date_added_between_is_inclusive_at_both_ends() {
+        let t = track_with_new_fields("1");
+        let ctx = EvalContext::default();
+        assert!(matches(
+            &one(
+                Field::DateAdded,
+                Operator::Between,
+                Value::TextRange("2025-03-14".into(), "2025-03-15".into())
+            ),
+            &t,
+            &ctx
+        ));
+        assert!(!matches(
+            &one(
+                Field::DateAdded,
+                Operator::Between,
+                Value::TextRange("2025-04-01".into(), "2025-05-01".into())
+            ),
+            &t,
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn a_numeric_range_does_not_satisfy_a_date_between() {
+        // `Range` and `TextRange` are deliberately distinct; feeding the wrong
+        // one must fail closed rather than compare a date against a float.
+        let t = track_with_new_fields("1");
+        assert!(!matches(
+            &one(
+                Field::DateAdded,
+                Operator::Between,
+                Value::Range(0.0, 9999.0)
+            ),
+            &t,
+            &EvalContext::default()
+        ));
     }
 }

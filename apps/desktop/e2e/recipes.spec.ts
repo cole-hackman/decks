@@ -26,6 +26,11 @@ test.beforeEach(async ({ page }) => {
           bit_rate: null,
           release_year: 2013,
           dj_play_count: null,
+          label: null,
+          remixer: null,
+          mix: null,
+          color: null,
+          date_added: null,
           energy: null,
         },
       ];

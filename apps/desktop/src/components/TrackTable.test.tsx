@@ -77,6 +77,11 @@ const TRACKS: Track[] = [
     bit_rate: null,
     release_year: null,
     dj_play_count: null,
+    label: "Downwards",
+    remixer: "Regis",
+    mix: "Extended Mix",
+    color: "Red",
+    date_added: "2025-03-14T09:00:00Z",
     energy: null,
   },
   {
@@ -97,6 +102,11 @@ const TRACKS: Track[] = [
     bit_rate: null,
     release_year: null,
     dj_play_count: null,
+    label: null,
+    remixer: null,
+    mix: null,
+    color: null,
+    date_added: null,
     energy: null,
   },
 ];
@@ -588,5 +598,26 @@ describe("TrackTable — spreadsheet keyboard navigation", () => {
     // The table still renders; the rows simply show no waveform.
     expect(await screen.findByText("Dark Matter")).toBeInTheDocument();
     expect(screen.queryAllByTestId("row-waveform")).toHaveLength(0);
+  });
+
+  it("shows the label, mix, remixer and colour columns", () => {
+    render(<TrackTable libraryPath="/tmp/master.db" filters={EMPTY_FILTERS} filterCtx={EMPTY_CTX} selectedTrackIds={new Set()} onSelectionChange={vi.fn()} onSelect={vi.fn()} />, { wrapper });
+    expect(screen.getByText("Downwards")).toBeInTheDocument();
+    expect(screen.getByText("Extended Mix")).toBeInTheDocument();
+    expect(screen.getByText("Regis")).toBeInTheDocument();
+    expect(screen.getByText("Red")).toBeInTheDocument();
+  });
+
+  it("shows only the date part of date added", () => {
+    // The stored string is not reformatted — trimming the time is
+    // presentation; parsing it would be a guess about its precision.
+    render(<TrackTable libraryPath="/tmp/master.db" filters={EMPTY_FILTERS} filterCtx={EMPTY_CTX} selectedTrackIds={new Set()} onSelectionChange={vi.fn()} onSelect={vi.fn()} />, { wrapper });
+    expect(screen.getByText("2025-03-14")).toBeInTheDocument();
+  });
+
+  it("renders an em dash where a track has none of the new fields", () => {
+    render(<TrackTable libraryPath="/tmp/master.db" filters={EMPTY_FILTERS} filterCtx={EMPTY_CTX} selectedTrackIds={new Set()} onSelectionChange={vi.fn()} onSelect={vi.fn()} />, { wrapper });
+    // Track 2 carries none of them; absent must read as absent, not blank.
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });

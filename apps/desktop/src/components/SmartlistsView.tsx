@@ -162,14 +162,58 @@ function RuleRow({
       {takesOperand(rule.op) && rule.value.type === "text" && (
         <input
           aria-label="Value"
-          type="text"
-          placeholder={kind === "key" ? "8A, Am, 8m…" : "value"}
+          type={kind === "date" ? "date" : "text"}
+          placeholder={
+            kind === "key" ? "8A, Am, 8m…" : kind === "date" ? "YYYY-MM-DD" : "value"
+          }
           className="w-48 rounded border border-border bg-surface px-2 py-1 text-sm"
           value={rule.value.value}
           onChange={(e) =>
             onChange({ ...rule, value: { type: "text", value: e.target.value } })
           }
         />
+      )}
+
+      {takesOperand(rule.op) && rule.value.type === "text_range" && (
+        <>
+          <input
+            aria-label="From"
+            type="date"
+            className="w-40 rounded border border-border bg-surface px-2 py-1 text-sm"
+            value={rule.value.value[0]}
+            onChange={(e) =>
+              onChange({
+                ...rule,
+                value: {
+                  type: "text_range",
+                  value: [
+                    e.target.value,
+                    (rule.value as { value: [string, string] }).value[1],
+                  ],
+                },
+              })
+            }
+          />
+          <span className="text-xs text-muted">and</span>
+          <input
+            aria-label="To"
+            type="date"
+            className="w-40 rounded border border-border bg-surface px-2 py-1 text-sm"
+            value={rule.value.value[1]}
+            onChange={(e) =>
+              onChange({
+                ...rule,
+                value: {
+                  type: "text_range",
+                  value: [
+                    (rule.value as { value: [string, string] }).value[0],
+                    e.target.value,
+                  ],
+                },
+              })
+            }
+          />
+        </>
       )}
 
       {takesOperand(rule.op) && rule.value.type === "tags" && (

@@ -1,5 +1,52 @@
 # Status
 
+## 2026-08-07 — `Track` grows five fields
+
+The whole stack (#10–#33) is merged; `main` carries every epic through 6 and CI is green on it.
+With one branch again, the schema widening that six parity rows were waiting on became cheap, so
+that is what this is.
+
+`Track` now carries **Label**, **Remixer**, **Mix**, **Colour** and **Date added**, read from
+`djmdLabel`, `djmdArtist` via `RemixerID`, `djmdContent.Subtitle`, `djmdColor` and
+`djmdContent.DateCreated`. Writing `Label` already worked — `changes::applier` has treated it as a
+foreign-key edit since Epic 5 — so the browser could set a label it could never show back. That
+asymmetry is gone.
+
+Four decisions worth recording:
+
+- **The SELECT is built per connection, not constant.** Naming an absent column fails the *whole*
+  query, and these five are exactly the ones an older or migrated library may not have. Each is
+  probed and degrades to `NULL`, so a library without `LabelID` keeps returning all its tracks and
+  simply has no Label. Losing every track read to gain a column would be a bad trade. The helpers
+  `cues` grew for the same reason moved into `queries::columns` and are now shared.
+- **Colour is read by name, not id.** An id means nothing outside the database it came from. The
+  name lives in `djmdColor.Commnt`, not `Name` — a genuine Rekordbox quirk, so it is `COALESCE`d
+  and both halves are exercised by the seed.
+- **Date added is not parsed.** The column is sometimes a date and sometimes a full timestamp
+  depending on how the library was migrated. It is compared lexicographically, which is correct for
+  ISO-8601, and `equals` is a **prefix** match so `2025-03` means "during March". Parsing to a
+  fixed precision would take that away and invent certainty the column does not have.
+- **A numeric range cannot satisfy a date `between`.** `Value::TextRange` is separate from
+  `Value::Range` and the mismatch fails closed rather than comparing a date against a float.
+
+What this unblocks, in the same change: Label / Mix / Remixer / Colour / Added columns in the
+browser; five new smartlist fields plus a `date` field kind with its own operator set; and two of
+Mixable Tracks' four missing rules — `Match colour` and `Recently added`, taking it from 9 of 13
+to 11 of 13.
+
+**And a correction to my own bookkeeping.** `Danceability / Popularity / Happiness` was recorded as
+`missing`, which reads as "not built yet". It is not: ADR-0012 already established that Lexicon
+sources all three from Spotify's `audio-features` endpoint, deprecated 2024-11-27 and returning 403
+for applications registered since — and that Popularity is a catalog metric no local analysis can
+produce. That is `blocked`. The Mixable panel's own notice said the same wrong thing and now says
+why instead. `Colors → nearest` moved the other way: it was `blocked` on a missing colour field,
+which now exists, so it is `partial` — read-only until a change kind writes `ColorID`.
+
+**Next:** album art and `crates/enrichment` are the largest remaining Epic 4 items, and they need
+one decision from the user — which metadata provider. MusicBrainz + Cover Art Archive is the
+recommendation (no key, no account, free); Discogs would be an opt-in second source needing a
+keychain token.
+
 ## 2026-08-06 — Hashtag imports land in `Imported Tags`
 
 Chasing the last Custom Tags gaps turned up a docs error of my own: `02-library.md` listed hashtag

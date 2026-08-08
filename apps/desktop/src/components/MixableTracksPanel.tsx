@@ -49,10 +49,11 @@ function numericLabel(rule: NumericRule): string {
  * header reports "12 of 4,213" — a rule that quietly demoted rather than
  * excluded would make "must have cue points" a suggestion.
  *
- * Four of the spec's options are absent, all for one reason: `Track` does not
- * carry the field yet. `Match color` and `Recently added` need colour and
- * date-added columns; Popularity, Danceability and Happiness are the
- * Lexicon-only analysis fields from Epic 4. They are missing rather than
+ * Three of the spec's options are absent, and not for want of a column.
+ * Popularity, Danceability and Happiness come from Spotify's `audio-features`
+ * endpoint in Lexicon; it was deprecated in November 2024 and 403s for
+ * applications registered since, and Popularity is a catalog metric that cannot
+ * be computed locally at all (ADR-0012). They are missing rather than
  * present-and-inert.
  */
 export function MixableTracksPanel({
@@ -291,6 +292,29 @@ export function MixableTracksPanel({
               Must have cue points
             </label>
 
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={options.match_color}
+                aria-label="Match colour"
+                onChange={(e) => update({ match_color: e.target.checked })}
+              />
+              Match colour
+            </label>
+
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-muted">Added since</span>
+              <input
+                type="date"
+                aria-label="Added since"
+                className="rounded border border-border bg-surface px-2 py-1 text-xs"
+                value={options.added_since ?? ""}
+                onChange={(e) =>
+                  update({ added_since: e.target.value || null })
+                }
+              />
+            </label>
+
             <label className="block">
               <span className="mb-1 block text-muted">Genres (comma separated)</span>
               <input
@@ -370,8 +394,9 @@ export function MixableTracksPanel({
             </label>
 
             <p className="text-[11px] text-muted">
-              Colour, date added, Popularity, Danceability and Happiness are not
-              offered: the library does not carry those fields yet.
+              Popularity, Danceability and Happiness are not offered: Lexicon
+              takes them from Spotify, whose audio-features endpoint has been
+              withdrawn, and Popularity cannot be measured locally at all.
             </p>
 
             <div className="border-t border-border pt-2">

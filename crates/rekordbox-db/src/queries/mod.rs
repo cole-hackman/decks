@@ -1,4 +1,5 @@
 pub mod analytics;
+pub mod columns;
 pub mod cues;
 pub mod health;
 pub mod history;

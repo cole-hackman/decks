@@ -41,7 +41,27 @@ CREATE TABLE IF NOT EXISTS djmdContent (
     ReleaseYear        INTEGER,
     DJPlayCount        INTEGER,
     DateCreated        TEXT,
+    LabelID            TEXT,
+    RemixerID          TEXT,
+    Subtitle           TEXT,
+    ColorID            TEXT,
     rb_local_deleted   INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS djmdLabel (
+    ID   TEXT PRIMARY KEY,
+    Name TEXT
+);
+
+-- Rekordbox keeps the human-readable colour name in `Commnt`, not `Name`.
+-- Both are declared here so the reader's COALESCE is exercised against the
+-- real shape rather than a tidied-up one.
+CREATE TABLE IF NOT EXISTS djmdColor (
+    ID        TEXT PRIMARY KEY,
+    ColorCode INTEGER,
+    SortKey   INTEGER,
+    Commnt    TEXT,
+    Name      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS djmdPlaylist (

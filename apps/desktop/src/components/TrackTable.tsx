@@ -45,6 +45,23 @@ const MAX_INLINE_TAGS = 3;
  * Time (a property of the file) and Tags (its own storage, its own picker) are
  * deliberately absent.
  */
+/**
+ * Rekordbox's eight track colours, for the Colour column's dot.
+ *
+ * Keyed by the lower-cased name `djmdColor` stores. A name that is not here
+ * still renders its text — the dot is an aid, not the value.
+ */
+const COLOUR_SWATCHES: Record<string, string> = {
+  pink: "#ff6b9d",
+  red: "#e5484d",
+  orange: "#f76b15",
+  yellow: "#f5d90a",
+  green: "#46a758",
+  aqua: "#12a5b8",
+  blue: "#3e63dd",
+  purple: "#8e4ec6",
+};
+
 const EDITABLE_COLUMNS: Record<string, string> = {
   title: "title",
   artist: "artist",
@@ -185,6 +202,67 @@ function buildColumns(
       cell: (info) => (
         <span className="truncate text-ink-secondary">{info.getValue<string | null>() ?? "—"}</span>
       ),
+    },
+    {
+      accessorKey: "label",
+      header: "Label",
+      size: 130,
+      cell: (info) => (
+        <span className="truncate text-ink-secondary">{info.getValue<string | null>() ?? "—"}</span>
+      ),
+    },
+    {
+      accessorKey: "mix",
+      header: "Mix",
+      size: 120,
+      cell: (info) => (
+        <span className="truncate text-ink-secondary">{info.getValue<string | null>() ?? "—"}</span>
+      ),
+    },
+    {
+      accessorKey: "remixer",
+      header: "Remixer",
+      size: 130,
+      cell: (info) => (
+        <span className="truncate text-ink-secondary">{info.getValue<string | null>() ?? "—"}</span>
+      ),
+    },
+    {
+      accessorKey: "color",
+      header: "Colour",
+      size: 90,
+      cell: (info) => {
+        const name = info.getValue<string | null>();
+        if (!name) return <span className="text-ink-faint">—</span>;
+        const swatch = COLOUR_SWATCHES[name.toLowerCase()];
+        return (
+          <span className="flex items-center gap-1.5 truncate text-ink-secondary">
+            {/* A dot only when we recognise the name. An unknown colour still
+                shows its label rather than a misleading grey swatch. */}
+            {swatch && (
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: swatch }}
+              />
+            )}
+            {name}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "date_added",
+      header: "Added",
+      size: 110,
+      cell: (info) => {
+        const raw = info.getValue<string | null>();
+        // Show the date part only. The stored string is not reformatted —
+        // trimming the time is presentation, parsing it would be a guess.
+        return (
+          <span className="truncate text-ink-secondary">{raw ? raw.slice(0, 10) : "—"}</span>
+        );
+      },
     },
   ];
 

@@ -25,6 +25,31 @@ pub struct Track {
     pub bit_rate: Option<i64>,
     pub release_year: Option<i64>,
     pub dj_play_count: Option<i64>,
+    /// Record label, from `djmdLabel` via `djmdContent.LabelID`.
+    ///
+    /// Writing this already worked — `changes::applier` has handled `Label` as
+    /// a foreign-key edit since Epic 5. Only the read side was missing, which
+    /// meant the browser could set a label it could never show back.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Remixer, from `djmdArtist` via `djmdContent.RemixerID`.
+    #[serde(default)]
+    pub remixer: Option<String>,
+    /// Mix name — `djmdContent.Subtitle`, which is where Rekordbox keeps
+    /// "Extended Mix", "Radio Edit" and friends.
+    #[serde(default)]
+    pub mix: Option<String>,
+    /// Rekordbox's own colour label for the track.
+    ///
+    /// The *name*, not the id: an id is meaningless outside the database it
+    /// came from, and "Red" is the thing the user sorted by.
+    #[serde(default)]
+    pub color: Option<String>,
+    /// When Rekordbox first saw the track — `djmdContent.DateCreated`, as the
+    /// ISO-8601 string the column stores. Not parsed here: the column's format
+    /// varies between libraries, and pretending otherwise loses information.
+    #[serde(default)]
+    pub date_added: Option<String>,
     /// Audio energy 0.0–1.0, hydrated from the local cache's `audio_features`
     /// table at the Tauri layer. `None` when no analysis has been cached.
     #[serde(default)]

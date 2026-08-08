@@ -11,12 +11,15 @@
 //! score would produce a list where a rule the user asked for is merely a
 //! headwind, which is not what "must have cue points" means.
 //!
-//! Four of the spec's thirteen options are **not** implemented, all for the
-//! same reason: `Track` does not model the field yet. `Match color` and
-//! `Recently added` need a colour and a date-added column, and
-//! `Popularity` / `Danceability` / `Happiness` are the Lexicon-only analysis
-//! fields from Epic 4. They are absent rather than stubbed — a rule that
-//! silently matches everything is worse than a rule that isn't offered.
+//! `Match color` and `Recently added` now work: `Track` carries colour and
+//! date-added since the field-widening change. What remains unimplemented is
+//! `Popularity` / `Danceability` / `Happiness` — and those are not waiting on a
+//! column. ADR-0012 records that Lexicon sources them from Spotify's
+//! `audio-features` endpoint, which was deprecated in November 2024 and returns
+//! 403 for applications registered since. Popularity is a catalog metric that
+//! cannot be computed locally at all. They are absent rather than stubbed — a
+//! rule that silently matches everything is worse than a rule that isn't
+//! offered.
 
 use std::collections::{HashMap, HashSet};
 
@@ -205,6 +208,18 @@ pub struct MixableOptions {
     pub must_have_tags: Vec<String>,
     /// Tag ids that disqualify a candidate.
     pub must_not_have_tags: Vec<String>,
+    /// Restrict to candidates carrying the source track's colour.
+    ///
+    /// A source with no colour admits nothing rather than everything: the rule
+    /// says "the same colour as this", and "the same as nothing" is not a set
+    /// worth returning.
+    pub match_color: bool,
+    /// Only candidates added on or after this ISO-8601 date.
+    ///
+    /// A string rather than a duration, because `djmdContent.DateCreated` is
+    /// stored as text of varying precision and the caller — which knows what
+    /// "recently" means to the user — can compute the cutoff once.
+    pub added_since: Option<String>,
     pub limit: usize,
 }
 
@@ -229,6 +244,8 @@ impl MixableOptions {
             rating: NumericRule::Off,
             must_have_tags: Vec::new(),
             must_not_have_tags: Vec::new(),
+            match_color: false,
+            added_since: None,
             limit: 25,
         }
     }
@@ -370,6 +387,24 @@ pub fn find_mixable(
                 return None;
             }
 
+            if opts.match_color {
+                let (Some(a), Some(b)) = (source.color.as_deref(), t.color.as_deref()) else {
+                    return None;
+                };
+                if !a.eq_ignore_ascii_case(b) {
+                    return None;
+                }
+            }
+            if let Some(since) = opts.added_since.as_deref() {
+                // Lexicographic, matching the smartlist date rules — ISO-8601
+                // sorts correctly as text. A track with no date is excluded:
+                // we do not know when it arrived, so we cannot claim it is new.
+                let added = t.date_added.as_deref()?;
+                if added.trim() < since.trim() {
+                    return None;
+                }
+            }
+
             let tags = ctx.tags_by_track.get(&t.id);
             if !has_all(tags, &opts.must_have_tags) || !has_none(tags, &opts.must_not_have_tags) {
                 return None;
@@ -427,6 +462,11 @@ mod tests {
             bit_rate: None,
             release_year: None,
             dj_play_count: None,
+            label: None,
+            remixer: None,
+            mix: None,
+            color: None,
+            date_added: None,
             energy: None,
         }
     }
@@ -876,5 +916,93 @@ mod tests {
         let opts: MixableOptions = serde_json::from_str(r#"{"match_key": false}"#).unwrap();
         assert!(!opts.match_key);
         assert_eq!(opts.limit, MixableOptions::basic().limit);
+    }
+
+    fn coloured(id: &str, color: Option<&str>, added: Option<&str>) -> Track {
+        Track {
+            color: color.map(str::to_string),
+            date_added: added.map(str::to_string),
+            ..track(id, Some("8A"), Some(128.0))
+        }
+    }
+
+    #[test]
+    fn match_color_keeps_only_the_sources_colour() {
+        let source = coloured("src", Some("Red"), None);
+        let candidates = vec![
+            coloured("same", Some("Red"), None),
+            coloured("other", Some("Blue"), None),
+            coloured("none", None, None),
+        ];
+        let opts = MixableOptions {
+            match_color: true,
+            ..MixableOptions::basic()
+        };
+        let got = find_mixable(&source, &candidates, &opts, &MixableContext::default());
+        assert_eq!(ids(&got), vec!["same"]);
+    }
+
+    #[test]
+    fn match_color_is_case_insensitive() {
+        // Rekordbox's own casing is not something a user should have to know.
+        let source = coloured("src", Some("Red"), None);
+        let candidates = vec![coloured("same", Some("RED"), None)];
+        let opts = MixableOptions {
+            match_color: true,
+            ..MixableOptions::basic()
+        };
+        let got = find_mixable(&source, &candidates, &opts, &MixableContext::default());
+        assert_eq!(ids(&got), vec!["same"]);
+    }
+
+    #[test]
+    fn an_uncoloured_source_admits_nothing_rather_than_everything() {
+        // "the same colour as this" where this has no colour is not a set worth
+        // returning — and returning all of them would look like the rule is off.
+        let source = coloured("src", None, None);
+        let candidates = vec![coloured("a", Some("Red"), None), coloured("b", None, None)];
+        let opts = MixableOptions {
+            match_color: true,
+            ..MixableOptions::basic()
+        };
+        assert!(find_mixable(&source, &candidates, &opts, &MixableContext::default()).is_empty());
+    }
+
+    #[test]
+    fn added_since_is_inclusive_of_the_cutoff_day() {
+        let source = coloured("src", None, Some("2025-01-01"));
+        let candidates = vec![
+            coloured("on", None, Some("2025-06-01T00:00:00Z")),
+            coloured("after", None, Some("2025-07-01T00:00:00Z")),
+            coloured("before", None, Some("2025-05-01T00:00:00Z")),
+        ];
+        let opts = MixableOptions {
+            added_since: Some("2025-06-01".into()),
+            ..MixableOptions::basic()
+        };
+        let found = find_mixable(&source, &candidates, &opts, &MixableContext::default());
+        let mut got = ids(&found);
+        got.sort();
+        assert_eq!(got, vec!["after", "on"]);
+    }
+
+    #[test]
+    fn a_track_with_no_date_is_not_treated_as_recent() {
+        // We do not know when it arrived, so claiming it is new would be a
+        // guess presented as a fact.
+        let source = coloured("src", None, Some("2025-01-01"));
+        let candidates = vec![coloured("undated", None, None)];
+        let opts = MixableOptions {
+            added_since: Some("2020-01-01".into()),
+            ..MixableOptions::basic()
+        };
+        assert!(find_mixable(&source, &candidates, &opts, &MixableContext::default()).is_empty());
+    }
+
+    #[test]
+    fn the_new_rules_are_off_in_basic_mode() {
+        let basic = MixableOptions::basic();
+        assert!(!basic.match_color);
+        assert_eq!(basic.added_since, None);
     }
 }
