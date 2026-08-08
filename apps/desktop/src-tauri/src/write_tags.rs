@@ -288,10 +288,44 @@ pub fn mappable_tag_targets() -> Vec<String> {
     MAPPABLE_TAG_TARGETS.iter().map(|s| s.to_string()).collect()
 }
 
+/// The `djmdContent` columns a mapping can write when the destination is the
+/// Rekordbox database.
+///
+/// Taken from the applier's own allowlist rather than from a second hand-kept
+/// list, so a target offered here is one sync will actually write. These are
+/// column names (`Commnt`), not display names — the applier's vocabulary, and
+/// the UI labels them.
 #[tauri::command]
-pub fn list_field_mappings(app: tauri::AppHandle) -> Result<Vec<FieldMappingRow>, String> {
+pub fn mappable_library_targets() -> Vec<String> {
+    [
+        "Title", "Artist", "Album", "Genre", "Key", "Commnt", "Label",
+    ]
+    .into_iter()
+    .filter(|t| changes::applier::writes_field(t))
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Resolve a profile name from the frontend to one we actually store.
+///
+/// Unknown names fall back to ID3 rather than erroring: the alternative is that
+/// a build mismatch between the shell and the UI makes the settings panel throw
+/// instead of showing the default profile, which is a worse failure than
+/// showing the wrong one.
+fn profile(name: Option<&str>) -> &'static str {
+    match name {
+        Some(crate::sync_mappings::REKORDBOX_PROFILE) => crate::sync_mappings::REKORDBOX_PROFILE,
+        _ => cache::store::ID3_PROFILE,
+    }
+}
+
+#[tauri::command]
+pub fn list_field_mappings(
+    app: tauri::AppHandle,
+    profile_name: Option<String>,
+) -> Result<Vec<FieldMappingRow>, String> {
     Ok(crate::cache_db(&app)?
-        .list_field_mapping_rows(cache::store::ID3_PROFILE)
+        .list_field_mapping_rows(profile(profile_name.as_deref()))
         .map_err(|e| e.to_string())?
         .into_iter()
         .map(|(id, m)| FieldMappingRow {
@@ -309,10 +343,11 @@ pub fn create_field_mapping(
     source: changes::field_mappings::MappingSource,
     target: String,
     overwrite: bool,
+    profile_name: Option<String>,
 ) -> Result<String, String> {
     crate::cache_db(&app)?
         .create_field_mapping(
-            cache::store::ID3_PROFILE,
+            profile(profile_name.as_deref()),
             &changes::field_mappings::FieldMapping {
                 source,
                 target,

@@ -541,6 +541,26 @@ export type MappingSource =
   | { kind: "tag_category"; name: string }
   | { kind: "colour" };
 
+/** One edit the Rekordbox field mappings would make. */
+export interface MappingProposal {
+  id: string;
+  track_id: string;
+  track_title: string;
+  /** `djmdContent` column name, in the applier's vocabulary. */
+  target: string;
+  before: string | null;
+  after: string;
+}
+
+export interface MappingPreview {
+  proposals: MappingProposal[];
+  /** Targets the applier will not write, named rather than dropped. */
+  unwritable_targets: string[];
+  /** Tracks a mapping produced nothing for, so "0 proposals" reads as
+   *  "nothing to change" rather than as a broken configuration. */
+  unchanged: number;
+}
+
 export interface FieldMappingRow {
   id: string;
   source: MappingSource;

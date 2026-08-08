@@ -9,8 +9,10 @@ import {
   type PendingChange,
   type SyncMode,
   type SyncOptions,
+  previewSyncMappings,
+  stageSyncMappings,
 } from "../ipc";
-import type { Playlist } from "../types";
+import type { MappingPreview, Playlist } from "../types";
 import { useDialog } from "../hooks/useDialog";
 import { useToast } from "./Toast";
 
@@ -58,6 +60,29 @@ export function SyncPanel({ libraryPath }: Props) {
     ],
   );
 
+  /**
+   * What the Rekordbox field mappings would write.
+   *
+   * Loaded separately from the pending list and *staged*, not applied: a
+   * mapping rewrites Comment or Genre across the whole library, which is the
+   * most destructive shape of edit this app makes. Everything else here goes
+   * through the review table, and there is no case for this being the
+   * exception.
+   */
+  const [mappingPreview, setMappingPreview] = useState<MappingPreview | null>(null);
+  const [staging, setStaging] = useState(false);
+
+  const loadMappings = useCallback(async () => {
+    if (!libraryPath) return;
+    try {
+      setMappingPreview(await previewSyncMappings(libraryPath));
+    } catch {
+      // No mappings configured, or a host that does not know the command.
+      // Neither is worth taking the sync panel down for.
+      setMappingPreview(null);
+    }
+  }, [libraryPath]);
+
   const refresh = useCallback(async () => {
     if (!libraryPath) return;
     setLoading(true);
@@ -75,6 +100,10 @@ export function SyncPanel({ libraryPath }: Props) {
       setLoading(false);
     }
   }, [libraryPath, mode, options, toast]);
+
+  useEffect(() => {
+    void loadMappings();
+  }, [loadMappings]);
 
   useEffect(() => {
     void refresh();
@@ -260,6 +289,56 @@ export function SyncPanel({ libraryPath }: Props) {
           Don&apos;t touch my grids (skip BPM writes)
         </label>
       </div>
+
+      {mappingPreview && mappingPreview.proposals.length > 0 && (
+        <section
+          data-testid="sync-mappings"
+          className="mb-2 rounded-lg border border-edge bg-base p-2 text-xs"
+          aria-label="Field mappings"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-ink">
+              Field mappings would change {mappingPreview.proposals.length} field
+              {mappingPreview.proposals.length === 1 ? "" : "s"} across your
+              library.
+            </span>
+            <button
+              type="button"
+              disabled={staging}
+              onClick={async () => {
+                setStaging(true);
+                try {
+                  const { staged } = await stageSyncMappings(libraryPath!);
+                  toast({
+                    variant: "success",
+                    message: `Staged ${staged} mapping change(s) for review`,
+                  });
+                  await refresh();
+                  await loadMappings();
+                } catch (e) {
+                  toast({ variant: "error", message: String(e) });
+                } finally {
+                  setStaging(false);
+                }
+              }}
+              className="rounded bg-accent px-2 py-0.5 font-medium text-base hover:bg-accent-hover disabled:opacity-50"
+            >
+              {staging ? "Staging…" : "Stage for review"}
+            </button>
+          </div>
+          {/* Staged, not written: they join the list below and go through the
+              same review and WriteGuard as everything else. */}
+          <p className="mt-1 text-[11px] text-ink-faint">
+            Staged for review below — nothing is written until you apply.
+          </p>
+          {mappingPreview.unwritable_targets.length > 0 && (
+            <p className="mt-1 text-[11px] text-amber-500">
+              {mappingPreview.unwritable_targets.join(", ")} cannot be written to
+              the Rekordbox library; those mappings are skipped.
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="mb-2 flex items-center justify-between">
         <div className="text-ink-muted">

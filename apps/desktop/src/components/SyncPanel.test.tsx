@@ -2,7 +2,13 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SyncPanel } from "./SyncPanel";
-import { syncCheck, syncExecute, syncPreview } from "../ipc";
+import {
+  previewSyncMappings,
+  stageSyncMappings,
+  syncCheck,
+  syncExecute,
+  syncPreview,
+} from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 
 vi.mock("../ipc", () => ({
@@ -10,6 +16,8 @@ vi.mock("../ipc", () => ({
   syncCheck: vi.fn(),
   syncExecute: vi.fn(),
   syncPreview: vi.fn(),
+  previewSyncMappings: vi.fn(),
+  stageSyncMappings: vi.fn(),
 }));
 
 const ROW = {
@@ -26,6 +34,13 @@ const ROW = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // No mappings configured is the default state for every existing test.
+  vi.mocked(previewSyncMappings).mockResolvedValue({
+    proposals: [],
+    unwritable_targets: [],
+    unchanged: 0,
+  });
+  vi.mocked(stageSyncMappings).mockResolvedValue({ staged: 2 });
 });
 
 function render_() {
@@ -170,5 +185,78 @@ describe("SyncPanel", () => {
     expect(vi.mocked(syncExecute).mock.calls.at(-1)?.[2]).toMatchObject({
       change_to_nearest_color: true,
     });
+  });
+
+  it("stays out of the way when no field mappings are configured", async () => {
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    render_();
+    await screen.findByText("Some Title");
+    expect(screen.queryByTestId("sync-mappings")).toBeNull();
+  });
+
+  it("stages mapping edits for review rather than writing them", async () => {
+    // A mapping rewrites Comment or Genre across the whole library. Everything
+    // else here goes through the review table; this is not the exception.
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    vi.mocked(previewSyncMappings).mockResolvedValue({
+      proposals: [
+        {
+          id: "t1:Commnt",
+          track_id: "t1",
+          track_title: "Some Title",
+          target: "Commnt",
+          before: null,
+          after: "Energy 08",
+        },
+        {
+          id: "t2:Commnt",
+          track_id: "t2",
+          track_title: "Other",
+          target: "Commnt",
+          before: "note",
+          after: "note, Energy 04",
+        },
+      ],
+      unwritable_targets: [],
+      unchanged: 5,
+    });
+
+    render_();
+    const section = await screen.findByTestId("sync-mappings");
+    expect(section).toHaveTextContent(/would change 2 fields/);
+    expect(section).toHaveTextContent(/nothing is written until you apply/i);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Stage for review" }),
+    );
+    expect(vi.mocked(stageSyncMappings)).toHaveBeenCalledWith("/db");
+    // Never the applier — staging is not writing.
+    expect(vi.mocked(syncExecute)).not.toHaveBeenCalled();
+  });
+
+  it("names a target sync cannot write instead of dropping it", async () => {
+    vi.mocked(syncCheck).mockResolvedValue({ locked: false, pending_changes: 1 });
+    vi.mocked(syncPreview).mockResolvedValue([ROW]);
+    vi.mocked(previewSyncMappings).mockResolvedValue({
+      proposals: [
+        {
+          id: "t1:Commnt",
+          track_id: "t1",
+          track_title: "Some Title",
+          target: "Commnt",
+          before: null,
+          after: "Energy 08",
+        },
+      ],
+      unwritable_targets: ["AlbumArt"],
+      unchanged: 0,
+    });
+
+    render_();
+    expect(await screen.findByTestId("sync-mappings")).toHaveTextContent(
+      /AlbumArt cannot be written/,
+    );
   });
 });

@@ -17,6 +17,7 @@ mod playlist_tools;
 mod recipes;
 mod share;
 mod smartlists;
+mod sync_mappings;
 mod trash;
 mod undo;
 mod watch;
@@ -3018,6 +3019,9 @@ pub fn run() {
             organizer::preview_path_rewrite,
             organizer::apply_path_rewrite,
             write_tags::mappable_tag_targets,
+            sync_mappings::preview_sync_mappings,
+            sync_mappings::stage_sync_mappings,
+            write_tags::mappable_library_targets,
             write_tags::list_field_mappings,
             write_tags::create_field_mapping,
             write_tags::delete_field_mapping,

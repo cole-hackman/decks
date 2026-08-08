@@ -7,6 +7,7 @@ import {
   deleteFieldMapping,
   listFieldMappings,
   listTagCategories,
+  mappableLibraryTargets,
   mappableTagTargets,
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
@@ -17,6 +18,7 @@ vi.mock("../ipc", () => ({
   createFieldMapping: vi.fn(),
   deleteFieldMapping: vi.fn(),
   mappableTagTargets: vi.fn(),
+  mappableLibraryTargets: vi.fn(),
   listTagCategories: vi.fn(),
 }));
 
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listFieldMappings).mockResolvedValue(ROWS);
   vi.mocked(mappableTagTargets).mockResolvedValue(["Comment", "Genre"]);
+  vi.mocked(mappableLibraryTargets).mockResolvedValue(["Commnt", "Genre"]);
   vi.mocked(createFieldMapping).mockResolvedValue("r3");
   vi.mocked(listTagCategories).mockResolvedValue([
     { id: "genre", name: "Genre", seq: 0, color: null },
@@ -96,6 +99,7 @@ describe("FieldMappingsSection", () => {
         { kind: "all_custom_tags" },
         "Genre",
         true,
+        "id3",
       );
     });
   });
@@ -142,6 +146,7 @@ describe("FieldMappingsSection", () => {
       { kind: "tag_category", name: "Mood" },
       "Comment",
       false,
+      "id3",
     );
   });
 
@@ -151,5 +156,43 @@ describe("FieldMappingsSection", () => {
     renderSection();
     expect(await screen.findByLabelText("Mapping source")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Energy" })).toBeInTheDocument();
+  });
+
+  it("switches destination, and offers that destination's targets", async () => {
+    // The two genuinely differ — an audio file has no Rating frame worth
+    // writing and `djmdContent` has no album-art column — so offering one
+    // list for both would advertise mappings that silently do nothing.
+    renderSection();
+    await screen.findByLabelText("Mapping target");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Rekordbox library" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("option", { name: "Commnt" }),
+      ).toBeInTheDocument(),
+    );
+    expect(vi.mocked(listFieldMappings)).toHaveBeenLastCalledWith("rekordbox");
+  });
+
+  it("stores a new mapping against the selected destination", async () => {
+    renderSection();
+    await screen.findByLabelText("Mapping target");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Rekordbox library" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "Commnt" })).toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /^Add/ }));
+    expect(vi.mocked(createFieldMapping)).toHaveBeenLastCalledWith(
+      { kind: "energy" },
+      "Commnt",
+      false,
+      "rekordbox",
+    );
   });
 });

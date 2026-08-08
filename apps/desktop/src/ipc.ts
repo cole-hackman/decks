@@ -75,6 +75,7 @@ import type {
   ImportResult,
   AutomaticAction,
   FieldMappingRow,
+  MappingPreview,
   MappingSource,
   Recipe,
   RecipePreview,
@@ -1218,16 +1219,52 @@ export async function mappableTagTargets(): Promise<string[]> {
   return invoke<string[]>("mappable_tag_targets");
 }
 
-export async function listFieldMappings(): Promise<FieldMappingRow[]> {
-  return invoke<FieldMappingRow[]>("list_field_mappings");
+/** The `djmdContent` columns sync will actually write, from the applier's own
+ *  allowlist rather than a second hand-kept list. */
+export async function mappableLibraryTargets(): Promise<string[]> {
+  return invoke<string[]>("mappable_library_targets");
+}
+
+/** Which destination a set of mappings targets. */
+export type MappingProfile = "id3" | "rekordbox";
+
+export async function listFieldMappings(
+  profileName: MappingProfile = "id3",
+): Promise<FieldMappingRow[]> {
+  return invoke<FieldMappingRow[]>("list_field_mappings", { profileName });
 }
 
 export async function createFieldMapping(
   source: MappingSource,
   target: string,
   overwrite: boolean,
+  profileName: MappingProfile = "id3",
 ): Promise<string> {
-  return invoke<string>("create_field_mapping", { source, target, overwrite });
+  return invoke<string>("create_field_mapping", {
+    source,
+    target,
+    overwrite,
+    profileName,
+  });
+}
+
+/** What the Rekordbox field mappings would write, without writing it. */
+export async function previewSyncMappings(
+  libraryPath: string,
+): Promise<MappingPreview> {
+  return invoke<MappingPreview>("preview_sync_mappings", { libraryPath });
+}
+
+/** Stage the mapping edits for review. Writes nothing to `master.db` itself —
+ *  they go through the review table and the WriteGuard like any other change. */
+export async function stageSyncMappings(
+  libraryPath: string,
+  proposalIds: string[] = [],
+): Promise<{ staged: number }> {
+  return invoke<{ staged: number }>("stage_sync_mappings", {
+    libraryPath,
+    proposalIds,
+  });
 }
 
 export async function deleteFieldMapping(id: string): Promise<boolean> {
