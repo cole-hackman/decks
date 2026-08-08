@@ -29,6 +29,11 @@ import {
 import { colorForKey, toCamelot } from "../lib/camelot";
 import { EnergyBar } from "./EnergyBar";
 import { RowWaveform } from "./RowWaveform";
+import {
+  dragPayload,
+  encodeDragPayload,
+  TRACK_IDS_MIME,
+} from "../lib/track-drag";
 import { useRowWaveforms } from "../hooks/useRowWaveforms";
 import type { Track } from "../types";
 
@@ -925,6 +930,21 @@ export function TrackTable({
                     ? "bg-accent/12 shadow-[inset_2px_0_0_0_rgb(var(--accent))] hover:bg-accent/15"
                     : "hover:bg-elevated/60",
                 ].join(" ")}
+                draggable
+                onDragStart={(e) => {
+                  // Dragging a row inside the selection drags the whole
+                  // selection; a row outside it drags alone and does not
+                  // silently extend the selection.
+                  const ids = dragPayload(row.original.id, selectedTrackIds);
+                  e.dataTransfer.setData(
+                    TRACK_IDS_MIME,
+                    encodeDragPayload(ids),
+                  );
+                  // A plain-text fallback so dropping into any other app gives
+                  // something readable rather than nothing.
+                  e.dataTransfer.setData("text/plain", ids.join("\n"));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 onClick={(e) => handleRowClick(e, vItem.index, row.original)}
                 onContextMenu={(e) => {
                   if (!onTrackContextMenu) return;

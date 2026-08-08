@@ -49,6 +49,36 @@ Verified in the Claude Code container on 2026-08-06, and relevant to whoever pic
 - **There is no audio to calibrate against.** `fixtures/audio/` contains only `.gitkeep`; real
   fixtures are gitignored by design. Energy, Danceability and beatshift detection all need real
   encoder-padded, genre-varied audio before their numbers mean anything.
+- **ANLZ *writing* cannot be verified here, and four parity rows depend on it.** Investigated
+  2026-08-07. `crates/rekordbox-db/src/anlz.rs` parses; nothing writes.
+
+  Producing the bytes is the easy half and is not the blocker. The format is self-describing —
+  `PMAI` magic, a big-endian header length, then a chain of sections each carrying its own tag,
+  header length and total length — so rewriting `PQTZ` in place is mechanical, and `for_each_section`
+  already proves we can walk it correctly.
+
+  What cannot be answered without a real Rekordbox install is whether Rekordbox **accepts** a file
+  we wrote:
+
+  1. Whether anything beyond the length fields is validated.
+  2. Whether the `.DAT` and its `.EXT` companion must stay mutually consistent — we only read one.
+  3. Whether `master.db` carries state that must change alongside it (`AnalysisUpdated`,
+     `AnalysisDataPath`), and what Rekordbox does on next launch if it does not.
+
+  The failure mode is not data loss but it is not nothing: a rejected or misparsed ANLZ leaves a
+  track with no waveform and no grid in Rekordbox until it is re-analysed there.
+
+  **So it is deliberately unbuilt rather than half-built.** A writer we cannot verify would be
+  untestable production code by the same argument that keeps the enrichment providers unwritten,
+  and shipping it unwired would violate this project's own definition of done ("reachable from the
+  UI, never tests-only"). The four rows that depend on it — **Beatgrid editing**, the last two
+  **cue-point recipes**, **Don't Touch My Grids**, **Beatshift correction** — stay `partial` with
+  this as their shared reason.
+
+  **What would unblock it:** the disposable-DB smoke harness described in ADR-0010's notes
+  (`scripts/real-library-smoke.sh`), extended to write one `PQTZ` section into a copy of a real
+  ANLZ file and then open that copy in Rekordbox. That is a fifteen-minute check on a machine with
+  Rekordbox installed, and it converts all four rows at once.
 
 ## Open questions for the project owner
 

@@ -1,5 +1,48 @@
 # Status
 
+## 2026-08-07 — A drag source, and why ANLZ writes stay unbuilt
+
+Two things: the last Library & browser gap, and an investigation that closes off four others by
+saying no.
+
+**Track rows are a drag source now**, which also lit up the Favorite Playlists drop target that had
+been waiting on exactly this. One rule worth stating: dragging a row *inside* the selection carries
+the whole selection, and dragging one *outside* it carries only that row without silently extending
+the selection. Dragging one of five highlighted rows to mean only that row would make the highlight
+a lie.
+
+The drop carries its own ids rather than reading the current selection at drop time — the selection
+can change between picking up and letting go, and the payload is the record of what the user
+actually grabbed. The favourite only accepts a drag carrying our own MIME type, so the chip does
+not light up for a dragged file and then do nothing.
+
+**ANLZ writing: investigated, and deliberately not built.** Four `partial`/`missing` rows depend on
+it — Beatgrid editing, the last two cue-point recipes, Don't Touch My Grids, Beatshift correction —
+so it was worth answering once rather than four times.
+
+Producing the bytes is the easy half. The format is self-describing (`PMAI` magic, big-endian
+lengths, a chain of tagged sections), `for_each_section` already walks it correctly, and rewriting
+a `PQTZ` section is mechanical.
+
+What cannot be answered here is whether Rekordbox **accepts** a file we wrote: whether anything
+beyond the length fields is validated, whether the `.DAT` and its `.EXT` companion must stay
+consistent, and whether `master.db` carries state that has to change alongside it. The failure mode
+is not data loss, but a rejected ANLZ leaves a track with no waveform and no grid in Rekordbox until
+it is re-analysed there.
+
+So it stays unbuilt rather than half-built. A writer we cannot verify is untestable production code
+by the same argument that keeps the enrichment providers unwritten, and shipping it unwired would
+break this project's own definition of done. The four rows now share one recorded reason instead of
+four vague ones, and `GAPS.md` names the fifteen-minute check on a machine with Rekordbox installed
+that would unblock all of them at once.
+
+Library & browser is now **17 done / 0 partial** once the tree PR lands.
+
+**Next:** with ANLZ ruled out for now, the remaining unblocked work is thin — Energy's defined
+scale (ADR-0012 adopted `libebur128`; check whether it is wired) and the Rekordbox direct-DB-write
+row, which may be a divergence rather than a gap. Album art and `crates/enrichment` still need the
+provider decision.
+
 ## 2026-08-07 — Playlists move between folders
 
 The playlists tree's last named gaps: folder-drop and drag-between. Both come down to one missing

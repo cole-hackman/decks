@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FavouritePlaylistsBar } from "./FavouritePlaylistsBar";
@@ -9,6 +9,7 @@ import {
 } from "../ipc";
 import { WithProviders } from "../test-utils/providers";
 import type { FavouritePlaylist } from "../types";
+import { TRACK_IDS_MIME } from "../lib/track-drag";
 
 vi.mock("../ipc", () => ({
   listFavouritePlaylists: vi.fn(),
@@ -60,7 +61,9 @@ describe("FavouritePlaylistsBar", () => {
   it("says what the keys do rather than leaving numbers as decoration", async () => {
     renderBar();
     const bar = await screen.findByTestId("favourite-playlists");
-    expect(bar).toHaveTextContent("1–9 opens · Shift+1–9 files the selection");
+    expect(bar).toHaveTextContent(
+      "1–9 opens · Shift+1–9 or drag files the selection",
+    );
   });
 
   it("a digit opens the favourite at that position", async () => {
@@ -169,5 +172,58 @@ describe("FavouritePlaylistsBar", () => {
     renderBar();
     await waitFor(() => expect(listFavouritePlaylists).toHaveBeenCalled());
     expect(screen.queryByTestId("favourite-playlists")).not.toBeInTheDocument();
+  });
+
+  /** A DataTransfer stand-in — jsdom does not construct one. */
+  function transfer(payload: string | null) {
+    return {
+      types: payload === null ? [] : [TRACK_IDS_MIME],
+      getData: () => payload ?? "",
+      dropEffect: "",
+      setData: () => {},
+    };
+  }
+
+  it("files tracks dropped onto a favourite", async () => {
+    renderBar();
+    const chip = (await screen.findByText("Warmup")).closest("span")!;
+
+    fireEvent.dragOver(chip, { dataTransfer: transfer("t1\nt2") });
+    fireEvent.drop(chip, { dataTransfer: transfer("t1\nt2") });
+
+    await waitFor(() =>
+      expect(vi.mocked(addTracksToPlaylist)).toHaveBeenCalledWith(
+        "/lib.db",
+        "p1",
+        ["t1", "t2"],
+      ),
+    );
+  });
+
+  it("files what was dragged, not what happens to be selected now", async () => {
+    // The selection can change between the drag starting and the drop; the
+    // payload is the record of what the user picked up.
+    renderBar(["other"]);
+    const chip = (await screen.findByText("Warmup")).closest("span")!;
+
+    fireEvent.drop(chip, { dataTransfer: transfer("t1") });
+
+    await waitFor(() =>
+      expect(vi.mocked(addTracksToPlaylist)).toHaveBeenCalledWith(
+        "/lib.db",
+        "p1",
+        ["t1"],
+      ),
+    );
+  });
+
+  it("ignores a drag that is not ours", async () => {
+    // Without the type check the chip would light up for a dragged file and
+    // then do nothing.
+    renderBar();
+    const chip = (await screen.findByText("Warmup")).closest("span")!;
+
+    fireEvent.drop(chip, { dataTransfer: transfer(null) });
+    expect(vi.mocked(addTracksToPlaylist)).not.toHaveBeenCalled();
   });
 });
