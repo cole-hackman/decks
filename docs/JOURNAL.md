@@ -2584,6 +2584,48 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (a drag source, and a spike that says no)
+
+The last Library & browser gap was a drag source in the track table, and the Favorite Playlists row
+had been sitting on "drag-and-drop target not done — no drag source in the table yet" waiting for
+it. One change, two rows.
+
+The rule that took a moment: dragging a row that is *inside* the current selection should carry the
+whole selection, and dragging one *outside* it should carry only that row. The alternative — always
+just the row under the pointer — makes a multi-select highlight into a lie, and the other
+alternative — extending the selection to include the dragged row — silently changes state the user
+did not ask to change.
+
+The drop reads the payload rather than the live selection, which matters more than it sounds: the
+selection can change between the drag starting and the drop landing, and the payload is the record
+of what was actually picked up. And the favourite only accepts a drag carrying our own MIME type,
+because without that check the chip lights up for a dragged file and then does nothing, which is
+worse than never lighting up.
+
+Rules live in `lib/track-drag.ts` for the now-usual reason: jsdom does not run drag events.
+
+**Then the spike.** Four rows depend on writing ANLZ files, and I wanted to answer that once rather
+than discovering it four times.
+
+The bytes are not the problem. The format is self-describing — `PMAI`, a big-endian header length,
+then sections each carrying tag, header length and total length — and `for_each_section` already
+walks it correctly, so rewriting `PQTZ` in place is mechanical work with an obvious round-trip test.
+
+The problem is everything after producing the bytes. Does Rekordbox validate anything beyond the
+lengths? Must the `.DAT` and its `.EXT` companion stay mutually consistent — we only read one? Does
+`master.db` carry state (`AnalysisUpdated`) that has to change too, and what happens on next launch
+if it does not? None of that is answerable from documentation, and none of it is answerable in this
+container: there is no Rekordbox here and every fixture is synthetic.
+
+I could have written the writer anyway, round-trip-tested against our own parser, and called the
+rows closed. That would have been the wrong call twice over. It is untestable production code by
+exactly the argument that keeps `crates/enrichment` unwritten. And it would sit unwired, which this
+project's own definition of done forbids — "reachable from the UI, never tests-only".
+
+So the deliverable is the finding: four rows now share one written reason, and `GAPS.md` names the
+specific fifteen-minute check on a machine with Rekordbox that resolves all four together. That is
+worth more than a writer nobody can trust.
+
 ## Session — 2026-08-07 (playlists move between folders)
 
 Folder-drop and drag-between were listed as two gaps; they are one missing change kind.

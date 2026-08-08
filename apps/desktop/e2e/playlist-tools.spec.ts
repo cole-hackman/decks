@@ -419,7 +419,9 @@ test("favourites: star a playlist, then jump to it with its hotkey", async ({
   await page.getByRole("button", { name: "Library" }).click();
   const bar = page.getByTestId("favourite-playlists");
   await expect(bar).toContainText("Peak");
-  await expect(bar).toContainText("1–9 opens · Shift+1–9 files the selection");
+  await expect(bar).toContainText(
+    "1–9 opens · Shift+1–9 or drag files the selection",
+  );
 
   // Hotkey 1 opens it in the playlist browser.
   await page.keyboard.press("Digit1");

@@ -15,7 +15,7 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
 | Interop & sync | 8 | 3 | 1 | 0 | 11 |
-| Library & browser | 16 | 1 | 1 | 0 | 0 |
+| Library & browser | 17 | 0 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **59** | **21** | **14** | **2** | **16** |
+| **Total** | **60** | **20** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -59,20 +59,20 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Rekordbox direct DB write | partial | `WriteGuard` + applier; stricter than Lexicon (refuses while RB is open) | — |
 | Full / Playlist / Modified sync | partial | Modes exist and **Modified Sync is done** — a per-`(library, app)` watermark (cache v20), stamped only after a run that wrote, forward-only, and the mode is locked with a reason until a first sync. **Full-Sync delete is a deliberate divergence, not a gap**: it means "remove anything not in Lexicon", and `decks` has no library of its own to mirror from — it reads `master.db`. The nearest literal implementation would delete the user's collection | 6 |
 | Cue Destination | **done** | Sets `Kind` on inserted cues, plus a `MirrorCues` recipe for the wholesale hot↔memory copy (idempotent — a position that is already both is left alone). **The hidden-duplicate round-trip is a divergence, not a gap**: Lexicon collapses memory cues into hot cues on import and must remember what it hid; `decks` never imports, so nothing is collapsed and there is nothing to restore | 2 |
-| Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
+| Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip, and they need **ANLZ writes** (`GAPS.md` §Environment blockers) | 2 |
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
 | Colors → nearest | **done** | `Track` carries colour; `TrackMetadataEdit` writes `ColorID` against Rekordbox's fixed eight-colour palette. Off, an inexact colour is **left unchanged** and the skip is reported; on, it maps to the nearest and each mapping is named. Never creates a `djmdColor` row — a ninth colour renders on no CDJ | 4 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
 | Field Mappings | **done** | Engine, ID3 profile **and** a Rekordbox profile applied to the library. Per-category tag sources and the Colour source populated. Library mappings are **previewed and staged**, not written directly — a mapping rewrites Comment or Genre library-wide, and that goes through review like every other bulk edit. Profiles for non-Rekordbox apps stay `deferred` with the rest of those adapters | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
-| Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues | 4 |
+| Beatshift correction on import/sync | **missing** | Correctness issue — we already write cues. Needs **ANLZ writes** (`GAPS.md` §Environment blockers) | 4 |
 | Serato / Traktor / VirtualDJ / Engine / djay / Apple Music / M3U / USB / DIRECT2CDJ | deferred | 11 items | — |
 
 ## Library & browser — `02-library.md`
 
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
-| Virtualized track table | partial | Resizable, sortable, inline column search, multi-select, inline cell editing. Label / Mix / Remixer / Colour / Added columns added with the `Track` widening | — |
+| Virtualized track table | **done** | Resizable, sortable, inline column search, multi-select, inline cell editing, Label / Mix / Remixer / Colour / Added columns, and **rows are a drag source** — dragging inside the selection carries the whole selection, outside it carries just that row | — |
 | Search operators (`None`, `>`, `<`, ranges, `!`) | **done** | `smartlists::search` parses the box into rules the same evaluator runs — one implementation, not two | 1 |
 | Tag query language (`~`, `!`, comma) in the search box | **done** | `~a,b` requires all, `tag:a,b` any, `!` negates — parsed to `has_all` / `has_any` / `has_none` | 5 |
 | Key-notation-aware search | **done** | `key:4A` finds `Abm`: the box parses to a key rule, and the evaluator does the notation work | 1 |
@@ -82,7 +82,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Sidepanel (second track browser) | **done** | Resizable, toggled from the header or `Cmd/Ctrl+\\`; keeps its own selection so it is a second view rather than a mirror | 6 |
 | Track Timeline | **done** | BPM / Energy / Rating / Key, coloured by key or BPM change; hidden past 200 tracks; also on history sets. Danceability / Popularity / Happiness not modelled | 6 |
 | Playlists tree | **done** | M3U import, create-from-selection, and **drag a playlist or folder into a folder** via a new `PlaylistMove` change kind. The applier refuses a non-folder destination and a folder moved into its own descendant — the second detaches a whole subtree from the root forever — and the UI mirrors both rules so a drop that sync would reject never looks like it worked | 6 |
-| Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens and Shift+1–9 files the selection. Drag-and-drop target not done — no drag source in the table yet | 6 |
+| Favorite Playlists + hotkeys | **done** | Star up to 9; bar above the browser, 1–9 opens, Shift+1–9 **or a drag from the table** files the selection | 6 |
 | Playlist Merge / Sort / Cross Reference / Prefix / Rewrite Order | **done** | All five, in a Playlist Tools view. Sort needed a new `PlaylistReorder` change kind. Rewrite Order sorts on a field picked in the tool rather than the browser's transient column sort — documented divergence | 6 |
 | Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
 | Custom Tags | **done** | OR-within/AND-across selection, MyTag and hashtag import, category colours, drag **and keyboard** reorder (`reorder_tags`), per-tag number hotkeys (global, so assigning a taken one steals it), and Field-Mapper export both for all tags and per category | 5 |
@@ -125,7 +125,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Loops | partial | Loop length in beats via `OutMsec`. **Active loops need a `djmdCue` column we do not model** — deferred | 2 |
 | Quantize (incl. grid-move-carries-cues) | **done** | 1/2/4/16/64-beat snapping; a grid nudge moves only cues already on the grid | 2 |
 | Cue templates | **done** | Ship as *cue presets* — `CueTemplate` was taken by the generator. Immutable, promoted from a cue, applied as staged `CueMetadataEdit`s, hotkeys 1–8 with gap-closing on delete | 6 |
-| Beatgrid editing | partial | Grid nudge stages the cue moves that follow it. Writing the grid itself back to ANLZ, and half/double BPM, still missing | 2 |
+| Beatgrid editing | partial | Grid nudge stages the cue moves that follow it. Writing the grid back needs **ANLZ writes**, which are unbuilt on purpose — see `GAPS.md` §Environment blockers: producing the bytes is mechanical, but whether Rekordbox accepts a file we wrote cannot be verified without a real install | 2 |
 | Beat jump | **done** | ±4/±16 beats along the real ANLZ grid, clamped at both ends | 2 |
 | Hotkeys: rebinding, global, inline hints | partial | Rebinding + persistence + conflict detection exist in the registry; no settings UI yet, and no system-wide hotkeys | 2 |
 | **Action registry** | **done** | `lib/actions.ts` — bindings, rebinding, conflict detection, search. App globals migrated onto it | 2 |

@@ -5,6 +5,7 @@ import {
   toggleFavouritePlaylist,
 } from "../ipc";
 import { useToast } from "./Toast";
+import { readDragPayload, TRACK_IDS_MIME } from "../lib/track-drag";
 import type { FavouritePlaylist } from "../types";
 
 interface Props {
@@ -49,6 +50,9 @@ export function FavouritePlaylistsBar({
   }, [libraryPath]);
 
   useEffect(refresh, [refresh, refreshToken]);
+
+  /** Which favourite is under the pointer during a drag. */
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const file = useCallback(
     async (fav: FavouritePlaylist, ids: string[]) => {
@@ -132,7 +136,31 @@ export function FavouritePlaylistsBar({
       {favourites.map((fav) => (
         <span
           key={fav.playlist_id}
-          className="group flex items-center overflow-hidden rounded border border-border"
+          className={[
+            "group flex items-center overflow-hidden rounded border",
+            dropTarget === fav.playlist_id
+              ? "border-accent ring-1 ring-inset ring-accent"
+              : "border-border",
+          ].join(" ")}
+          onDragOver={(e) => {
+            // Only accept a drag that carries our own payload. Without the
+            // type check the bar would light up for a dragged file or a text
+            // selection and then do nothing.
+            if (!e.dataTransfer.types.includes(TRACK_IDS_MIME)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDropTarget(fav.playlist_id);
+          }}
+          onDragLeave={() => setDropTarget((c) => (c === fav.playlist_id ? null : c))}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDropTarget(null);
+            const ids = readDragPayload(e.dataTransfer.getData(TRACK_IDS_MIME));
+            // The drop carries its own ids rather than reading the current
+            // selection: what was dragged is what gets filed, even if the
+            // selection changed between the drag starting and the drop.
+            if (ids.length > 0) void file(fav, ids);
+          }}
         >
           <button
             type="button"
@@ -166,7 +194,7 @@ export function FavouritePlaylistsBar({
       ))}
       <span className="ml-1 text-[11px] text-muted">
         {/* Say what the keys do; a numbered chip alone reads as decoration. */}
-        1–9 opens · Shift+1–9 files the selection
+        1–9 opens · Shift+1–9 or drag files the selection
       </span>
     </div>
   );
