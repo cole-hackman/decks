@@ -3105,3 +3105,57 @@ with the reason.
 
 ### Parity
 61 done / 21 partial / 12 missing / 2 blocked / 16 deferred. Epic 7 streaming next.
+
+## Session — 2026-08-08 — Epic 7: scoping, then the credential-free half
+
+### Plan
+"Integrate all the ones you can." Scope first, build second — the risk with an instruction like
+that is promising seven rows and delivering four half-authenticated clients nobody can turn on.
+
+### The scoping, which was the real work
+Three buckets, not two:
+
+1. **Needs nothing** — Track Matcher's `.m3u8` / separator / playlist-creation gaps, and onward
+   search + Store Links *as generated search URLs*. Built.
+2. **Needs a registered app + per-user token** — Beatport catalog/cart/purchase, Charts, Send To,
+   SoundCloud playback, Track Discovery, price comparison. Not built; it is an account action with
+   terms attached and belongs to the owner.
+3. **Needs a verified place to put a streaming reference** — streaming tracks, Transfer Streaming
+   To Local. This is the one worth flagging: it needs *no API*, the spec's own claim is that the
+   reference survives even when the audio can't be played, and it is still unbuildable here because
+   `master.db` models no streaming columns in the synthetic schema and no real one is available.
+   Storing it in the cache would make it decks-only and defeat the point.
+
+### Decisions
+- **A search URL is the honest form of Store Links.** It claims nothing about existence or price
+  and cannot be wrong in a way that costs the user anything. Half-authenticating a store client
+  would fail at the first request and look like a bug rather than a boundary.
+- **`%20`, not `+`.** Several of these stores put the query in a path segment where a literal `+`
+  stays a plus sign and breaks the search.
+- **One reader for `.txt` and `.m3u8`**, since an `.m3u8` is a text file whose non-track lines
+  start with `#`. `#EXTINF` titles beat the path lines beneath them.
+- **Separator selectable, not guessed** — the spec says so, and mis-splitting produces confident
+  wrong matches rather than obvious failures.
+
+### Two bugs my own tests found
+`#3 C - D` was swallowed: I had `is_noise` treat every `#` line as an m3u8 directive, which is true
+for `.m3u8` and false for a hand-written setlist. Resolved on what follows the `#` — letters mean
+directive, digits mean index.
+
+Fixing that then broke `99 Problems`, because allowing a bare space after digits made the number an
+index. Resolved by letting only the `#` license a space delimiter; without it, punctuation is
+required. Both cases now have regression tests naming the tension.
+
+### The process fix
+`rust-toolchain.toml` pins `stable` = 1.97.1 on CI; this container had 1.94.1. Every local "clippy
+clean" this session was a weaker claim than the gate, and #45 failed on both platforms for a lint I
+could not see. Installed current stable; the definition of done now runs against it. Carrying two
+toolchains filled the disk — `cargo clean` plus removing the old one freed 31 GB.
+
+### Verification
+`cargo +stable fmt --check`, `cargo +stable test --workspace`, `cargo +stable clippy --workspace
+--all-targets -D warnings` (clean incl. `decks-desktop`), `pnpm test` (837), `pnpm typecheck`,
+`pnpm lint`, `pnpm e2e` (59).
+
+### Parity
+62 done / 21 partial / 11 missing / 2 blocked / 16 deferred.

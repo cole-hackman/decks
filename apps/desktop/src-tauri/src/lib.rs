@@ -2268,6 +2268,41 @@ fn parse_csv_for_matcher(
         .map_err(|e| e.to_string())
 }
 
+/// Read a pasted or uploaded `.txt` / `.m3u8` tracklist.
+///
+/// The CSV path stays separate (`parse_csv_for_matcher`) because CSV has
+/// columns to map and these formats do not — one entry per line, and a
+/// separator the user chooses rather than one we guess at. Per
+/// `docs/lexicon/08-streaming.md §Track Matcher`.
+#[tauri::command]
+fn parse_tracklist_for_matcher(
+    content: String,
+    separator: Option<track_matcher::tracklist::Separator>,
+) -> Result<Vec<track_matcher::MatchInput>, String> {
+    Ok(track_matcher::tracklist::parse(
+        &content,
+        &separator.unwrap_or_default(),
+    ))
+}
+
+/// Search URLs for entries the library did not have.
+///
+/// The honest half of Lexicon's onward-search and Store Links: constructing the
+/// right search URL per store, per track, so a DJ working through fifty
+/// unmatched request-list entries opens fifty right-first-time searches instead
+/// of typing fifty queries. **Price comparison and playlist push are not built**
+/// — both need a registered application and a per-user token for each service.
+/// See `docs/lexicon/08-streaming.md` and the Epic 7 note in `GAPS.md`.
+#[tauri::command]
+fn store_links_for_tracks(
+    tracks: Vec<MatchInputDto>,
+    stores: Vec<track_matcher::store_links::Store>,
+) -> Vec<track_matcher::store_links::TrackLinks> {
+    let pairs: Vec<(String, Option<String>)> =
+        tracks.into_iter().map(|t| (t.title, t.artist)).collect();
+    track_matcher::store_links::links_for(&pairs, &stores)
+}
+
 #[tauri::command]
 fn parse_csv_headers_for_matcher(content: String) -> Result<Vec<String>, String> {
     track_matcher::csv_input::parse_headers(&content).map_err(|e| e.to_string())
@@ -3181,6 +3216,8 @@ pub fn run() {
             sync_execute_accepted,
             match_tracks,
             parse_csv_for_matcher,
+            parse_tracklist_for_matcher,
+            store_links_for_tracks,
             parse_csv_headers_for_matcher,
             create_playlist_from_tracks,
             stage_track_delete,

@@ -62,7 +62,18 @@ library.
 *What it does* — Given a chart or a list, automates the tedious per-track search across online
 stores to find where each track can be bought, with price comparison.
 
-*decks status* — **missing.** *Epic* — **7**.
+*decks status* — **partial.** `track_matcher::store_links` generates the correct search URL per
+track for Beatport, Bandcamp, Discogs, Spotify, Tidal, SoundCloud and YouTube — the three the
+manual names for onward search, plus the stores a DJ actually buys from. That is the tedious part,
+and it is honest: a search link claims nothing about whether the track exists or what it costs, and
+cannot be wrong in a way that costs the user anything.
+
+**Price comparison is not built**, and neither is anything else needing an authenticated store API.
+Doing it properly means a registered application and a per-user token per store — an account action
+with terms attached. The UI says plainly that these are search links only, rather than implying a
+comparison that is not happening.
+
+*Epic* — **7**.
 
 ---
 
@@ -84,8 +95,26 @@ or Beatport** to hunt down. Aimed squarely at wedding and event DJs working from
 *decks status* — **partial, and solid.** `crates/track-matcher` does normalisation (strip `feat.`,
 strip `(Original Mix)`/`(Extended)`/`(Radio Edit)`), exact match on normalised artist+title, then
 token-sort Levenshtein ≥ 85, returning `exact` / `fuzzy` / `unmatched` with a confidence score.
-CSV parsing moved to the Rust backend (`parse_csv_for_matcher`) with a column-mapping UI. Missing:
-`.m3u8` input, configurable separator, playlist creation from results, and all onward-search.
+CSV parsing moved to the Rust backend (`parse_csv_for_matcher`) with a column-mapping UI.
+
+**Now done.** `tracklist::parse` reads `.txt` and `.m3u8` with one reader — an `.m3u8` is a text
+file whose non-track lines start with `#` — preferring `#EXTINF` titles over the path lines beneath
+them, because a path is a location and matching a library by path is what Relocate is for. The
+separator is *selectable* as the manual specifies, not guessed: hyphen, en dash, em dash,
+`Title by Artist` (the one form where the sides swap), none, or custom. Matches become a playlist
+via the existing `create_playlist_from_tracks`.
+
+Two things real request lists forced, neither in the manual:
+
+- **Numbered indices are stripped.** `1. Daft Punk - ...` otherwise makes the artist `1. Daft Punk`,
+  which normalisation does not remove and which pushes a genuine match under the fuzzy threshold.
+  A digit alone is never an index, though — `99 Problems` and `1979` are titles — so the number
+  must be followed by punctuation, or introduced by `#`.
+- **`#` is ambiguous** between the two formats: a directive in `.m3u8`, a list index in a
+  hand-written setlist. What follows settles it — letters mean directive, digits mean index.
+
+Onward search is built as **generated store search URLs** (see §Store Links). The
+push-to-service half is not; it needs a registered application and a per-user token per service.
 
 *Epic* — **7**.
 

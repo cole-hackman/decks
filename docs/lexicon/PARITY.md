@@ -22,10 +22,10 @@ regardless of how much of Lexicon they represent.
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 3 | 1 | 0 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
-| Streaming | 1 | 1 | 7 | 0 | 0 |
+| Streaming | 2 | 1 | 6 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **61** | **21** | **12** | **2** | **16** |
+| **Total** | **62** | **21** | **11** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -180,11 +180,18 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Feature | Status | Notes | Epic |
 |---|---|---|---|
 | Share / export (CSV, M3U, HTML/PDF, quick copy) | **done** | `crates/share`, in Playlist Tools. CSV formula injection defused; M3U reports the pathless tracks it could not carry; HTML self-contained, PDF via the browser. Header drag-to-reorder not done — the picker orders by tick order | 6 |
-| Track Matcher | partial | No `.m3u8`, no separator choice, no playlist creation, no onward search | 7 |
+| Track Matcher | **done** | `.txt` / `.m3u8` input (one reader, `#EXTINF` titles preferred over paths), selectable separator (hyphen / en dash / em dash / `by` / none / custom), numbered-setlist indices stripped, playlist creation from matches, and onward search as generated store URLs | 7 |
 
-Everything else is **missing** and belongs to **Epic 7**: Beatport / Beatsource / Tidal /
-SoundCloud sources, Beatport catalog + cart + purchase-replacement, Charts, Store Links, Track
-Discovery, Send To, Transfer Streaming To Local.
+| Store Links | partial | Search URLs generated per track across Beatport, Bandcamp, Discogs, Spotify, Tidal, SoundCloud and YouTube — the tedious part, and honest: a search link claims nothing. **Price comparison needs authenticated store APIs** and is not built | 7 |
+
+Everything else is **missing** and belongs to **Epic 7**. `GAPS.md` §Epic 7 records exactly why,
+and the split matters: Beatport catalog / cart / purchase-replacement, Charts, Send To, SoundCloud
+playback and Track Discovery are blocked on **a registered application and a per-user token per
+service** — an account action with terms attached, so the project owner's to take. Streaming
+tracks and Transfer Streaming To Local are blocked on something different: **there is nowhere
+verified to store a streaming reference.** `master.db` models no streaming columns in the synthetic
+schema and no real one is available here, and putting the reference in the local cache would make
+it decks-only — which defeats the one guarantee the feature exists to give.
 
 ## History & backup — `09-history-backup.md`
 

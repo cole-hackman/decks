@@ -1,5 +1,60 @@
 # Status
 
+## 2026-08-08 — Epic 7, scoped honestly: Track Matcher done, store links built, the rest named
+
+The instruction was "integrate all the ones you can". The useful part of this session was working
+out what **can** actually means, and writing the boundary down so it can be argued with rather than
+merely asserted. `GAPS.md` §Epic 7 has the full table.
+
+**Built, because it needs no account:**
+
+Track Matcher is now **done**. `.txt` and `.m3u8` read by one reader — an `.m3u8` is a text file
+whose non-track lines start with `#` — preferring `#EXTINF` titles over the paths beneath them,
+because a path is a location and matching a library by path is what Relocate is for. The separator
+is *selectable* as the manual specifies rather than guessed: hyphen, en dash, em dash,
+`Title by Artist` (the one form where the sides swap), none, or custom. Matches become a playlist
+through the `create_playlist_from_tracks` that already existed.
+
+Two things real request lists forced, neither in the manual. **Numbered indices are stripped** —
+`1. Daft Punk - ...` otherwise makes the artist `1. Daft Punk`, which normalisation does not remove
+and which pushes a genuine match under the fuzzy threshold. But a digit alone is never an index:
+`99 Problems` and `1979` are titles, so the number must be followed by punctuation or introduced by
+`#`. And **`#` is ambiguous** between the two formats — a directive in `.m3u8`, a list index in a
+hand-written setlist. Letters after it mean directive, digits mean index.
+
+Both of those came out of tests failing, not out of foresight. The first version swallowed every
+`#`-prefixed line as a directive and lost `#3 C - D` entirely; the fix for that then ate the number
+in `99 Problems` until the hash was made to license the bare-space delimiter.
+
+**Store Links and onward search are built as generated search URLs.** Constructing the right search
+URL per store per track is the tedious part of both features, across Beatport, Bandcamp, Discogs,
+Spotify, Tidal, SoundCloud and YouTube. A search link is *honest*: it claims nothing about whether
+the track exists or what it costs, and cannot be wrong in a way that costs the user anything. The
+UI says plainly that this is search-only, rather than implying a comparison that is not happening.
+
+**Not built, and the two reasons are different.**
+
+Beatport catalog / cart / purchase-replacement, Charts, Send To, SoundCloud playback and Track
+Discovery all need **a registered application and a per-user token per service**. That is an
+account action with terms attached, so it is the owner's to take. Once an app exists the client work
+is small — the keychain plumbing already exists (ADR-0016).
+
+Streaming tracks and Transfer Streaming To Local are blocked on something else: **there is nowhere
+verified to store a streaming reference.** The spec's most valuable claim here needs no API at all —
+"conversion is supported for all sources, even those that can't be played", the reference surviving
+when the audio doesn't. It is unbuilt because `decks` is Rekordbox-first and read-only on
+`master.db`, the synthetic schema models no streaming columns, and no real `master.db` is available
+here. Putting the reference in the local cache would make it decks-only, which defeats the one
+guarantee the feature exists to give. `GAPS.md` carries the one `sqlite3` command that settles it.
+
+**A process fix that matters more than any of the above.** `rust-toolchain.toml` pins `stable`,
+which is 1.97.1 on CI, while this container's image shipped 1.94.1 — so every "clippy is clean" this
+session had been checked against an older lint set than the gate, and #45 failed on both platforms
+for a lint I could not see. Installed the current stable and now run the whole definition of done
+against it. Two lints since: `while_let_loop` and a derivable `Default`.
+
+Parity: **62 done / 21 partial / 11 missing / 2 blocked / 16 deferred.**
+
 ## 2026-08-08 — Enrichment: MusicBrainz by default, Discogs opt-in
 
 `crates/enrichment` was a ten-line placeholder and the last large `missing` row. It is now a real
