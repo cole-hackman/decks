@@ -4,9 +4,12 @@ import {
   matchTracks,
   parseCsvForMatcher,
   parseCsvHeadersForMatcher,
+  parseTracklistForMatcher,
+  storeLinksForTracks,
   type MatchInput,
   type MatchResult,
 } from "../ipc";
+import type { Separator, Store } from "../types";
 import { useDialog } from "../hooks/useDialog";
 import { readTextFile } from "../lib/read-file";
 import { useToast } from "./Toast";
@@ -18,12 +21,38 @@ interface Props {
 
 type Source = "paste" | "txt" | "csv";
 
+/**
+ * What the separator `<select>` shows vs. what goes over IPC. Kept as its
+ * own union rather than reusing `Separator` directly so "custom" can be a
+ * selectable state before the user has typed anything into the delimiter
+ * box — `Separator`'s `Custom` variant always carries a (possibly empty)
+ * string, which isn't a value this dropdown can represent on its own.
+ */
+type SeparatorKind = "hyphen" | "en_dash" | "em_dash" | "by" | "none" | "custom";
+
+/** Every storefront the backend knows how to build a search link for. There
+ *  is no per-store picker in this cut — Lexicon parity here is "give the user
+ *  somewhere to look", not curation, so asking them to opt stores in first
+ *  would be friction for no benefit. */
+const ALL_STORES: Store[] = [
+  "beatport",
+  "bandcamp",
+  "discogs",
+  "spotify",
+  "tidal",
+  "soundcloud",
+  "youtube",
+];
+
 export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   const dialog = useDialog();
   const { toast } = useToast();
 
   const [source, setSource] = useState<Source>("paste");
   const [pasted, setPasted] = useState("");
+  const [txtText, setTxtText] = useState("");
+  const [separatorKind, setSeparatorKind] = useState<SeparatorKind>("hyphen");
+  const [customSeparator, setCustomSeparator] = useState("");
   const [csvText, setCsvText] = useState<string>("");
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRowCount, setCsvRowCount] = useState<number>(0);
@@ -31,6 +60,10 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   const [artistCol, setArtistCol] = useState<number>(-1);
   const [results, setResults] = useState<MatchResult[]>([]);
   const [matching, setMatching] = useState(false);
+  const [storeLinks, setStoreLinks] = useState<
+    { title: string; artist: string | null; links: [string, string][] }[]
+  >([]);
+  const [findingLinks, setFindingLinks] = useState(false);
 
   const matched = useMemo(
     () => results.filter((r) => r.track !== null),
@@ -39,6 +72,10 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   const matchedIds = useMemo(
     () => matched.map((r) => r.track!.id),
     [matched],
+  );
+  const unmatched = useMemo(
+    () => results.filter((r) => r.status === "Unmatched"),
+    [results],
   );
 
   const parsePasted = (): MatchInput[] => {
@@ -56,12 +93,17 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
       });
   };
 
+  /** What the separator select actually sends. "custom" is a UI-only state
+   *  until this point — it becomes the `Custom` variant here, carrying
+   *  whatever the user typed (even empty, which the backend can reject on
+   *  its own rather than this component guessing what counts as valid). */
+  const separatorArg = (): Separator =>
+    separatorKind === "custom" ? { custom: customSeparator } : separatorKind;
+
   const onTxtUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    const text = await readTextFile(f);
-    setPasted(text);
-    setSource("paste");
+    setTxtText(await readTextFile(f));
   };
 
   const onCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +153,12 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
           csvHeaders[titleCol]!,
           artistCol >= 0 ? csvHeaders[artistCol] : undefined,
         );
+      } else if (source === "txt") {
+        if (!txtText.trim()) {
+          toast({ variant: "info", message: "Paste or upload a tracklist first." });
+          return;
+        }
+        inputs = await parseTracklistForMatcher(txtText, separatorArg());
       } else {
         inputs = parsePasted();
       }
@@ -120,6 +168,10 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
       }
       const res = await matchTracks(libraryPath, inputs);
       setResults(res);
+      // Stale store links point at the previous unmatched list by index —
+      // clearing them here is cheaper than trying to reconcile old links
+      // against a new match run.
+      setStoreLinks([]);
     } catch (e) {
       toast({ variant: "error", message: "Match failed", detail: String(e) });
     } finally {
@@ -133,7 +185,11 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
       title: "Playlist name",
       placeholder: "e.g. Spotify – Chill Vibes",
       defaultValue:
-        source === "csv" ? "Imported (CSV)" : "Imported (paste)",
+        source === "csv"
+          ? "Imported (CSV)"
+          : source === "txt"
+            ? "Imported (tracklist)"
+            : "Imported (paste)",
     });
     if (!name) return;
     await createPlaylistFromTracks(libraryPath, name, matchedIds);
@@ -146,11 +202,9 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
   };
 
   const doExportUnmatched = () => {
-    const lines = results
-      .filter((r) => r.status === "Unmatched")
-      .map((r) =>
-        r.input_artist ? `${r.input_artist} - ${r.input_title}` : r.input_title,
-      );
+    const lines = unmatched.map((r) =>
+      r.input_artist ? `${r.input_artist} - ${r.input_title}` : r.input_title,
+    );
     if (lines.length === 0) return;
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -161,6 +215,34 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Look up storefront search links for whatever is still unmatched. Fired
+   * on demand rather than after every match — most matches leave only a
+   * handful of stragglers, and firing seven store lookups per row on every
+   * Match click would be a lot of network noise for links most users won't
+   * click.
+   */
+  const doFindStoreLinks = async () => {
+    if (unmatched.length === 0) return;
+    setFindingLinks(true);
+    try {
+      const tracks = unmatched.map((r) => ({
+        title: r.input_title,
+        artist: r.input_artist,
+      }));
+      const links = await storeLinksForTracks(tracks, ALL_STORES);
+      setStoreLinks(links);
+    } catch (e) {
+      toast({
+        variant: "error",
+        message: "Store search failed",
+        detail: String(e),
+      });
+    } finally {
+      setFindingLinks(false);
+    }
   };
 
   return (
@@ -185,11 +267,11 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
           className="rounded border border-edge bg-base px-2 py-1 text-ink"
         >
           <option value="paste">Paste / text</option>
-          <option value="txt">.txt upload</option>
+          <option value="txt">.txt / .m3u8 tracklist</option>
           <option value="csv">.csv upload</option>
         </select>
         {source === "txt" && (
-          <input type="file" accept=".txt" onChange={onTxtUpload} />
+          <input type="file" accept=".txt,.m3u8" onChange={onTxtUpload} />
         )}
         {source === "csv" && (
           <input type="file" accept=".csv" onChange={onCsvUpload} />
@@ -204,13 +286,50 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
         </button>
       </div>
 
-      {source !== "csv" && (
+      {source === "paste" && (
         <textarea
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
           placeholder={"One per line:\nArtist - Title\nor just Title"}
           className="mb-3 h-32 w-full rounded border border-edge bg-base p-2 font-mono text-xs text-ink"
         />
+      )}
+
+      {source === "txt" && (
+        <div className="mb-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-xs uppercase tracking-wide text-ink-muted">
+              Separator
+            </label>
+            <select
+              value={separatorKind}
+              onChange={(e) => setSeparatorKind(e.target.value as SeparatorKind)}
+              className="rounded border border-edge bg-base px-2 py-1 text-ink"
+            >
+              <option value="hyphen">{" - "} (default)</option>
+              <option value="en_dash">{" – "} (en dash)</option>
+              <option value="em_dash">{" — "} (em dash)</option>
+              <option value="by">Title by Artist</option>
+              <option value="none">No separator (whole line is a title)</option>
+              <option value="custom">Custom…</option>
+            </select>
+            {separatorKind === "custom" && (
+              <input
+                type="text"
+                value={customSeparator}
+                onChange={(e) => setCustomSeparator(e.target.value)}
+                placeholder="Custom separator, e.g. ::"
+                className="rounded border border-edge bg-base px-2 py-1 text-ink"
+              />
+            )}
+          </div>
+          <textarea
+            value={txtText}
+            onChange={(e) => setTxtText(e.target.value)}
+            placeholder={"One per line, split by the separator above"}
+            className="h-32 w-full rounded border border-edge bg-base p-2 font-mono text-xs text-ink"
+          />
+        </div>
       )}
 
       {source === "csv" && csvHeaders.length > 0 && (
@@ -263,7 +382,7 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
           <button
             onClick={doExportUnmatched}
             className="rounded bg-elevated px-2 py-1 text-ink hover:bg-edge"
-            disabled={results.every((r) => r.status !== "Unmatched")}
+            disabled={unmatched.length === 0}
           >
             Export unmatched
           </button>
@@ -314,6 +433,63 @@ export function TrackMatcherView({ libraryPath, onGoToSync }: Props) {
           </table>
         )}
       </div>
+
+      {unmatched.length > 0 && (
+        <div className="mt-3 rounded border border-edge bg-base p-3 text-xs">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-medium text-ink">
+              {unmatched.length} unmatched — search other stores
+            </span>
+            <button
+              onClick={() => void doFindStoreLinks()}
+              disabled={findingLinks}
+              className="rounded bg-elevated px-2 py-1 text-ink hover:bg-edge disabled:opacity-50"
+            >
+              {findingLinks ? "Searching…" : "Find store links"}
+            </button>
+          </div>
+          {/* These are query-string search URLs, not a purchase or
+              playlist-push integration — either would need a registered
+              developer app plus a token scoped to this user, which is a
+              real setup burden this local-first tool has no business
+              asking for just to save someone a manual search. */}
+          <p className="mb-2 text-ink-muted">
+            Search links only — decks does not compare prices or push
+            playlists to a store. Both need a registered developer app and a
+            per-user token, so they open the store's search page for you to
+            take it from there.
+          </p>
+          {storeLinks.length > 0 && (
+            <ul className="space-y-1.5">
+              {unmatched.map((r, idx) => {
+                const entry = storeLinks[idx];
+                return (
+                  <li
+                    key={idx}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                  >
+                    <span className="text-ink">
+                      {r.input_artist ? `${r.input_artist} — ` : ""}
+                      {r.input_title}
+                    </span>
+                    {entry?.links.map(([label, url]) => (
+                      <a
+                        key={label}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent underline"
+                      >
+                        {label}
+                      </a>
+                    ))}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -323,4 +499,3 @@ function statusIcon(s: "Exact" | "Fuzzy" | "Unmatched") {
   if (s === "Fuzzy") return <span className="text-yellow-500">~</span>;
   return <span className="text-orange-500">—</span>;
 }
-

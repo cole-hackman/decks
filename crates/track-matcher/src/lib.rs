@@ -5,6 +5,8 @@ use serde::Serialize;
 pub mod csv_import;
 pub mod csv_input;
 pub mod normalise;
+pub mod store_links;
+pub mod tracklist;
 
 #[derive(Debug, Clone)]
 pub struct MatchCandidate {

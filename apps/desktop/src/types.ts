@@ -1425,3 +1425,40 @@ export interface EnrichPreview {
   /** Provider failures, verbatim — one source being down is not "no match". */
   errors: string[];
 }
+
+// ── Track Matcher: tracklist parsing & onward search ────────────────────────
+
+/**
+ * Mirrors the Rust `Separator` enum. Serde's default for a unit variant is
+ * its bare snake_case name, but `Custom` carries a string, so it serialises
+ * as `{ custom: "..." }` instead — the two shapes can't be unified into one
+ * string type without lying to the backend about what it accepts.
+ */
+export type Separator =
+  | "hyphen"
+  | "en_dash"
+  | "em_dash"
+  | "by"
+  | "none"
+  | { custom: string };
+
+/** Storefronts the onward-search links can be built for. */
+export type Store =
+  | "beatport"
+  | "bandcamp"
+  | "discogs"
+  | "spotify"
+  | "tidal"
+  | "soundcloud"
+  | "youtube";
+
+/**
+ * Mirrors `track_matcher::TrackLinks`. `links` is a label/URL pair rather
+ * than a `Store`-keyed map because the backend already chose display labels
+ * (e.g. capitalisation) and there's nothing to gain by re-deriving them here.
+ */
+export interface TrackLinks {
+  title: string;
+  artist: string | null;
+  links: [string, string][];
+}

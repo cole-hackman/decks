@@ -112,6 +112,9 @@ import type {
   EnrichPreview,
   EnrichRequest,
   TrackProposal,
+  Separator,
+  Store,
+  TrackLinks,
 } from "./types";
 import type {
   ChatMessage,
@@ -869,6 +872,34 @@ export async function parseCsvHeadersForMatcher(
   content: string,
 ): Promise<string[]> {
   return invoke<string[]>("parse_csv_headers_for_matcher", { content });
+}
+
+/**
+ * Split a pasted or uploaded `.txt`/`.m3u8` tracklist into match candidates.
+ * `separator` is omitted rather than defaulted here so the Rust side's own
+ * default (hyphen) is the single source of truth for what "no separator
+ * chosen" means.
+ */
+export async function parseTracklistForMatcher(
+  content: string,
+  separator?: Separator,
+): Promise<MatchInput[]> {
+  return invoke<MatchInput[]>("parse_tracklist_for_matcher", {
+    content,
+    separator: separator ?? null,
+  });
+}
+
+/**
+ * Search-link URLs per store for a set of tracks — not a purchase or
+ * playlist-push integration, both of which need a registered app and a
+ * per-user token this local-first tool doesn't hold.
+ */
+export async function storeLinksForTracks(
+  tracks: { title: string; artist?: string | null }[],
+  stores: Store[],
+): Promise<TrackLinks[]> {
+  return invoke<TrackLinks[]>("store_links_for_tracks", { tracks, stores });
 }
 
 export async function createPlaylistFromTracks(

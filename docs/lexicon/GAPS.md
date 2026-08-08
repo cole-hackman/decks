@@ -107,6 +107,57 @@ Compare the shape against `musicbrainz::parse_search`'s expectations — `record
 `artist-credit[].name` / `.joinphrase`, `tags[].name` / `.count`, `releases[].date`,
 `releases[].label-info[].label.name`. The equivalents for Discogs are in `discogs::parse_search`.
 
+### Epic 7 streaming: what needs credentials only the account owner can obtain
+
+The instruction was "integrate all the ones you can". This records precisely what "can" turned out
+to mean, so the boundary is arguable rather than merely asserted.
+
+**Built — needs no account:**
+
+- Track Matcher's `.txt` / `.m3u8` input, the selectable separator, and playlist creation from
+  results. These were always plain parsing and staging; nothing external is involved.
+- **Onward search and Store Links, as generated search URLs.** Constructing the right search URL
+  per store per track is the tedious part of both features, and a search URL is *honest*: it makes
+  no claim the track exists, no claim about price, and it cannot be wrong in a way that costs the
+  user anything.
+
+**Not built — blocked on a registered application and a per-user token:**
+
+| Feature | What it needs |
+|---|---|
+| Beatport catalog, cart, purchase replacement | Beatport API app + OAuth user token |
+| Charts | Beatport API app |
+| Store Links *price comparison* | per-store authenticated APIs |
+| Send To (Spotify / Tidal / Beatport) | write scopes on each service |
+| SoundCloud playback of streaming tracks | SoundCloud API app + OAuth |
+| Track Discovery | a catalog to recommend from, i.e. one of the above |
+
+Registering these applications is an account action with terms attached, so it is the project
+owner's to take, not something an agent should do on their behalf. Once an app exists for a
+service, the client work is small — the token plumbing already exists (`get_api_key` /
+`set_api_key`, keychain-backed, as used for Discogs in ADR-0016).
+
+**Not built — blocked on something else entirely: the streaming-track data model.**
+
+`08-streaming.md §Streaming tracks` says conversion of streaming references between DJ apps is
+supported "for all sources, even those that can't be played" — the reference survives when the
+audio does not. That is the most valuable part and it needs *no* API. It is unbuilt because
+**there is nowhere verified to put it.** `decks` is Rekordbox-first and read-only on `master.db`,
+the synthetic schema in `crates/rekordbox-db/src/sql/schema.sql` models no streaming columns, and
+no real `master.db` is available here to see what Rekordbox 7 actually uses. Storing the reference
+in `cache.sqlite3` instead would make it a decks-only concept that never reaches Rekordbox, which
+is exactly the promise the feature is supposed to keep.
+
+**The unblocking check**, on a machine with Rekordbox 7 installed:
+
+```sh
+# against a *copy* of a real master.db, read-only
+sqlite3 master-copy.db ".schema djmdContent" | grep -iE 'stream|service|web|link|uuid'
+```
+
+If Rekordbox models streaming tracks in `djmdContent` (or a sibling table), the column names decide
+the design and the feature becomes ordinary work. Until then it would be built against a guess.
+
 ## Open questions for the project owner
 
 1. **Camelot vs Open Key.** Lexicon avoids Camelot for licensing reasons and ships Open Key.
