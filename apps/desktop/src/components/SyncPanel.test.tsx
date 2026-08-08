@@ -153,4 +153,22 @@ describe("SyncPanel", () => {
       add_leading_zero: true,
     });
   });
+
+  it("forwards the nearest-colour option, off by default", async () => {
+    // Default off is the load-bearing part: a colour Rekordbox cannot represent
+    // is left alone rather than quietly approximated to something the user
+    // never picked.
+    render_();
+    await screen.findByText("Some Title");
+    const box = screen.getByRole("checkbox", { name: /nearest one/i });
+    expect(box).not.toBeChecked();
+
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole("button", { name: /Apply 1 change/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+
+    expect(vi.mocked(syncExecute).mock.calls.at(-1)?.[2]).toMatchObject({
+      change_to_nearest_color: true,
+    });
+  });
 });

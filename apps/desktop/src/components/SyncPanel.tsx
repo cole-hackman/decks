@@ -36,6 +36,7 @@ export function SyncPanel({ libraryPath }: Props) {
   const [keepGrids, setKeepGrids] = useState(false);
   const [convertKeys, setConvertKeys] = useState<KeyFormat>("original");
   const [addLeadingZero, setAddLeadingZero] = useState(false);
+  const [nearestColor, setNearestColor] = useState(false);
 
   const options = useMemo<SyncOptions>(
     () => ({
@@ -44,8 +45,17 @@ export function SyncPanel({ libraryPath }: Props) {
       keep_grids: keepGrids,
       convert_keys: convertKeys,
       add_leading_zero: addLeadingZero,
+      change_to_nearest_color: nearestColor,
     }),
-    [mode, playlistId, cueDestination, keepGrids, convertKeys, addLeadingZero],
+    [
+      mode,
+      playlistId,
+      cueDestination,
+      keepGrids,
+      convertKeys,
+      addLeadingZero,
+      nearestColor,
+    ],
   );
 
   const refresh = useCallback(async () => {
@@ -228,6 +238,17 @@ export function SyncPanel({ libraryPath }: Props) {
           {/* Sorted as text, an unpadded library reads 1A, 10A, 11A, 2A — the
               only reason this option exists. */}
           Add a leading zero to keys (01A, not 1A) so apps sort them correctly
+        </label>
+
+        <label className="col-span-2 flex items-center gap-2 text-ink">
+          <input
+            type="checkbox"
+            checked={nearestColor}
+            onChange={(e) => setNearestColor(e.target.checked)}
+          />
+          {/* Off, a colour Rekordbox cannot represent is left alone rather than
+              approximated. On, it is mapped and each mapping is reported. */}
+          Map colours Rekordbox doesn&apos;t have to the nearest one it does
         </label>
 
         <label className="col-span-2 flex items-center gap-2 text-ink">

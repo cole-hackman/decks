@@ -3,6 +3,7 @@
 //! Vendored and adapted from reklawdbox `src/changes.rs` (MIT, Ryan Voitiskis).
 
 pub mod applier;
+pub mod color;
 pub mod field_mappings;
 pub mod key_format;
 pub mod multi_edit;

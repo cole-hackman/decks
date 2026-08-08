@@ -58,6 +58,8 @@ fn editable(t: &decks_core::rekordbox_db::Track) -> EditableTrack {
     );
     put("rating", t.rating.map(|v| v.to_string()));
     put("year", t.release_year.map(|v| v.to_string()));
+    put("label", t.label.clone());
+    put("color", t.color.clone());
     put("playCount", t.dj_play_count.map(|v| v.to_string()));
     EditableTrack {
         id: t.id.clone(),
@@ -185,6 +187,21 @@ mod tests {
     fn every_offered_field_maps_to_a_writable_column() {
         for field in multi_edit_fields() {
             assert!(column_for(&field).is_some(), "{field} has no column");
+        }
+    }
+
+    /// The invariant that actually matters: the applier has to accept what the
+    /// editor offers. A column that maps cleanly but is not on the applier's
+    /// allowlist would give the user a form control whose value vanishes at
+    /// sync time — which looks like data loss, not like an unsupported field.
+    #[test]
+    fn every_offered_field_is_one_the_applier_will_write() {
+        for field in multi_edit_fields() {
+            let column = column_for(&field).unwrap();
+            assert!(
+                changes::applier::writes_field(column),
+                "{field} maps to {column}, which the applier will not write"
+            );
         }
     }
 

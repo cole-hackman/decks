@@ -237,8 +237,9 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       drag-to-reorder not done; the picker orders by tick order
 - [x] Key conversion leading-zero option — a Sync setting, applied after conversion and
       independently of it. **Colors → nearest is blocked**: `Track` has no colour field and no
-      change kind writes `ColorID`. `Track` carries colour now, so it is read, shown and matched
-      on; the Sync flag stays accepted and unexposed until something can write it back
+      change kind wrote `ColorID`. Both halves exist now: `Track` carries colour, and
+      `TrackMetadataEdit` writes it against the fixed eight-colour palette, mapping to the nearest
+      only when the Sync toggle says so
 
 ---
 
