@@ -84,7 +84,10 @@ pub fn invert(change: &StagedChange) -> Reversal {
         | ChangeKind::TrackRelocate
         | ChangeKind::PlaylistRename
         | ChangeKind::PlaylistReorderTrack
-        | ChangeKind::PlaylistReorder => match &change.old_value {
+        | ChangeKind::PlaylistReorder
+        // A move records where the playlist came from, so putting it back is
+        // the same verb with the payloads swapped.
+        | ChangeKind::PlaylistMove => match &change.old_value {
             None => Reversal::Blocked(NOT_RECORDED),
             Some(old) => Reversal::Reversible(Inverse {
                 kind: change.kind.clone(),

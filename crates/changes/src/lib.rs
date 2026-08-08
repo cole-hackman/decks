@@ -55,6 +55,13 @@ pub enum ChangeKind {
     /// `target_id` is the parent folder id, or absent for the root level;
     /// `new_value` is `{order: [playlist_id, …]}`.
     PlaylistReorder,
+    /// Move a playlist or folder **into a different folder** — the drag-between
+    /// half of the tree that `PlaylistReorder` deliberately refuses to do.
+    ///
+    /// `target_id` is the playlist being moved; `new_value` is
+    /// `{parent_id: string | null, seq?: number}`, where a null parent means
+    /// the root level.
+    PlaylistMove,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

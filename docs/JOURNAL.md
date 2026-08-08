@@ -2584,6 +2584,43 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (playlists move between folders)
+
+Folder-drop and drag-between were listed as two gaps; they are one missing change kind.
+
+`PlaylistReorder` already writes `djmdPlaylist.Seq`, and its SQL puts the parent in the `WHERE`
+clause specifically so a reorder cannot move anything between folders. That was a good decision when
+it was made — a reorder that restructured the tree would be a nasty surprise — and it means moving
+needs its own verb rather than a looser reorder.
+
+`PlaylistMove` carries two refusals, because `djmdPlaylist` enforces neither and both corrupt the
+tree:
+
+The destination must be a folder. Rekordbox nests under folders only, and a playlist parented to a
+playlist is a shape nothing renders — it would simply vanish from the sidebar.
+
+And a folder cannot be moved into its own descendant. This is the one that actually worried me: it
+does not error, it does not lose data, it just detaches that entire subtree from the root. The
+playlists still exist in `djmdPlaylist`; there is no path to them from the tree, ever. Silent, total,
+and undoable only if you knew to record the old parent — which is why `old_parent_id` rides on the
+change.
+
+The ancestor check walks *upward* from the destination rather than downward from the dragged folder.
+A playlist tree is far wider than it is deep, so the upward walk is bounded by depth while the
+downward one would visit the whole subtree. Both the Rust and the TypeScript versions keep a `seen`
+set: a database that already contains a cycle must not hang the sync or the render, and the move is
+not what created that problem, so it reports "not a descendant" and lets the write through.
+
+The UI duplicates both rules rather than letting the applier be the only guard. That is duplication
+I would normally argue against, but the failure mode without it is specific and bad: the drop looks
+like it worked, the row appears to move, and the rejection only surfaces when the user opens the
+review table later — by which point they have made several more drops on a tree that was lying to
+them. So a folder only highlights when the drop would actually be accepted.
+
+The rules live in `lib/playlist-tree.ts` rather than inside the drop handler, for the same reason
+`reorder.ts` exists: jsdom does not run drag events, so a rule that lives in a handler is a rule
+nothing tests.
+
 ## Session — 2026-08-07 (Cue Destination, and a round-trip we do not need)
 
 The Cue Destination row read "no hidden-duplicate model, so the round-trip guarantee does not

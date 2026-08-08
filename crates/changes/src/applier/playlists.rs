@@ -1,6 +1,6 @@
 use crate::StagedChange;
 use anyhow::{anyhow, bail};
-use rusqlite::{params, Transaction};
+use rusqlite::{params, OptionalExtension, Transaction};
 use serde_json::Value;
 
 /// `PlaylistCreate`:
@@ -252,6 +252,123 @@ pub(super) fn apply_reorder_playlists(
         }
     }
     Ok(())
+}
+
+/// `PlaylistMove`:
+/// - `target_id` = the playlist or folder being moved
+/// - `new_value` = `{parent_id: string | null, seq?: number}`
+///
+/// The drag-between half of the tree. `PlaylistReorder` deliberately refuses to
+/// change a parent — a reorder that silently restructured the tree would be a
+/// nasty surprise — so moving is its own change kind, and it carries its own
+/// refusals.
+///
+/// Two things are checked before the write, because `djmdPlaylist` enforces
+/// neither and getting either wrong corrupts the tree:
+///
+/// - **The destination must be a folder.** Rekordbox nests under folders only;
+///   a playlist parented to a playlist is a shape nothing can render.
+/// - **A folder cannot be moved inside itself or any of its descendants.**
+///   That detaches the whole subtree from the root — it still exists, and it is
+///   unreachable from the tree forever.
+pub(super) fn apply_move(tx: &Transaction, change: &StagedChange) -> anyhow::Result<()> {
+    let playlist_id = change
+        .target_id
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing target_id"))?;
+    let new = change
+        .new_value
+        .as_ref()
+        .ok_or_else(|| anyhow!("Missing new_value"))?;
+    let obj = new
+        .as_object()
+        .ok_or_else(|| anyhow!("new_value must be object"))?;
+
+    // Absent and null both mean the root. A caller that omits the key is not
+    // asking for something different from one that sends null.
+    let parent_id = obj.get("parent_id").and_then(|v| v.as_str());
+    let seq = obj.get("seq").and_then(Value::as_i64);
+
+    if let Some(parent) = parent_id {
+        if parent == playlist_id {
+            bail!("A playlist cannot be moved into itself");
+        }
+        if !is_folder(tx, parent)? {
+            bail!("Destination {parent} is not a folder");
+        }
+        if is_descendant_of(tx, parent, playlist_id)? {
+            bail!("Cannot move a folder into its own descendant");
+        }
+    }
+
+    let rows = match (parent_id, seq) {
+        (Some(parent), Some(seq)) => tx.execute(
+            "UPDATE djmdPlaylist SET ParentID = ?, Seq = ? WHERE ID = ?",
+            params![parent, seq, playlist_id],
+        )?,
+        (Some(parent), None) => tx.execute(
+            "UPDATE djmdPlaylist SET ParentID = ? WHERE ID = ?",
+            params![parent, playlist_id],
+        )?,
+        (None, Some(seq)) => tx.execute(
+            "UPDATE djmdPlaylist SET ParentID = NULL, Seq = ? WHERE ID = ?",
+            params![seq, playlist_id],
+        )?,
+        (None, None) => tx.execute(
+            "UPDATE djmdPlaylist SET ParentID = NULL WHERE ID = ?",
+            params![playlist_id],
+        )?,
+    };
+    if rows == 0 {
+        bail!("No rows updated (playlist {} not found)", playlist_id);
+    }
+    Ok(())
+}
+
+/// `djmdPlaylist.Attribute` 1 is a folder; 0 is a playlist, 4 a smart playlist.
+fn is_folder(tx: &Transaction, id: &str) -> anyhow::Result<bool> {
+    let attribute: Option<i64> = tx
+        .query_row(
+            "SELECT Attribute FROM djmdPlaylist WHERE ID = ?",
+            params![id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(attribute == Some(1))
+}
+
+/// Is `candidate` `ancestor`, or somewhere beneath it?
+///
+/// Walks upward from `candidate` rather than downward from `ancestor`: a tree
+/// is much wider than it is deep, and the walk is bounded by depth either way.
+/// The visited set is a cycle guard — a database that already contains one must
+/// not hang the sync.
+fn is_descendant_of(tx: &Transaction, candidate: &str, ancestor: &str) -> anyhow::Result<bool> {
+    let mut current = candidate.to_string();
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        if current == ancestor {
+            return Ok(true);
+        }
+        if !seen.insert(current.clone()) {
+            // Already-cyclic data. Report "not a descendant" rather than
+            // looping; the move is not what created the problem.
+            return Ok(false);
+        }
+        let parent: Option<String> = tx
+            .query_row(
+                "SELECT ParentID FROM djmdPlaylist WHERE ID = ?",
+                params![current],
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        match parent {
+            Some(p) if !p.is_empty() => current = p,
+            _ => return Ok(false),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -523,5 +640,133 @@ mod tests {
             ),
         );
         assert!(res.is_err());
+    }
+
+    /// Root folder `f1` holds folder `f2`, which holds playlist `p1`.
+    /// `f3` is a sibling folder, `p2` a sibling playlist.
+    fn tree() -> Connection {
+        let conn = fixture();
+        conn.execute_batch(
+            "INSERT INTO djmdPlaylist (ID, Seq, Name, Attribute, ParentID) VALUES
+               ('f1', 1, 'Folder One',   1, NULL),
+               ('f2', 1, 'Folder Two',   1, 'f1'),
+               ('f3', 2, 'Folder Three', 1, NULL),
+               ('p1', 1, 'Playlist One', 0, 'f2'),
+               ('p2', 3, 'Playlist Two', 0, NULL);",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn parent_of(conn: &Connection, id: &str) -> Option<String> {
+        conn.query_row(
+            "SELECT ParentID FROM djmdPlaylist WHERE ID = ?",
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    fn do_move(conn: &mut Connection, id: &str, value: Value) -> anyhow::Result<()> {
+        let tx = conn.transaction().unwrap();
+        let res = apply_move(&tx, &ch(ChangeKind::PlaylistMove, id, value));
+        if res.is_ok() {
+            tx.commit().unwrap();
+        }
+        res
+    }
+
+    #[test]
+    fn a_playlist_moves_into_a_folder() {
+        let mut conn = tree();
+        do_move(&mut conn, "p2", serde_json::json!({"parent_id": "f3"})).unwrap();
+        assert_eq!(parent_of(&conn, "p2").as_deref(), Some("f3"));
+    }
+
+    #[test]
+    fn a_playlist_moves_back_to_the_root() {
+        let mut conn = tree();
+        do_move(&mut conn, "p1", serde_json::json!({"parent_id": null})).unwrap();
+        assert_eq!(parent_of(&conn, "p1"), None);
+    }
+
+    #[test]
+    fn an_absent_parent_key_means_the_root_just_like_null() {
+        // A caller that omits the key is not asking for something different
+        // from one that sends null.
+        let mut conn = tree();
+        do_move(&mut conn, "p1", serde_json::json!({})).unwrap();
+        assert_eq!(parent_of(&conn, "p1"), None);
+    }
+
+    #[test]
+    fn a_move_can_set_the_position_at_the_same_time() {
+        let mut conn = tree();
+        do_move(
+            &mut conn,
+            "p2",
+            serde_json::json!({"parent_id": "f3", "seq": 7}),
+        )
+        .unwrap();
+        let seq: i64 = conn
+            .query_row("SELECT Seq FROM djmdPlaylist WHERE ID = 'p2'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(seq, 7);
+    }
+
+    /// Rekordbox nests under folders only.
+    #[test]
+    fn a_playlist_cannot_become_the_parent_of_another() {
+        let mut conn = tree();
+        let err = do_move(&mut conn, "p2", serde_json::json!({"parent_id": "p1"})).unwrap_err();
+        assert!(err.to_string().contains("not a folder"), "{err}");
+        assert_eq!(parent_of(&conn, "p2"), None, "nothing should have moved");
+    }
+
+    /// The move that would detach a whole subtree from the root forever.
+    #[test]
+    fn a_folder_cannot_be_moved_into_its_own_descendant() {
+        let mut conn = tree();
+        let err = do_move(&mut conn, "f1", serde_json::json!({"parent_id": "f2"})).unwrap_err();
+        assert!(err.to_string().contains("own descendant"), "{err}");
+        assert_eq!(parent_of(&conn, "f1"), None);
+    }
+
+    #[test]
+    fn a_folder_cannot_be_moved_into_itself() {
+        let mut conn = tree();
+        let err = do_move(&mut conn, "f1", serde_json::json!({"parent_id": "f1"})).unwrap_err();
+        assert!(err.to_string().contains("into itself"), "{err}");
+    }
+
+    #[test]
+    fn a_folder_can_still_move_into_an_unrelated_folder() {
+        // The descendant check must not be so broad that it refuses legitimate
+        // moves — `f3` is a sibling, not a descendant.
+        let mut conn = tree();
+        do_move(&mut conn, "f1", serde_json::json!({"parent_id": "f3"})).unwrap();
+        assert_eq!(parent_of(&conn, "f1").as_deref(), Some("f3"));
+    }
+
+    #[test]
+    fn moving_a_playlist_that_does_not_exist_fails_loudly() {
+        let mut conn = tree();
+        let err = do_move(&mut conn, "nope", serde_json::json!({"parent_id": "f3"})).unwrap_err();
+        assert!(err.to_string().contains("not found"), "{err}");
+    }
+
+    #[test]
+    fn already_cyclic_data_does_not_hang_the_move() {
+        // A database that already contains a cycle must not loop the sync. The
+        // move is not what created the problem, so it is allowed through.
+        let mut conn = tree();
+        conn.execute_batch(
+            "UPDATE djmdPlaylist SET ParentID = 'f2' WHERE ID = 'f1';
+             UPDATE djmdPlaylist SET ParentID = 'f1' WHERE ID = 'f2';",
+        )
+        .unwrap();
+        let _ = do_move(&mut conn, "p2", serde_json::json!({"parent_id": "f3"}));
     }
 }
