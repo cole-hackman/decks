@@ -1,5 +1,37 @@
 # Status
 
+## 2026-08-07 — Modified Sync gets a watermark; Full-Sync delete does not exist
+
+Two halves of one parity row, and only one of them was buildable.
+
+**Modified Sync is done.** Cache **v20** stores a watermark per `(library_path, app)`, stamped
+after a sync that actually wrote something. The bug it fixes was live: `since_ts` defaulted to `0`
+when the caller did not supply one, so Modified Sync quietly behaved as a Full Sync over the whole
+library — the exact opposite of what the mode promises, and invisible unless you counted the rows.
+
+Four decisions:
+
+- **Absent is not zero.** `None` means no sync has ever run and locks the mode; `0` would mean
+  "synced at the epoch" and unlock it over everything.
+- **Locked with a reason, not hidden.** The option is shown disabled, saying there is no "since" to
+  sync from yet. A mode that appears to work and does nothing reads as a bug in the app.
+- **Stamped only when something was written.** A run that applied nothing has not established a new
+  baseline; stamping one would drop whatever it failed to write out of the next window.
+- **Forward only**, enforced in SQL with `MAX(...)` on conflict. A watermark that could rewind
+  would re-propose changes the user has already dealt with.
+
+**Full-Sync delete is not a gap — it is a divergence, and it is going in the docs as one.** Lexicon
+means "the DJ app becomes a mirror of Lexicon; anything not in Lexicon is removed from the app".
+That works because Lexicon owns a library and the DJ app is downstream of it. `decks` has no such
+library: it *reads* `master.db`. There is no set of tracks Rekordbox holds and `decks` does not, so
+"remove anything not in `decks`" has no referent — and the nearest literal implementation would
+delete the user's entire collection. The row stays `partial` with the reason written down rather
+than being closed with something dangerous or something fake.
+
+**Next:** Find Lost Tracks' merge-with-existing and re-check cadence; more of the Automatic Actions
+group; the hidden-memory-cue round-trip for Cue Destination. Album art and `crates/enrichment`
+still need the provider decision.
+
 ## 2026-08-07 — Field Mappings reach the library
 
 Mappings have projected Energy and Custom Tags into ID3 frames since Epic 4. They now reach

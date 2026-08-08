@@ -9,6 +9,7 @@ import {
   type PendingChange,
   type SyncMode,
   type SyncOptions,
+  modifiedSyncStatus,
   previewSyncMappings,
   stageSyncMappings,
 } from "../ipc";
@@ -70,7 +71,29 @@ export function SyncPanel({ libraryPath }: Props) {
    * exception.
    */
   const [mappingPreview, setMappingPreview] = useState<MappingPreview | null>(null);
+  /**
+   * Whether Modified Sync is unlocked.
+   *
+   * Per the spec it is available "only after a first Full or Playlist sync".
+   * Offering it before that and syncing nothing is worse than saying why — a
+   * mode that silently does nothing looks like a bug in the app.
+   */
+  const [modifiedAvailable, setModifiedAvailable] = useState<boolean | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [staging, setStaging] = useState(false);
+
+  const loadModifiedStatus = useCallback(async () => {
+    if (!libraryPath) return;
+    try {
+      const s = await modifiedSyncStatus(libraryPath);
+      setModifiedAvailable(s.available);
+      setLastSyncedAt(s.last_synced_at);
+    } catch {
+      // Unknown rather than false: a host that does not know the command
+      // should not have the mode disabled on its behalf.
+      setModifiedAvailable(null);
+    }
+  }, [libraryPath]);
 
   const loadMappings = useCallback(async () => {
     if (!libraryPath) return;
@@ -104,6 +127,10 @@ export function SyncPanel({ libraryPath }: Props) {
   useEffect(() => {
     void loadMappings();
   }, [loadMappings]);
+
+  useEffect(() => {
+    void loadModifiedStatus();
+  }, [loadModifiedStatus]);
 
   useEffect(() => {
     void refresh();
@@ -174,6 +201,10 @@ export function SyncPanel({ libraryPath }: Props) {
         detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       });
       await refresh();
+      // A successful apply moves the watermark, which is what unlocks
+      // Modified Sync — re-read it rather than leaving the mode disabled until
+      // the panel is next mounted.
+      await loadModifiedStatus();
     } catch (e) {
       toast({ variant: "error", message: "Apply failed", detail: String(e) });
     } finally {
@@ -210,8 +241,22 @@ export function SyncPanel({ libraryPath }: Props) {
           >
             <option value="full">Full — all accepted changes</option>
             <option value="playlist">Playlist — tracks in a playlist</option>
-            <option value="modified">Modified since last sync</option>
+            <option value="modified" disabled={modifiedAvailable === false}>
+              Modified since last sync
+              {modifiedAvailable === false ? " — no sync yet" : ""}
+            </option>
           </select>
+          {mode === "modified" && modifiedAvailable === false && (
+            <span className="text-[11px] text-amber-500" data-testid="modified-locked">
+              Nothing has been synced to this library yet, so there is no
+              &ldquo;since&rdquo; to sync from. Run a Full sync first.
+            </span>
+          )}
+          {mode === "modified" && lastSyncedAt !== null && (
+            <span className="text-[11px] text-ink-faint">
+              Since {new Date(lastSyncedAt * 1000).toLocaleString()}
+            </span>
+          )}
         </label>
 
         {mode === "playlist" && (
@@ -315,6 +360,7 @@ export function SyncPanel({ libraryPath }: Props) {
                   });
                   await refresh();
                   await loadMappings();
+                  await loadModifiedStatus();
                 } catch (e) {
                   toast({ variant: "error", message: String(e) });
                 } finally {

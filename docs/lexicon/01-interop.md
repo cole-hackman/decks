@@ -38,8 +38,32 @@ deferred.
 *The Rekordbox XML exception* — XML import in Rekordbox never deletes anything, so a Full Sync over
 XML cannot actually mirror. Worth stating in our UI, since XML is `decks`'s default egress.
 
-*decks status* — **partial.** `SyncPanel` has mode plumbing and a staged diff, but no per-app
-modified-sync watermark and no delete semantics for Full Sync.
+*decks status* — **partial, and one half of it will stay that way.**
+
+**Modified Sync is done.** Cache migration **v20** stores a watermark per `(library_path, app)`,
+stamped after a sync that actually wrote something. Four decisions:
+
+- **The absence of a watermark is meaningful.** `None` and `0` are different claims: the first
+  means no sync has ever run, and it is what locks the mode. Before this, an absent `since_ts`
+  defaulted to `0` and Modified Sync silently behaved as a Full Sync over the whole library — the
+  exact opposite of what the mode promises.
+- **Locked with a reason, not hidden.** The mode is offered and disabled, saying there is no
+  "since" to sync from yet. A mode that appears to work and syncs nothing reads as a bug.
+- **Stamped only on a run that wrote something.** A sync that applied nothing has not established a
+  new baseline; stamping one would drop whatever it failed to write out of the next window.
+- **Forward only.** A watermark that could rewind would re-propose changes the user has already
+  dealt with.
+
+**Full-Sync delete cannot be built as specified, and should not be faked.** Lexicon's Full Sync
+means "the DJ app becomes a mirror of Lexicon — anything not in Lexicon is removed from the app",
+which works because Lexicon owns a library of its own and the DJ app is downstream of it. `decks`
+has no such library: it *reads* `master.db` and stages edits back. There is no set of tracks that
+Rekordbox holds and `decks` does not, so "remove anything not in `decks`" has no meaningful referent
+— and the nearest literal implementation would delete the user's entire collection.
+
+This is recorded as a **deliberate divergence** rather than a gap. The row stays `partial` because
+Full Sync exists and does the additive half; the delete half is not coming until `decks` has a
+library concept of its own, which is not on this initiative's roadmap.
 
 *Epic* — deferred / **6**.
 

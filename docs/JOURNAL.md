@@ -2584,6 +2584,41 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (Modified Sync's watermark, and a delete that cannot exist)
+
+One parity row, two halves, and only one of them should be built.
+
+The Modified Sync half had a live bug rather than a missing feature. `filter_for_mode` read
+`opts.since_ts.unwrap_or(0)`, so a caller that did not pass a timestamp got a window starting at the
+epoch — meaning Modified Sync silently synced the entire library. It looked like it worked. Nothing
+would have surfaced it except counting the rows and noticing they matched Full Sync.
+
+So the watermark is stored (cache v20, keyed by library *and* app, because the spec's unit is the
+app even though we target one), and `None` is now a meaningful state rather than a defaulted zero.
+That distinction is the whole fix: "never synced" and "synced at the epoch" are different claims,
+and only the first should lock the mode.
+
+Stamping it only when the run wrote something took a moment to see. The obvious place is "after a
+successful sync", but a sync that applies zero changes is also successful, and it has not
+established any new baseline — stamping there would move the window past changes that failed to
+write and quietly drop them from the next Modified Sync.
+
+Forward-only is enforced in the SQL, `MAX(sync_watermarks.synced_at, excluded.synced_at)` on
+conflict, rather than in Rust. There is no read-modify-write to lose a race on, and the invariant
+lives where it cannot be bypassed by a future caller.
+
+**Then the half that should not be built.** Lexicon's Full Sync deletes anything the app has that
+Lexicon does not. I started sketching how to express that against `master.db` and stopped, because
+the premise does not hold here. Lexicon owns a library; the DJ app mirrors it. `decks` reads
+`master.db` — the Rekordbox library *is* the library. There is no set of tracks Rekordbox has and
+`decks` does not, so the literal implementation of "remove anything not in `decks`" removes nothing
+or removes everything depending on how you squint, and the plausible-looking version of it would
+delete the user's collection.
+
+That goes in the docs as a divergence with the reasoning, and the row stays `partial`. Closing it
+with a dangerous implementation would be worse than leaving it open; closing it with a no-op that
+reports success would be worse still.
+
 ## Session — 2026-08-07 (Field Mappings reach the library)
 
 The last non-deferred `Field Mappings` gap: mappings applied to Rekordbox, not only to file tags.
