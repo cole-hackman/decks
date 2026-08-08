@@ -1,5 +1,44 @@
 # Status
 
+## 2026-08-07 — Custom Tags, finished
+
+The four remaining Custom Tags gaps, closed together because they share a migration: category
+colours, reorder, per-tag number hotkeys, and Field-Mapper export. Cache migration **v19** adds
+`tag_categories.color` and `tags.hotkey`, both nullable — a category with no colour is the normal
+state, and a default would make every existing category silently claim one the user never picked.
+
+Four decisions:
+
+- **`reorder_tags` takes the whole new order**, not a `(tag, position)` pair. A drag produces a
+  complete order anyway, and applying it wholesale means there is never a window where two tags
+  share a `seq`, which a shift-everything-down-by-one approach would have. Ids from another
+  category are ignored rather than moved in — that is `move_tag`'s job, and doing it implicitly
+  would let a reorder silently restructure the tree.
+- **Reorder is on the keyboard, not only the mouse.** `Alt`+`←`/`→` moves the focused chip. This is
+  the same class of bug as the FindPopup hover-only buttons: a gesture that only exists for a mouse
+  makes the feature unreachable without one, and jsdom does not run drag events so only a
+  deliberate keyboard path is testable at all.
+- **A hotkey is global, and assigning a taken one steals it.** Refusing would send the user hunting
+  through every category for whichever tag holds `3`. The theft is visible at once — the other
+  tag's number is simply gone — and stealing is what assigning a keyboard shortcut normally means.
+  Both statements run in one transaction, so a steal cannot clear the old binding and then fail to
+  set the new one.
+- **Clearing is its own choice.** "No colour" is a button in the colour menu, and the hotkey select
+  has an explicit empty option, rather than either being reachable only by picking something else.
+
+**A real bug found on the way.** The Field Mapper has offered a `Colour` source for some time, and
+it produced nothing: `MappingInput.colour_name` was never populated, because `Track` had no colour
+to populate it from. That is a control that did not do what it said — exactly what the no-stub rule
+in `CLAUDE.md` is about. It works now. And per-category tag export, which the spec asks for
+explicitly ("a single category can be the source instead"), was supported by the engine all along
+and simply never offered in the UI; it is now, keyed by category **name** so a rename stops matching
+rather than quietly exporting a different set under the old label.
+
+Custom Tags moves to `done`. Library & browser is now 15 done / 2 partial / 1 missing.
+
+**Next:** the remaining `partial` rows need either Epic 2 depth (beatgrid writes, active loops) or
+the enrichment provider decision that album art and `crates/enrichment` are waiting on.
+
 ## 2026-08-07 — Colour, written
 
 `Colors → nearest` was the last row sitting in the `blocked` column for a reason that had stopped

@@ -2695,6 +2695,74 @@ async fn move_tag(
     .map_err(|e| e.to_string())?
 }
 
+/// Set or clear a tag category's colour. `None` clears it.
+#[tauri::command]
+async fn set_tag_category_color(
+    app: tauri::AppHandle,
+    id: String,
+    color: Option<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.set_tag_category_color(&id, color.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Bind a tag to a number-row hotkey (1–9), or clear it with `None`.
+///
+/// The hotkey is global across the tag tree, so assigning one already in use
+/// takes it from the other tag rather than failing.
+#[tauri::command]
+async fn set_tag_hotkey(
+    app: tauri::AppHandle,
+    id: String,
+    hotkey: Option<i64>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.set_tag_hotkey(&id, hotkey).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Rewrite the order of the tags within a category.
+///
+/// Takes the whole ordered list, which is what a drag produces. Ids belonging
+/// to another category are ignored — moving between categories is `move_tag`.
+#[tauri::command]
+async fn reorder_tags(
+    app: tauri::AppHandle,
+    category_id: String,
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.reorder_tags(&category_id, &ordered_ids)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Rewrite the order of the categories themselves.
+#[tauri::command]
+async fn reorder_tag_categories(
+    app: tauri::AppHandle,
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = cache_db(&app)?;
+        db.reorder_tag_categories(&ordered_ids)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn get_track_tags(
     app: tauri::AppHandle,
@@ -3046,6 +3114,10 @@ pub fn run() {
             rename_tag,
             delete_tag,
             move_tag,
+            set_tag_category_color,
+            set_tag_hotkey,
+            reorder_tags,
+            reorder_tag_categories,
             get_track_tags,
             set_track_tags,
             add_track_tag,

@@ -825,6 +825,31 @@ export async function moveTag(id: string, newCategoryId: string): Promise<void> 
   return invoke<void>("move_tag", { id, newCategoryId });
 }
 
+export async function setTagCategoryColor(
+  id: string,
+  color: string | null,
+): Promise<void> {
+  return invoke<void>("set_tag_category_color", { id, color });
+}
+
+/** Bind a tag to a number-row hotkey (1–9), or clear it with null. The hotkey
+ *  is global, so assigning one already in use takes it from the other tag. */
+export async function setTagHotkey(id: string, hotkey: number | null): Promise<void> {
+  return invoke<void>("set_tag_hotkey", { id, hotkey });
+}
+
+/** The whole new order for one category's tags, which is what a drag produces. */
+export async function reorderTags(
+  categoryId: string,
+  orderedIds: string[],
+): Promise<void> {
+  return invoke<void>("reorder_tags", { categoryId, orderedIds });
+}
+
+export async function reorderTagCategories(orderedIds: string[]): Promise<void> {
+  return invoke<void>("reorder_tag_categories", { orderedIds });
+}
+
 export async function getTrackTags(libraryPath: string, trackId: string): Promise<Tag[]> {
   return invoke<Tag[]>("get_track_tags", { libraryPath, trackId });
 }

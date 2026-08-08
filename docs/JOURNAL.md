@@ -2584,6 +2584,48 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (Custom Tags, finished)
+
+Four gaps, one migration, and one genuine bug uncovered.
+
+The gaps were category colours, reorder, per-tag hotkeys and Field-Mapper export. Cache v19 carries
+the first two as nullable columns. Nullable is the point: most categories will never have a colour,
+so `NULL` is the normal state rather than a missing value, and a default would have made every
+category that already existed claim a colour nobody chose.
+
+`reorder_tags` is the command the panel had a comment apologising for the absence of. It takes the
+**whole** ordered list. A `(tag, new_position)` signature would need to shift everything between
+the old and new slots, and there is a window in that where two tags share a `seq` and the list
+order is undefined. A drag produces a complete order anyway, so taking it wholesale is both simpler
+and has no such window. Ids belonging to another category are ignored: moving between categories is
+`move_tag`, and letting a reorder do it implicitly would mean a drag inside one category could
+silently restructure the tree.
+
+Then the part I nearly skipped. Drag-and-drop is a mouse gesture. jsdom does not run drag events,
+so a drag-only reorder is untestable *and* unreachable for anyone not using a mouse — the same
+shape as the FindPopup hover-only buttons that only Playwright caught. So `Alt`+arrow moves the
+focused chip, and that is what the tests exercise. Plain arrows are deliberately left to the
+browser so tabbing through chips still works.
+
+Hotkeys are global across the whole tag tree, which forces a decision when one is already taken.
+Refusing sounds safer and is worse: the user gets an error naming a conflict with a tag they cannot
+find without opening every category. Stealing is immediately legible — the other tag's badge is
+gone — and is what assigning a keyboard shortcut normally means anywhere else. Both statements run
+in one transaction, because a steal that cleared the old binding and then failed would lose a
+hotkey and give nothing back.
+
+**The bug.** Field Mappings has offered a `Colour` source in the settings UI for a while.
+`MappingInput.colour_name` was never set, because until this morning `Track` had no colour field at
+all — so choosing it produced nothing, silently. A control that does not do what it says is exactly
+what the no-stub-logic rule exists to prevent, and this one had been shipped and forgotten rather
+than deliberately stubbed, which is how those get in.
+
+While there: `MappingSource::TagCategory` has been in the engine since Epic 4 and was never offered
+in the UI, though the spec asks for it in as many words — "a single category can be the source
+instead". Offered now, keyed by category **name** rather than id, so renaming a category stops the
+mapping matching instead of quietly exporting a different set of tags under the old label. Matching
+by id would have been more "correct" and would have made a rename invisible, which is worse.
+
 ## Session — 2026-08-07 (colour, written)
 
 Follow-on from the field widening, and a short one: `Colors → nearest` had a colour field to read

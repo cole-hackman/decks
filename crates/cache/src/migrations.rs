@@ -472,6 +472,27 @@ pub const MIGRATIONS: &[(u32, &str)] = &[
         CREATE INDEX idx_cue_presets_seq ON cue_presets(seq);
         ",
     ),
+    (
+        19,
+        "
+        -- Per `docs/lexicon/02-library.md §Custom Tags`: categories carry a
+        -- colour, and individual tags can be assigned a number, with that
+        -- number bound to a hotkey.
+        --
+        -- Added as nullable columns rather than with defaults. A category with
+        -- no colour is a real state — most of them will never have one — and a
+        -- default would make every existing category silently claim a colour
+        -- the user never picked.
+        ALTER TABLE tag_categories ADD COLUMN color TEXT;
+
+        -- 1–9, matching the number row. Nullable, and unique across the whole
+        -- tag tree rather than per category: the hotkey is global, so two tags
+        -- claiming `3` would make one of them unreachable. Enforced by a
+        -- partial unique index so any number of tags may have no hotkey.
+        ALTER TABLE tags ADD COLUMN hotkey INTEGER;
+        CREATE UNIQUE INDEX idx_tags_hotkey ON tags(hotkey) WHERE hotkey IS NOT NULL;
+        ",
+    ),
 ];
 
 pub fn current_version(conn: &rusqlite::Connection) -> anyhow::Result<u32> {
@@ -917,5 +938,88 @@ mod tests {
              VALUES ('t2', 'Peak time', '{}', 1770000000);",
         );
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn tag_category_colour_and_tag_hotkey_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO tag_categories (id, name, seq, color)
+             VALUES ('cat1', 'Genre', 0, '#e5484d');
+             INSERT INTO tags (id, category_id, name, seq, hotkey)
+             VALUES ('t1', 'cat1', 'Techno', 0, 3);",
+        )
+        .unwrap();
+        let (color, hotkey): (Option<String>, Option<i64>) = conn
+            .query_row(
+                "SELECT c.color, t.hotkey FROM tag_categories c
+                   JOIN tags t ON t.category_id = c.id
+                  WHERE c.id = 'cat1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(color.as_deref(), Some("#e5484d"));
+        assert_eq!(hotkey, Some(3));
+    }
+
+    #[test]
+    fn a_category_without_a_colour_is_a_real_state() {
+        // Most categories will never have one. A default would make every
+        // existing category silently claim a colour the user never picked.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO tag_categories (id, name, seq) VALUES ('cat1', 'Mood', 0);",
+        )
+        .unwrap();
+        let color: Option<String> = conn
+            .query_row(
+                "SELECT color FROM tag_categories WHERE id = 'cat1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(color.is_none());
+    }
+
+    #[test]
+    fn two_tags_cannot_claim_the_same_hotkey() {
+        // The hotkey is global, so a duplicate would make one of the two tags
+        // unreachable from the keyboard with no indication which.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO tag_categories (id, name, seq) VALUES ('cat1', 'Genre', 0);
+             INSERT INTO tags (id, category_id, name, seq, hotkey)
+             VALUES ('t1', 'cat1', 'Techno', 0, 3);",
+        )
+        .unwrap();
+        let clash = conn.execute_batch(
+            "INSERT INTO tags (id, category_id, name, seq, hotkey)
+             VALUES ('t2', 'cat1', 'House', 1, 3);",
+        );
+        assert!(clash.is_err(), "a second tag claimed hotkey 3");
+    }
+
+    #[test]
+    fn any_number_of_tags_may_have_no_hotkey() {
+        // The unique index is partial; NULLs must not collide with each other.
+        let conn = Connection::open_in_memory().unwrap();
+        run(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO tag_categories (id, name, seq) VALUES ('cat1', 'Genre', 0);
+             INSERT INTO tags (id, category_id, name, seq) VALUES ('t1', 'cat1', 'Techno', 0);
+             INSERT INTO tags (id, category_id, name, seq) VALUES ('t2', 'cat1', 'House', 1);
+             INSERT INTO tags (id, category_id, name, seq) VALUES ('t3', 'cat1', 'Disco', 2);",
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tags WHERE hotkey IS NULL", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 3);
     }
 }
