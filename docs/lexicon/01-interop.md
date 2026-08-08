@@ -52,7 +52,7 @@ modified-sync watermark and no delete semantics for Full Sync.
 | **Cue Destination** | See below | partial — governs `Kind` on newly inserted cue rows only |
 | **Key Conversion** | Original / Open Key / musical notation | done (`key_format.rs`), plus Camelot |
 | **Don't Touch My Grids** | Never modify existing beatgrids in the app. **New tracks still receive Lexicon's grid.** | partial — only skips BPM `TrackMetadataEdit`; no grid writes exist to skip |
-| **Colors → nearest** | Map Lexicon's larger palette to the app's nearest supported colour. **Off means no colour is written when there's no exact match** | partial — `Track` carries colour now, so it is read, shown and matched on. Writing is still missing: no change kind sets `ColorID`, so the flag is accepted and not exposed as a toggle, rather than offered as a switch that does nothing |
+| **Colors → nearest** | Map Lexicon's larger palette to the app's nearest supported colour. **Off means no colour is written when there's no exact match** | **done** — `TrackMetadataEdit` writes `ColorID`, resolving against Rekordbox's fixed eight-colour palette. Off, an inexact colour is left unchanged and the skip is surfaced as a warning; on, it maps to the nearest palette entry and every mapping is named in the warnings. A colour outside the palette never creates a `djmdColor` row: that table is what the hardware can display, not a vocabulary we may extend |
 | **Field Mappings** | See below | missing |
 | **All smartlists to playlists** | Materialise smartlists | **plumbed but ignored** |
 

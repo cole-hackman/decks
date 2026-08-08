@@ -2584,6 +2584,34 @@ first), CSV import, the duplicates work.
   `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm e2e`.
 - **Next:** Custom Tags' remainder is cosmetic or blocked. Epic 7 needs a scoping decision.
 
+## Session — 2026-08-07 (colour, written)
+
+Follow-on from the field widening, and a short one: `Colors → nearest` had a colour field to read
+but nothing that wrote one.
+
+The thing worth recording is why colour could not reuse `apply_fk_edit`. Genre, Album, Artist and
+Label are open vocabularies — `get_or_create_fk` inserting a row for a genre nobody has used before
+is the right behaviour. `djmdColor` is a closed one. It enumerates what Pioneer hardware can
+display, and a ninth row would be a value no CDJ renders. Reusing the FK helper would have "worked"
+in the sense that the write succeeded, which is the worst kind of working. So colour resolves
+against a fixed palette and skips when it cannot, and there is a test asserting the palette table
+still has exactly two rows after trying to write `Chartreuse`.
+
+The Sync option then splits cleanly. Off means *leave it alone* — the spec is explicit, and the
+temptation to be helpful by approximating anyway is exactly what the option exists to refuse. On
+means map, and name every mapping in the warnings; the user opted into having their colour changed,
+not into not being told which tracks it happened to.
+
+One thing I nearly got wrong: the first version treated an empty string as a failed palette match
+and warned about it. It should clear the colour. Removing a value invents nothing, so it needs no
+permission and no match — the same reason `Value::Null` was always allowed.
+
+`changes::applier::writes_field` came out of this too. The multi-track editor, recipes and CSV
+import each decide which fields to offer, and each had its own idea of what the applier accepts.
+They now assert against the real allowlist. That is how `label` and `color` became editable rather
+than merely visible — and the test that enforces it would have caught the drift if I had added the
+fields to one list and forgotten the other, which on this codebase's history I would have.
+
 ## Session — 2026-08-07 (merging the stack, then widening `Track`)
 
 Two things this session, and the first made the second cheap.

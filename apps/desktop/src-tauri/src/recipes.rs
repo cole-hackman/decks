@@ -31,6 +31,11 @@ const RECIPE_FIELDS: &[&str] = &[
     "rating",
     "year",
     "playCount",
+    // Read-and-write since `Track` gained the columns. `color` resolves against
+    // Rekordbox's fixed eight-colour palette in the applier rather than creating
+    // rows, so a value outside it is reported and skipped, never invented.
+    "label",
+    "color",
 ];
 
 /// Map a recipe field name to the `djmdContent` column the applier expects.
@@ -46,6 +51,8 @@ pub(crate) fn column_for(field: &str) -> Option<&'static str> {
         "rating" => "Rating",
         "year" => "ReleaseYear",
         "playCount" => "DJPlayCount",
+        "label" => "Label",
+        "color" => "Color",
         _ => return None,
     })
 }
@@ -84,6 +91,8 @@ fn track_to_fields(t: &decks_core::rekordbox_db::Track) -> TrackFields {
     put("rating", t.rating.map(|v| v.to_string()));
     put("year", t.release_year.map(|v| v.to_string()));
     put("playCount", t.dj_play_count.map(|v| v.to_string()));
+    put("label", t.label.clone());
+    put("color", t.color.clone());
     f
 }
 

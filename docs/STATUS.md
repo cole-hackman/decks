@@ -1,5 +1,48 @@
 # Status
 
+## 2026-08-07 — Colour, written
+
+`Colors → nearest` was the last row sitting in the `blocked` column for a reason that had stopped
+being true. `Track` gained a colour field an hour ago; what was still missing was anything that
+wrote one back. Both halves exist now, so the row is `done`.
+
+The interesting constraint is that **colour is not like Genre or Label**. Those are free-text
+vocabularies — `apply_fk_edit` happily creates a `djmdGenre` row for a genre nobody has used
+before, and that is correct. `djmdColor` is not a vocabulary. It is a lookup table of the eight
+colours the hardware can display, and inserting a ninth would give a track a colour that renders on
+no CDJ. So colour gets its own path, and that path **never creates a row**: an unmatched colour is
+a warning and a skip.
+
+`change_to_nearest_color` then decides what happens to a colour that is recognisable but outside
+the palette:
+
+- **Off** (the default) — nothing is written, and the skip is reported per track. This is the
+  spec's own wording: "Off means no colour is written when there's no exact match."
+- **On** — mapped to the nearest palette entry by RGB distance, and **every mapping is named in the
+  warnings**. Opting in is not a reason to hide which tracks had their colour changed to one the
+  user did not pick.
+
+Three smaller calls:
+
+- **Plain RGB distance, not CIELAB.** Eight widely separated hues; the two agree on every input
+  that matters, and a colour-science dependency to break ties between Pink and Red for a track
+  label is not a trade worth making. Written down so it reads as a choice rather than an oversight.
+- **Something that is not a colour is never approximated**, even with the option on. `Chartreuse`
+  is not a failed match — it is not a colour we can read, and mapping it would be invention.
+- **Clearing a colour needs no permission.** Removing a value invents nothing, so `null` and the
+  empty string clear it whatever the option says.
+
+Also new: `changes::applier::writes_field`, so the layers that *offer* fields — the multi-track
+editor, recipes, CSV import — assert against the applier's actual allowlist instead of keeping a
+parallel copy that drifts. A field offered by the editor but rejected by the applier gives the user
+a form control whose value vanishes at sync time, which reads as data loss rather than as an
+unsupported field. `label` and `color` join that vocabulary in the same change, so both are
+editable from the browser rather than merely visible.
+
+**Next:** Custom Tags leftovers (category colours, `reorder_tags` for drag-reorder, per-tag number
+hotkeys, Field-Mapper export). Album art and `crates/enrichment` still need the user's provider
+decision — MusicBrainz + Cover Art Archive recommended, Discogs as an opt-in second source.
+
 ## 2026-08-07 — `Track` grows five fields
 
 The whole stack (#10–#33) is merged; `main` carries every epic through 6 and CI is green on it.

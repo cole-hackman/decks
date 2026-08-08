@@ -9,6 +9,7 @@ use rusqlite::Transaction;
 mod cues;
 mod playlists;
 mod tracks;
+pub use tracks::writes_field;
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct ApplyResult {

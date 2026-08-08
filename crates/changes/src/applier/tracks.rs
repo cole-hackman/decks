@@ -1,12 +1,14 @@
 use crate::applier::{KeyFormat, SyncOptions};
-use crate::{key_format, StagedChange};
+use crate::{color, key_format, StagedChange};
 use anyhow::{anyhow, bail};
-use rusqlite::{params, Transaction};
+use rusqlite::{params, OptionalExtension, Transaction};
 use serde_json::Value;
 
 /// Columns on `djmdContent` writable via `TrackMetadataEdit`.
 /// FK-shaped fields (Artist/Genre/Album/Key/Label) are intercepted before
-/// the direct-column path; everything else here is a plain scalar column.
+/// the direct-column path, and `Color` takes its own path because it resolves
+/// against a fixed palette rather than creating rows; everything else here is a
+/// plain scalar column.
 const ALLOWED_CONTENT_FIELDS: &[&str] = &[
     "Title",
     "Commnt",
@@ -19,7 +21,18 @@ const ALLOWED_CONTENT_FIELDS: &[&str] = &[
     "Album",
     "Key",
     "Label",
+    "Color",
 ];
+
+/// Whether the applier will write a `TrackMetadataEdit` naming this column.
+///
+/// Exported so the layers that *offer* fields — the multi-track editor, recipes,
+/// CSV import — can assert against the same list rather than keeping a parallel
+/// copy that drifts. A field offered here but rejected there gives the user a
+/// form control whose value silently vanishes at sync time.
+pub fn writes_field(field: &str) -> bool {
+    ALLOWED_CONTENT_FIELDS.contains(&field)
+}
 
 pub(super) fn apply_metadata_edit(
     tx: &Transaction,
@@ -105,11 +118,112 @@ pub(super) fn apply_metadata_edit(
     };
 
     match field.as_str() {
+        "Color" => apply_color_edit(tx, target_id, new_value, options, warnings),
         "Artist" | "Genre" | "Album" | "Key" | "Label" => {
             apply_fk_edit(tx, target_id, field, new_value)
         }
         _ => apply_scalar_edit(tx, target_id, field, new_value),
     }
+}
+
+/// `Color` is a foreign key like Artist or Genre, but it must never *create* a
+/// row.
+///
+/// `djmdColor` is a lookup table of the eight colours the hardware can display,
+/// not a free-text vocabulary. Inserting a ninth would give a track a colour no
+/// CDJ can render — so an unmatched colour is a warning and a skip, never a new
+/// palette entry. That is what makes this different from `apply_fk_edit`.
+///
+/// `SyncOptions::change_to_nearest_color` decides what happens to a colour that
+/// is recognisable but not in the palette. Off — the default — writes nothing,
+/// per `docs/lexicon/01-interop.md`: "Off means no colour is written when
+/// there's no exact match."
+fn apply_color_edit(
+    tx: &Transaction,
+    target_id: &str,
+    new_value: &Value,
+    options: &SyncOptions,
+    warnings: &mut Vec<String>,
+) -> anyhow::Result<()> {
+    let requested = match new_value {
+        // Clearing a colour is always allowed: removing a value invents nothing.
+        Value::Null => {
+            return set_color_id(tx, target_id, None);
+        }
+        Value::String(s) if s.trim().is_empty() => {
+            return set_color_id(tx, target_id, None);
+        }
+        Value::String(s) => s,
+        _ => bail!("Color must be a string or null"),
+    };
+
+    let resolved = match color::resolve(requested, options.change_to_nearest_color) {
+        color::Resolution::Exact(c) => c,
+        color::Resolution::Nearest {
+            requested,
+            resolved,
+        } => {
+            // Surfaced rather than silent: the user's colour was changed to one
+            // they did not pick, and they opted into that but should still see
+            // which tracks it happened to.
+            warnings.push(format!(
+                "Track {target_id}: colour '{requested}' is not in Rekordbox's palette;                  wrote nearest match '{}'",
+                resolved.name
+            ));
+            resolved
+        }
+        color::Resolution::NoExactMatch { requested } => {
+            warnings.push(format!(
+                "Track {target_id}: colour '{requested}' has no exact Rekordbox colour;                  left unchanged (enable \"Change to nearest colour\" to map it)"
+            ));
+            return Ok(());
+        }
+        color::Resolution::Unrecognised { requested } => {
+            warnings.push(format!(
+                "Track {target_id}: '{requested}' is not a colour we recognise; left unchanged"
+            ));
+            return Ok(());
+        }
+    };
+
+    // Match an existing palette row by name. `djmdColor` keeps the name in
+    // `Commnt` in real libraries and sometimes in `Name`; both are checked
+    // rather than assumed.
+    let id: Option<String> = tx
+        .query_row(
+            "SELECT ID FROM djmdColor
+              WHERE Commnt = ?1 COLLATE NOCASE OR Name = ?1 COLLATE NOCASE
+              LIMIT 1",
+            params![resolved.name],
+            |r| r.get(0),
+        )
+        .optional()?;
+
+    let Some(id) = id else {
+        warnings.push(format!(
+            "Track {target_id}: this library has no '{}' colour row; left unchanged",
+            resolved.name
+        ));
+        return Ok(());
+    };
+    set_color_id(tx, target_id, Some(&id))
+}
+
+fn set_color_id(tx: &Transaction, target_id: &str, id: Option<&str>) -> anyhow::Result<()> {
+    let rows = match id {
+        Some(id) => tx.execute(
+            "UPDATE djmdContent SET ColorID = ? WHERE ID = ?",
+            params![id, target_id],
+        )?,
+        None => tx.execute(
+            "UPDATE djmdContent SET ColorID = NULL WHERE ID = ?",
+            params![target_id],
+        )?,
+    };
+    if rows == 0 {
+        bail!("No rows updated (target_id {} not found)", target_id);
+    }
+    Ok(())
 }
 
 fn apply_fk_edit(
@@ -748,5 +862,120 @@ mod tests {
             .unwrap();
         let tx = conn.transaction().unwrap();
         assert!(apply_relocate(&tx, &relocate_change(serde_json::json!({}))).is_err());
+    }
+
+    /// A fixture with the colour lookup table, shaped the way real libraries
+    /// are — the name lives in `Commnt`.
+    fn colour_fixture() -> Connection {
+        let conn = fixture();
+        conn.execute_batch(
+            "ALTER TABLE djmdContent ADD COLUMN ColorID TEXT;
+             CREATE TABLE djmdColor (ID TEXT PRIMARY KEY, Commnt TEXT, Name TEXT);
+             INSERT INTO djmdColor (ID, Commnt) VALUES ('c-red', 'Red'), ('c-blue', 'Blue');",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn colour_of(conn: &Connection) -> Option<String> {
+        conn.query_row("SELECT ColorID FROM djmdContent WHERE ID = 't1'", [], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    }
+
+    fn apply_colour(conn: &mut Connection, value: Value, nearest: bool) -> Vec<String> {
+        let opts = SyncOptions {
+            change_to_nearest_color: nearest,
+            ..SyncOptions::default()
+        };
+        let mut warnings = Vec::new();
+        let tx = conn.transaction().unwrap();
+        apply_metadata_edit(&tx, &change("Color", value), &opts, &mut warnings).unwrap();
+        tx.commit().unwrap();
+        warnings
+    }
+
+    #[test]
+    fn a_palette_colour_by_name_is_written() {
+        let mut conn = colour_fixture();
+        let warnings = apply_colour(&mut conn, Value::String("Red".into()), false);
+        assert_eq!(colour_of(&conn).as_deref(), Some("c-red"));
+        assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn colour_names_are_matched_case_insensitively() {
+        let mut conn = colour_fixture();
+        apply_colour(&mut conn, Value::String("bLuE".into()), false);
+        assert_eq!(colour_of(&conn).as_deref(), Some("c-blue"));
+    }
+
+    /// The behaviour the Lexicon option is actually about.
+    #[test]
+    fn an_inexact_colour_writes_nothing_when_the_option_is_off() {
+        let mut conn = colour_fixture();
+        let warnings = apply_colour(&mut conn, Value::String("#e04050".into()), false);
+        assert_eq!(colour_of(&conn), None, "nothing should have been written");
+        assert!(
+            warnings.iter().any(|w| w.contains("no exact")),
+            "the skip has to be visible: {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn an_inexact_colour_maps_to_the_nearest_when_the_option_is_on() {
+        let mut conn = colour_fixture();
+        let warnings = apply_colour(&mut conn, Value::String("#e04050".into()), true);
+        assert_eq!(colour_of(&conn).as_deref(), Some("c-red"));
+        // Opting in is not a reason to hide which tracks were changed.
+        assert!(
+            warnings.iter().any(|w| w.contains("nearest match 'Red'")),
+            "{warnings:?}"
+        );
+    }
+
+    /// `djmdColor` is the hardware's palette, not a vocabulary we may extend.
+    #[test]
+    fn an_unknown_colour_never_creates_a_palette_row() {
+        let mut conn = colour_fixture();
+        apply_colour(&mut conn, Value::String("Chartreuse".into()), true);
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM djmdColor", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 2, "a ninth colour would render on no CDJ");
+        assert_eq!(colour_of(&conn), None);
+    }
+
+    #[test]
+    fn a_palette_colour_this_library_lacks_is_skipped_not_invented() {
+        // Green is a real Rekordbox colour, but this library has no row for it.
+        let mut conn = colour_fixture();
+        let warnings = apply_colour(&mut conn, Value::String("Green".into()), true);
+        assert_eq!(colour_of(&conn), None);
+        assert!(
+            warnings.iter().any(|w| w.contains("no 'Green' colour row")),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn clearing_a_colour_is_always_allowed() {
+        // Removing a value invents nothing, so it needs no permission and no
+        // palette match.
+        let mut conn = colour_fixture();
+        apply_colour(&mut conn, Value::String("Red".into()), false);
+        assert_eq!(colour_of(&conn).as_deref(), Some("c-red"));
+        apply_colour(&mut conn, Value::Null, false);
+        assert_eq!(colour_of(&conn), None);
+    }
+
+    #[test]
+    fn an_empty_string_clears_rather_than_failing_to_match() {
+        let mut conn = colour_fixture();
+        apply_colour(&mut conn, Value::String("Red".into()), false);
+        let warnings = apply_colour(&mut conn, Value::String("   ".into()), false);
+        assert_eq!(colour_of(&conn), None);
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 }

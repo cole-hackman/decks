@@ -14,7 +14,7 @@ regardless of how much of Lexicon they represent.
 
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
-| Interop & sync | 5 | 6 | 1 | 0 | 11 |
+| Interop & sync | 6 | 5 | 1 | 0 | 11 |
 | Library & browser | 14 | 3 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 2 | 4 | 3 | 2 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **53** | **27** | **14** | **2** | **16** |
+| **Total** | **54** | **26** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -46,8 +46,7 @@ manual, not from Lexicon itself. Three specific limits apply:
 it is merely unbuilt. Two rows sit there: the Camelot/Open Key posture is a licensing decision
 rather than code, and Danceability / Popularity / Happiness depend on a Spotify endpoint that was
 withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any circumstances.
-`Colors → nearest` left this column when `Track` gained a colour field; it is now `partial`,
-read-only until a change kind writes `ColorID`.
+`Colors → nearest` left this column when `Track` gained a colour field and is now `done`.
 
 ---
 
@@ -62,7 +61,7 @@ read-only until a change kind writes `ColorID`.
 | Cue Destination | partial | Sets `Kind` on new cues only; no hidden-memory-cue round-trip | 2 |
 | Don't Touch My Grids | partial | Only skips BPM edits — no grid writes exist yet to skip | 2 |
 | Key conversion | **done** | Camelot + Open Key, both directions, plus the leading-zero Sync option. Notation posture still open | 6 |
-| Colors → nearest | partial | `Track` now carries colour, so the browser shows it and rules match on it. Still **read-only**: no change kind writes `ColorID`, so the Sync toggle stays unexposed rather than shipping inert | 4 |
+| Colors → nearest | **done** | `Track` carries colour; `TrackMetadataEdit` writes `ColorID` against Rekordbox's fixed eight-colour palette. Off, an inexact colour is **left unchanged** and the skip is reported; on, it maps to the nearest and each mapping is named. Never creates a `djmdColor` row — a ninth colour renders on no CDJ | 4 |
 | All smartlists → playlists | **done** | Materialises via `PlaylistCreate` + `PlaylistAddTrack`, staged before the change set is collected | 1 |
 | Field Mappings | partial | Engine + ID3 profile done, v5 dead table dropped; no per-DJ-app profiles, not applied during sync | 4 |
 | Excluded From Sync | **done** | Name-prefix (case-insensitive) and custom-tag conventions, both honoured during materialisation | 1 |
