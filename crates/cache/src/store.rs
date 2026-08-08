@@ -2666,6 +2666,64 @@ impl CacheDb {
     }
 }
 
+// ── Enrichment cache ─────────────────────────────────────────────────────────
+
+impl CacheDb {
+    /// The cached candidates JSON for `(provider, query_key)`, if a row exists
+    /// and is younger than `max_age_secs`.
+    ///
+    /// `candidates` may be `"[]"` — a cached no-match — and that comes back as
+    /// `Some("[]")`, not `None`. A no-match is what stops a library of
+    /// bootlegs paying the full rate-limited round trip on every re-run.
+    ///
+    /// A clock that moved backwards (NTP, a VM resuming) would make
+    /// `fetched_at` land in the future, yielding a negative age; the `>= 0`
+    /// guard treats that as stale rather than as fresh forever, which is what
+    /// a plain `< max_age_secs` comparison would do.
+    pub fn enrichment_cached(
+        &self,
+        provider: &str,
+        query_key: &str,
+        max_age_secs: i64,
+    ) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT candidates FROM enrichment_cache
+                 WHERE provider = ?1 AND query_key = ?2
+                   AND (unixepoch() - fetched_at) >= 0
+                   AND (unixepoch() - fetched_at) < ?3",
+                rusqlite::params![provider, query_key, max_age_secs],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Upsert the cached answer for `(provider, query_key)`, replacing
+    /// `candidates` and `fetched_at` on conflict.
+    pub fn enrichment_put(
+        &self,
+        provider: &str,
+        query_key: &str,
+        candidates_json: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO enrichment_cache (provider, query_key, candidates, fetched_at)
+             VALUES (?1, ?2, ?3, unixepoch())
+             ON CONFLICT(provider, query_key) DO UPDATE SET
+                 candidates = excluded.candidates,
+                 fetched_at = excluded.fetched_at",
+            rusqlite::params![provider, query_key, candidates_json],
+        )?;
+        Ok(())
+    }
+
+    /// Delete every cached lookup. Backs the "clear cached lookups" button.
+    pub fn enrichment_clear(&self) -> Result<usize> {
+        Ok(self.conn.execute("DELETE FROM enrichment_cache", [])?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4248,5 +4306,112 @@ mod tests {
         db.set_sync_watermark("/db", "rekordbox", 10).unwrap();
         db.clear_sync_watermark("/db", "rekordbox").unwrap();
         assert_eq!(db.sync_watermark("/db", "rekordbox").unwrap(), None);
+    }
+
+    /// Backdates a row's `fetched_at` so freshness tests do not depend on the
+    /// wall clock. `enrichment_put` always stamps `unixepoch()`, so a test
+    /// that wants an aged (or future) entry has to rewrite it after the fact.
+    fn set_enrichment_fetched_at(db: &CacheDb, provider: &str, query_key: &str, fetched_at: i64) {
+        db.conn
+            .execute(
+                "UPDATE enrichment_cache SET fetched_at = ?1
+                 WHERE provider = ?2 AND query_key = ?3",
+                rusqlite::params![fetched_at, provider, query_key],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn a_fresh_enrichment_entry_is_returned() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "daft punk|around the world", "[]")
+            .unwrap();
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "daft punk|around the world", 3600)
+                .unwrap(),
+            Some("[]".to_string())
+        );
+    }
+
+    #[test]
+    fn an_entry_older_than_max_age_is_not_returned() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[{\"id\":1}]")
+            .unwrap();
+        set_enrichment_fetched_at(&db, "MusicBrainz", "k1", now_secs() - 7200);
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "k1", 3600).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_backwards_clock_does_not_make_an_entry_fresh_forever() {
+        // NTP, or a VM resuming with a stale clock. A plain
+        // `now - fetched_at < max_age_secs` test would treat a negative age
+        // as fresh forever, since any negative number is less than a positive
+        // max_age_secs.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[]").unwrap();
+        set_enrichment_fetched_at(&db, "MusicBrainz", "k1", now_secs() + 7200);
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "k1", 3600).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_cached_no_match_round_trips_as_some_empty_array_not_none() {
+        // An empty candidates array is a meaningful answer — "we checked, and
+        // there is nothing" — not the absence of one.
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("Discogs", "obscure bootleg", "[]")
+            .unwrap();
+        assert_eq!(
+            db.enrichment_cached("Discogs", "obscure bootleg", 3600)
+                .unwrap(),
+            Some("[]".to_string())
+        );
+    }
+
+    #[test]
+    fn provider_and_query_key_together_form_the_cache_key() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[\"mb\"]").unwrap();
+        db.enrichment_put("Discogs", "k1", "[\"discogs\"]").unwrap();
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "k1", 3600).unwrap(),
+            Some("[\"mb\"]".to_string())
+        );
+        assert_eq!(
+            db.enrichment_cached("Discogs", "k1", 3600).unwrap(),
+            Some("[\"discogs\"]".to_string())
+        );
+    }
+
+    #[test]
+    fn putting_the_same_key_twice_replaces_rather_than_erroring() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[\"old\"]").unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[\"new\"]").unwrap();
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "k1", 3600).unwrap(),
+            Some("[\"new\"]".to_string())
+        );
+    }
+
+    #[test]
+    fn clear_removes_everything_and_reports_the_count() {
+        let db = CacheDb::open_in_memory().unwrap();
+        db.enrichment_put("MusicBrainz", "k1", "[]").unwrap();
+        db.enrichment_put("MusicBrainz", "k2", "[]").unwrap();
+        db.enrichment_put("Discogs", "k1", "[]").unwrap();
+
+        assert_eq!(db.enrichment_clear().unwrap(), 3);
+        assert_eq!(
+            db.enrichment_cached("MusicBrainz", "k1", 3600).unwrap(),
+            None
+        );
+        assert_eq!(db.enrichment_clear().unwrap(), 0);
     }
 }

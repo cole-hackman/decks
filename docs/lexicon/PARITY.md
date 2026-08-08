@@ -15,17 +15,17 @@ regardless of how much of Lexicon they represent.
 | Domain | done | partial | missing | blocked | deferred |
 |---|---:|---:|---:|---:|---:|
 | Interop & sync | 8 | 3 | 1 | 0 | 11 |
-| Library & browser | 17 | 0 | 1 | 0 | 0 |
+| Library & browser | 17 | 1 | 0 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
 | Analysis | 3 | 3 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
-| Health | 3 | 0 | 1 | 0 | 0 |
+| Health | 3 | 1 | 0 | 0 | 0 |
 | Recipes & editing | 7 | 1 | 1 | 0 | 0 |
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **61** | **19** | **14** | **2** | **16** |
+| **Total** | **61** | **21** | **12** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -87,7 +87,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Playlist Occurrence | **done** | Any N, in Playlist Tools. Counts distinct playlists, and ships the whole distribution so N does not have to be guessed | 6 |
 | Custom Tags | **done** | OR-within/AND-across selection, MyTag and hashtag import, category colours, drag **and keyboard** reorder (`reorder_tags`), per-tag number hotkeys (global, so assigning a taken one steals it), and Field-Mapper export both for all tags and per category | 5 |
 | Manual multi-track editor | **done** | `<multiple values>` as a placeholder; untouched fields never written. Album art out of scope | 5 |
-| Album art | **missing** | Absent from the product entirely | 4 |
+| Album art | partial | `enrichment::cover_art` downloads and identifies a cover (MIME sniffed from magic bytes; WAV refused up front per the manual's caveat). Embedding it needs picture support in `crates/audio-tags`, which does not exist — so nothing in the UI offers it yet, deliberately | 4 |
 | Archive | **done** | Context-sensitive playlist rule, selection helper, staged cleanup. Delete-from-disk is now a separate button, never a side effect of cleanup | 5 |
 | Genre / Artist Cleanup | **done** | Locking, pinned letters, alt-click filter, sort modes. Remixer is now modelled; composer and original-artist still are not | 5 |
 
@@ -159,7 +159,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Find Duplicates | **done** | 3 strategies, duration bounds, preselection, bulk Prefer, review step, playlist re-pointing. Interruptible scan and manual merge outstanding | 5 |
 | Find Lost Tracks / Relocate | **done** | Fuzzy match + prefix rewriting, all-tracks mode, extension change, backup on `WriteGuard`, **merge-with-existing** (playlist rewriting delegated to `duplicates` rather than reimplemented) and the **5-minute re-check cadence** (in-memory, so a restart forces a re-scan; force invalidates rather than bypasses) | 5 |
 | Find Broken Tracks | **done** | Real decode check, two depths, per-playlist report. Deleting from disk deliberately not offered | 5 |
-| Find Tags & Album Art | **missing** | `crates/enrichment` is a 10-line stub | 4 |
+| Find Tags & Album Art | partial | **Tags done**: MusicBrainz by default + Discogs opt-in (ADR-0016), cached locally, rate-limited to the providers' terms, backfill-only, every proposal attributed. Reachable from the track context menu and from `library_find_tags` (chat/MCP/CLI). **Art fetches but does not embed** — `crates/audio-tags` has no picture support, so no UI option offers it | 4 |
 
 ## Recipes & editing — `10-recipes.md`
 

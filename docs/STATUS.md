@@ -1,5 +1,71 @@
 # Status
 
+## 2026-08-08 — Enrichment: MusicBrainz by default, Discogs opt-in
+
+`crates/enrichment` was a ten-line placeholder and the last large `missing` row. It is now a real
+crate: MusicBrainz + Cover Art Archive by default, Discogs as an opt-in second source. **ADR-0016**
+records the choice.
+
+Neither of Lexicon's own sources was available. SonoVault is not a public API, and Spotify's
+`audio-features` is deprecated and 403s for applications registered since 2024-11-27 — so the
+sources had to be *chosen* rather than copied. MusicBrainz is the default because it needs no
+account, no key and no registration: a default source the user must go and register for is not a
+default, it is a dead feature with a settings page. Discogs earns its opt-in slot by being
+strongest where MusicBrainz is weakest — label, catalogue and year for dance records, which is most
+of a Rekordbox library. Its token goes in the OS keychain through the `get_api_key` plumbing that
+already existed.
+
+**This is the first feature where the library leaves the machine**, so the `CLAUDE.md` privacy rule
+had to become structural rather than aspirational. Every outbound request goes through one trait,
+so grepping for its implementors enumerates the whole network surface — today one type, in one
+file, behind an optional feature. The cache is consulted before any provider. What is sent is an
+artist and a title, and a test asserts that no path, library identifier or volume name ever appears
+in a request URL. The cache-first test asserts on the **request log** rather than the returned
+value, because returning the same answer twice would not prove the network was skipped.
+
+Rate limits are enforced in the crate, not left to call sites. MusicBrainz's one-per-second and its
+User-Agent requirement are conditions of use — a client that ignores either gets blocked, and a
+blocked client means the feature stops working with no visible cause. The limiter holds its lock
+across the sleep on purpose: releasing it first would let every waiter compute the same wake time
+and then fire together, which is the burst the limit forbids.
+
+Enrichment **backfills and never overwrites**. A field the library already holds is never proposed
+over, including when it holds whitespace — Rekordbox libraries are full of those, and treating
+`"   "` as curation would make the feature do nothing on a real collection. Every proposal names
+its provider, and that attribution survives into the staged change's reason.
+
+The genre split is the manual's own good idea, implemented as described: main genre to the Genre
+field, the rest to Custom Tags. MusicBrainz tags with zero votes are dropped, so one person's typo
+cannot become somebody's Genre. Discogs *styles* beat its broad *genres* — "Deep House" is more
+useful than "Electronic", which is true of nearly every record in a DJ library.
+
+**What is not verified, and why that is acceptable here.** The network policy denies
+`musicbrainz.org`, so both providers' field paths are written against documented schemas and have
+never seen a live response. Every parse is tolerant by construction, so schema drift costs
+*proposals* rather than producing wrong values. That asymmetry is exactly why this ships unverified
+and ANLZ writing does not: there, the failure mode is a corrupted user file. `GAPS.md` carries the
+one command that checks it.
+
+While writing that up I found the old GAPS bullet claiming the providers could not be **written**
+here either. That was wrong, and the fix is the design: making the transport a seam left query
+construction, parsing, rate limiting and caching fully testable without a socket. 85 tests in the
+crate say so.
+
+**Album art fetches but does not embed**, and there is deliberately no UI option for it. The
+downloader works — MIME sniffed from magic bytes rather than a header, because an ID3 picture frame
+with a wrong MIME is one players silently refuse to show, and WAV refused up front per the manual's
+own caveat. But `crates/audio-tags` has no picture support, so a checkbox would download an image
+and discard it: the stub logic `CLAUDE.md` forbids in production paths. A test asserts the option
+is absent.
+
+Reachable from the track context menu, and from `library_find_tags` in chat, MCP and the CLI —
+which needed care, because `AgentToolService::execute` is synchronous and the lookup is not. The
+future runs on a runtime owned by a *fresh thread* rather than via `block_on` here, since this
+service is called from inside a Tokio runtime in the MCP HTTP server and `block_on` in a runtime
+context panics.
+
+Parity: **61 done / 21 partial / 12 missing / 2 blocked / 16 deferred.**
+
 ## 2026-08-08 — Energy gets a scale, and stops being an empty column
 
 `cache.audio_features.energy` had existed for a long time. It hydrated a column, fed a smartlist

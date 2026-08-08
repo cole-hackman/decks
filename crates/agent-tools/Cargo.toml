@@ -16,6 +16,7 @@ smartlists = { path = "../smartlists" }
 changes = { path = "../changes" }
 audio-tags = { path = "../audio-tags" }
 audio-analysis = { path = "../audio-analysis" }
+enrichment = { path = "../enrichment", features = ["reqwest"] }
 relocate = { version = "0.1.0", path = "../relocate" }
 scoring = { path = "../scoring" }
 

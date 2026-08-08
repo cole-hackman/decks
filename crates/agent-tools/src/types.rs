@@ -54,6 +54,19 @@ pub enum ToolRequest {
         library_path: String,
         track_id: String,
     },
+    /// Metadata backfill for one track: MusicBrainz by default, Discogs when a
+    /// token is supplied. Returns proposals; stages nothing, like every other
+    /// preview in this tool surface.
+    LibraryFindTags {
+        library_path: String,
+        track_id: String,
+        /// Strip remix/remaster text and resolve to the earliest release.
+        #[serde(default)]
+        original_release: bool,
+        /// A Discogs personal access token. Absent means Discogs is not
+        /// consulted at all — opt-in is opt-in.
+        discogs_token: Option<String>,
+    },
     LibraryScanAndProposeMissing {
         library_path: String,
         #[serde(default)]

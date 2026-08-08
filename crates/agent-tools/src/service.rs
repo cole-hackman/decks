@@ -16,6 +16,41 @@ struct PlaylistDetail {
     tracks: Vec<Track>,
 }
 
+/// Binds `enrichment`'s cache trait to `enrichment_cache`.
+///
+/// A mutex because `CacheDb` holds a rusqlite `Connection` — `Send` but not
+/// `Sync` — while the trait must be `Sync`. Duplicated in the desktop crate for
+/// the same reason; a shared adapter would mean this crate depending on the
+/// desktop app, which is backwards.
+struct SharedCache(std::sync::Mutex<cache::CacheDb>);
+
+/// Thirty days, matching the desktop side. Release metadata barely moves, and
+/// the two surfaces sharing a window keeps one from silently re-fetching what
+/// the other just cached.
+const ENRICH_CACHE_MAX_AGE_SECS: i64 = 30 * 24 * 60 * 60;
+
+impl enrichment::ResponseCache for SharedCache {
+    fn get(&self, key: &str) -> Option<Vec<enrichment::Candidate>> {
+        let (provider, rest) = key.split_once('\u{1}')?;
+        let json = self
+            .0
+            .lock()
+            .ok()?
+            .enrichment_cached(provider, rest, ENRICH_CACHE_MAX_AGE_SECS)
+            .ok()??;
+        serde_json::from_str(&json).ok()
+    }
+
+    fn put(&self, key: &str, candidates: &[enrichment::Candidate]) {
+        let Some((provider, rest)) = key.split_once('\u{1}') else {
+            return;
+        };
+        if let (Ok(json), Ok(db)) = (serde_json::to_string(candidates), self.0.lock()) {
+            let _ = db.enrichment_put(provider, rest, &json);
+        }
+    }
+}
+
 impl AgentToolService {
     /// The cache DB, or a message naming what is missing.
     ///
@@ -271,6 +306,74 @@ impl AgentToolService {
                 )
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
                 to_value(result)
+            }
+
+            ToolRequest::LibraryFindTags {
+                library_path,
+                track_id,
+                original_release,
+                discogs_token,
+            } => {
+                let cache_path = self
+                    .cache_path
+                    .as_deref()
+                    .context("cache_path is required for find_tags")?;
+                let db = open_library(&library_path)?;
+                let track = db
+                    .track_by_id(&track_id)?
+                    .with_context(|| format!("track {track_id} not found"))?;
+
+                let q = enrichment::Query::new(track.artist.as_deref(), &track.title);
+                let q = if original_release {
+                    q.original_release()
+                } else {
+                    q
+                };
+                let existing = enrichment::Existing {
+                    genre: track.genre.clone(),
+                    year: track.release_year.map(|y| y as i32),
+                    label: track.label.clone(),
+                    album: track.album.clone(),
+                };
+                let providers = enrichment::Providers {
+                    discogs_token,
+                    album_art: false,
+                };
+
+                // `execute` is synchronous and the lookup is not. Running the
+                // future on a runtime owned by a *fresh thread* rather than
+                // with `Runtime::block_on` here is deliberate: this service is
+                // called from inside a Tokio runtime in the MCP HTTP server,
+                // and `block_on` inside a runtime context panics. A thread with
+                // no ambient runtime cannot nest, so this is correct from both
+                // the CLI (no runtime) and the server (runtime).
+                let cache_path = cache_path.to_path_buf();
+                let (candidates, errors) = std::thread::spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    let http = enrichment::reqwest_http::ReqwestHttp::new()
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                    // The MCP surface uses the same on-disk cache as the app,
+                    // so a lookup made from the chat panel and one made from
+                    // the CLI never pay for the same question twice.
+                    let db = cache::CacheDb::open(&cache_path)?;
+                    let svc =
+                        enrichment::Service::new(http, SharedCache(std::sync::Mutex::new(db)));
+                    Ok::<_, anyhow::Error>(rt.block_on(svc.lookup(&q, &providers)))
+                })
+                .join()
+                .map_err(|_| anyhow::anyhow!("enrichment lookup thread panicked"))??;
+
+                let proposal = enrichment::merge::build(&track_id, &existing, &candidates);
+                to_value(serde_json::json!({
+                    "track_id": track_id,
+                    "proposals": proposal.proposals,
+                    "tags": proposal.tags,
+                    "no_match": proposal.no_match,
+                    "errors": errors,
+                }))
             }
 
             ToolRequest::LibraryScanAndProposeMissing {

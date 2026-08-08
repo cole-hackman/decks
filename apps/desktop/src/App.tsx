@@ -46,6 +46,7 @@ import { useTrackContextActions } from "./hooks/useTrackContextActions";
 import { TrackContextMenu } from "./components/TrackContextMenu";
 import { MultiTrackEditor } from "./components/MultiTrackEditor";
 import { TagPickerModal } from "./components/TagPickerModal";
+import { EnrichPanel } from "./components/EnrichPanel";
 import {
   activeFilterCount,
   distinctValues,
@@ -122,6 +123,10 @@ export default function App() {
   const [tagPickerTrackIds, setTagPickerTrackIds] = useState<Set<string> | null>(
     null,
   );
+  // Frozen like editorTrackIds: the enrichment lookup runs against whatever
+  // selection was current when the panel opened, not whatever the table's
+  // selection drifts to while it's open.
+  const [enrichTrackIds, setEnrichTrackIds] = useState<string[] | null>(null);
   // The manual editor's selection, frozen when it opens: editing forty tracks
   // while the table's selection changes underneath would save to the wrong set.
   const [editorTrackIds, setEditorTrackIds] = useState<string[] | null>(null);
@@ -304,6 +309,12 @@ export default function App() {
         setSelectedTrack(track);
       }
       setCurrentView("organize");
+    },
+    onFindTags: (track) => {
+      const ids = selectedTrackIds.has(track.id)
+        ? Array.from(selectedTrackIds)
+        : [track.id];
+      setEnrichTrackIds(ids);
     },
   });
 
@@ -1031,6 +1042,14 @@ export default function App() {
           selectedTrackIds={tagPickerTrackIds}
           tagsByTrack={filterCtx.tagsByTrack}
           onClose={() => setTagPickerTrackIds(null)}
+        />
+      )}
+
+      {enrichTrackIds && libraryPath && (
+        <EnrichPanel
+          libraryPath={libraryPath}
+          trackIds={enrichTrackIds}
+          onClose={() => setEnrichTrackIds(null)}
         />
       )}
     </div>

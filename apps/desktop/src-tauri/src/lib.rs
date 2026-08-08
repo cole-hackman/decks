@@ -8,6 +8,7 @@ mod csv_import;
 mod cue_generator;
 mod cues;
 mod duplicates;
+mod enrich;
 mod history;
 mod missing_files;
 mod mixable;
@@ -572,6 +573,26 @@ async fn set_agent_model(app: tauri::AppHandle, model: String) -> Result<(), Str
     let mut config = read_config(&app)?;
     config["agent_model"] = serde_json::json!(model);
     write_config(&app, &config)
+}
+
+/// Read a secret from the OS keychain.
+///
+/// The plain-function half of `get_api_key`, so callers inside the app do not
+/// have to go through the IPC layer to reach a secret the app itself needs.
+/// `CLAUDE.md`: API keys live in the keychain, never in plaintext config —
+/// having one reader keeps that a single place to check.
+pub(crate) async fn read_keychain(service: &str) -> Result<Option<String>, String> {
+    let service = service.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let entry = keyring::Entry::new("decks", &service).map_err(|e| e.to_string())?;
+        match entry.get_password() {
+            Ok(pw) => Ok(Some(pw)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -3077,6 +3098,9 @@ pub fn run() {
             toggle_cleanup_lock,
             list_pinned_letters,
             toggle_pinned_letter,
+            enrich::enrich_preview,
+            enrich::enrich_stage,
+            enrich::enrich_clear_cache,
             duplicates::plan_duplicate_resolution,
             duplicates::resolve_duplicates,
             duplicates::preselect_keepers,

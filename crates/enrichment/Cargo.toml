@@ -3,7 +3,7 @@ name = "enrichment"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Discogs, MusicBrainz, Beatport, and Bandcamp metadata enrichment clients"
+description = "MusicBrainz + Cover Art Archive metadata enrichment, with Discogs as an opt-in second source"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -12,3 +12,15 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip"], optional = true }
+
+[features]
+# The socket-opening transport. Optional so a caller supplying its own
+# `Http` never links an HTTP stack, and so the crate's tests do not.
+reqwest = ["dep:reqwest"]
+# Exposes `http::fake::FakeHttp` to other crates' tests, so the desktop crate
+# can exercise its enrichment commands without a socket either.
+test-util = []
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros", "rt"] }

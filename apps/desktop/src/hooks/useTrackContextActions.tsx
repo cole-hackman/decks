@@ -35,6 +35,12 @@ interface Options {
   onAddToQueue?: (track: Track) => void;
   /** Inserts the selection straight after the playing track. */
   onPlayNext?: (track: Track) => void;
+  /** Opens the enrichment panel for the right-clicked track — MusicBrainz +
+   *  opt-in Discogs tag lookup. The label keeps the spec's full "& album art"
+   *  wording (`docs/lexicon/07-health.md`), but no checkbox actually offers
+   *  album art: `crates/audio-tags` has no picture support to embed one into,
+   *  so exposing the toggle would be the stub logic CLAUDE.md forbids. */
+  onFindTags?: (track: Track) => void;
 }
 
 /** Builds the right-click action set for a Track. Memoised so the menu
@@ -49,6 +55,7 @@ export function useTrackContextActions({
   onCreatePlaylist,
   onAddToQueue,
   onPlayNext,
+  onFindTags,
 }: Options): TrackContextMenuAction[] {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -331,6 +338,21 @@ export function useTrackContextActions({
             } as TrackContextMenuAction,
           ]
         : []),
+      ...(onFindTags
+        ? [
+            {
+              id: "find-tags",
+              label: "Find tags & album art…",
+              hint: "MusicBrainz/Discogs",
+              icon: (
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+                  <path d="M8 1l1.3 3.9L13 6l-3.7 1.1L8 11l-1.3-3.9L3 6l3.7-1.1L8 1zM3 11l.65 1.9L5.5 13.5l-1.85.6L3 16l-.65-1.9L.5 13.5l1.85-.6L3 11z" />
+                </svg>
+              ),
+              onSelect: (track: Track) => onFindTags(track),
+            } as TrackContextMenuAction,
+          ]
+        : []),
       ...(onSendToFiles
         ? [
             {
@@ -436,5 +458,6 @@ export function useTrackContextActions({
     onCreatePlaylist,
     onAddToQueue,
     onPlayNext,
+    onFindTags,
   ]);
 }

@@ -30,6 +30,7 @@ cache = { path = "../../../crates/cache" }
 changes = { path = "../../../crates/changes" }
 audio-tags = { path = "../../../crates/audio-tags" }
 audio-analysis = { path = "../../../crates/audio-analysis" }
+enrichment = { path = "../../../crates/enrichment", features = ["reqwest"] }
 relocate = { version = "0.1.0", path = "../../../crates/relocate" }
 scoring = { path = "../../../crates/scoring" }
 share = { path = "../../../crates/share" }
