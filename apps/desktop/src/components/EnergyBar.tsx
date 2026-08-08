@@ -1,18 +1,26 @@
+import { energyToDisplay } from "../lib/energy";
+
 /**
- * Tiny horizontal bar visualising a track's energy in [0, 1]. Renders as a
- * fixed-width track with a coloured fill, matching the dark elevated/accent
- * tokens used elsewhere in the app.
+ * Tiny horizontal bar visualising a track's energy, with the 1–10 number in the
+ * tooltip and in the accessible value.
+ *
+ * The bar takes the stored 0.1–1.0 value because that is what fills a width,
+ * but everything a user reads off it is the 1–10 scale of ADR-0015 — a tooltip
+ * saying "Energy 0.62" is a number on no published scale at all, which is the
+ * state `PARITY.md` recorded as "cached + displayed; no defined scale".
  */
 export function EnergyBar({ value }: { value: number }) {
   const clamped = Math.max(0, Math.min(1, value));
   const pct = clamped * 100;
+  const display = energyToDisplay(clamped);
   return (
     <div
       role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={1}
-      aria-valuenow={clamped}
-      title={`Energy ${clamped.toFixed(2)}`}
+      aria-valuemin={1}
+      aria-valuemax={10}
+      aria-valuenow={display}
+      aria-label="Energy"
+      title={`Energy ${display} of 10`}
       className="inline-block h-2 w-12 overflow-hidden rounded bg-elevated align-middle"
     >
       <div

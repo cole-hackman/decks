@@ -17,7 +17,7 @@ regardless of how much of Lexicon they represent.
 | Interop & sync | 8 | 3 | 1 | 0 | 11 |
 | Library & browser | 17 | 0 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
-| Analysis | 2 | 4 | 3 | 2 | 0 |
+| Analysis | 3 | 3 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 3 | 0 | 1 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **60** | **20** | **14** | **2** | **16** |
+| **Total** | **61** | **19** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -108,7 +108,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Waveform | partial | Reads native Pioneer ANLZ (arguably better); no custom colours, no bulk pre-gen | 2 |
 | Key detection | partial | Chroma-based; single algorithm | 6 |
 | **Camelot → Open Key posture** | **decision needed** | Lexicon avoids Camelot for licensing; we use it everywhere incl. a "Mixed In Key" palette | see GAPS |
-| Energy | partial | Cached + displayed; no defined scale, no deliberate fill | 4 |
+| Energy | **done** | Absolute 1–10 scale defined in ADR-0015 (loudness / drive / brightness / tempo, fixed physical anchors); filled by every `analyze_file_cached` path | 4 |
 | Danceability / Popularity / Happiness | **blocked** | Lexicon sources all three from Spotify's `audio-features` endpoint, deprecated 2024-11-27 and 403 for applications registered since (ADR-0012). Danceability is approximable from onset density; **Popularity is a catalog metric that cannot be computed locally at all**. Previously mislabelled `missing`, which implied it was merely unbuilt | 4 |
 | Auto-analyze on add | **missing** | | 4 |
 | Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 11 of 13 rules, `Use as next track`, saveable templates. `Match colour` and `Recently added` ship now that `Track` carries the fields. The 2 that remain (Popularity/Danceability/Happiness) are blocked upstream, not unbuilt | 4, 6 |

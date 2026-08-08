@@ -334,3 +334,82 @@ mappings are never staged, exported or synced.
 the bootstrap case and duplicates identical rows per library); rewriting `folder_path` in the
 library via a staged change (breaks the two-computer workflow, which is the feature's whole
 purpose — `crates/relocate` already covers the case where a path is genuinely, permanently wrong).
+
+## ADR-0015 — The Energy Scale
+
+**Date:** 2026-08-08
+**Status:** Accepted
+
+**Context:** `docs/lexicon/04-analysis.md §Energy` describes an **absolute** energy scale — "chill
+tracks should land low and powerful/fast tracks high, on a fixed scale" — and `GAPS.md` open
+question 2 asked that we write our definition down *before* implementing, because Lexicon itself
+ships two mutually incompatible energy scales (its own analyzer, and Spotify's `audio-features`)
+and a third invented by accident would be worse than none.
+
+Until now `cache.audio_features.energy` existed, hydrated a column, fed six read surfaces
+(browser column, smartlist `energy` field, Mixable Tracks, both Field Mapping profiles, the Track
+Timeline, Playlist Tools' energy sort) — and **no production path ever wrote a non-NULL value.**
+The only non-NULL energies in the repository were test fixtures. The column was honest-looking and
+permanently empty.
+
+Spotify's `audio-features` endpoint is deprecated and returns 403 to applications registered after
+2024-11-27, so adopting its numbers for compatibility is not an option even if we wanted it
+(ADR-0012).
+
+**Decision:** Energy is a weighted sum of four measurements, each anchored to a **fixed physical
+quantity** so that the same file always yields the same number regardless of what else is in the
+library. Stored as `0.1–1.0`; shown as **1–10**.
+
+| Term | Weight | Measurement | 1 ⟶ 10 anchors |
+|---|---|---|---|
+| Loudness | 0.35 | dBFS of the louder half of the RMS envelope | −24 dBFS ⟶ −7 dBFS |
+| Drive | 0.25 | mean frame-to-frame *rise* in the envelope, ÷ mean RMS | 0 ⟶ 0.30 |
+| Brightness | 0.25 | spectral-centroid proxy, log axis | 400 Hz ⟶ 5000 Hz |
+| Tempo | 0.15 | BPM from the analyzer that already ran | 70 ⟶ 150 |
+
+- **Absolute, not relative.** No ranking, no percentile, no per-library normalisation. That is what
+  the spec's word "absolute" forecloses, and it is why every anchor is dBFS/Hz/BPM rather than a
+  quantile.
+- **The louder half only**, for loudness. A long ambient intro otherwise drags a genuinely loud
+  track down; the number should describe the track as it plays, not its mean amplitude.
+- **Rises only**, for drive. Signed differences over a whole track sum to ~0 by construction, and
+  counting decay would score a slow fade the same as a kick.
+- **Level-independent drive and brightness.** Both are ratios, so mastering level moves the
+  loudness term and nothing else.
+- **No term can carry or sink the score.** A silent file at 128 BPM is a 2, not a 1, because tempo
+  is still a real measurement of it. This is a consequence of the weights, and is pinned by test.
+- **Stored floor is 0.1, not 0.0**, so the display mapping every consumer already uses —
+  `(energy * 10.0).round()`, in `sync_mappings.rs` and `write_tags.rs` — lands in 1–10. Lexicon's
+  scale has no zero, and a silent file is a 1 rather than an absence.
+- **`ANALYZER_VERSION` bumped to `stratum-dsp-v2`.** A v1 row has BPM and key but a NULL energy;
+  without the bump it would satisfy the cache lookup forever and no existing library would ever
+  gain energies.
+
+**Known approximation, accepted:** ADR-0012 adopted **`libebur128`** for ITU-R BS.1770 loudness,
+and a gated LUFS measurement would be a better loudness term than frame RMS. It is not pulled in
+here because loudness is one term of four and the crate is not otherwise in the tree; the
+substitution is contained to `energy::loudness_dbfs` plus a version bump when we do it. Recorded
+here rather than left as a silent shortcut.
+
+**Brightness without an FFT.** For a sinusoid at frequency `f`,
+`rms(diff(x)) / rms(x) = 2·sin(π·f/fs)` exactly, so inverting recovers the frequency; for real
+signals it lands near the centroid and is monotonic in brightness, which is all the mapping needs.
+One pass over the samples, no dependency, and unit-tested against synthesised sines at 440 / 1000 /
+4000 Hz to within 5%.
+
+**Trade-offs accepted:**
+- The weights and anchors are a **judgement call**, tuned against synthesised signals rather than a
+  labelled corpus — `fixtures/audio/` holds only a `.gitkeep`, by design, so there is nothing in
+  the repository to validate against. They are stated here so they can be argued with, and they are
+  reachable in one place.
+- Changing any weight or anchor changes every stored number. That is an amendment to this ADR plus
+  an `ANALYZER_VERSION` bump, not a tweak.
+- Energy fills as tracks are analysed, not in one sweep. There is no separate bulk-energy pass;
+  `analyze_file_cached` is the single path, so every existing caller (context-menu Analyse, watch
+  folder arrivals, the agent tools) gains it at once.
+
+**Alternatives rejected:** percentile-within-library (contradicts "absolute" — a track's number
+would change when the library changed around it); Spotify's numbers (endpoint closed to us);
+Essentia's or madmom's models (non-free weights, ADR-0012); shipping the field NULL and marking the
+row a divergence (six read surfaces already consume it, and a permanently empty column is worse
+than a documented approximation).

@@ -2,6 +2,7 @@
 // Symphonia decode + stratum-dsp analysis pipeline.
 // See NOTICE at the workspace root for full attribution.
 
+pub mod energy;
 pub mod playable;
 
 use std::path::Path;
@@ -17,7 +18,13 @@ use symphonia::default::{get_codecs, get_probe};
 
 /// Analyzer version used as the cache key. Bump this string when the
 /// stratum-dsp crate is updated in a way that changes output values.
-pub const ANALYZER_VERSION: &str = "stratum-dsp-v1";
+///
+/// v2 adds `energy`. The bump is what stops a v1 row — which has BPM and key
+/// but a NULL energy — from satisfying the cache lookup and returning a result
+/// with no energy in it forever; the alternative, treating a missing energy as
+/// a partial hit, would mean every lookup for an old row re-decoded the file
+/// and then found itself unable to tell that from a genuine miss.
+pub const ANALYZER_VERSION: &str = "stratum-dsp-v2";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AnalysisError {
@@ -47,6 +54,9 @@ pub struct AnalysisResult {
     pub bpm_confidence: f64,
     /// Key confidence from stratum-dsp (0.0–1.0).
     pub key_confidence: f64,
+    /// Absolute energy, stored 0.1–1.0 and shown as 1–10. See ADR-0014 and
+    /// [`energy::score`] for the scale; `energy::to_display` converts.
+    pub energy: f64,
     /// Whether this result was served from cache (not re-analyzed).
     pub cached: bool,
 }
@@ -277,12 +287,17 @@ pub fn analyze_file(path: &Path) -> Result<AnalysisResult> {
     let bpm_conf = result.bpm_confidence as f64;
     let key_conf = result.key_confidence as f64;
 
+    // Reuses the samples already in hand — energy costs one more pass over the
+    // buffer, not a second decode.
+    let energy = energy::analyze(&samples, sample_rate, result.bpm) as f64;
+
     Ok(AnalysisResult {
         bpm: result.bpm as f64,
         musical_key: camelot_key,
         confidence: (bpm_conf + key_conf) / 2.0,
         bpm_confidence: bpm_conf,
         key_confidence: key_conf,
+        energy,
         cached: false,
     })
 }
@@ -358,13 +373,16 @@ pub fn analyze_file_cached(
         .get_audio_features(track_uri, ANALYZER_VERSION)
         .map_err(|e| AnalysisError::Cache(e.to_string()))?
     {
-        if let (Some(bpm), Some(key)) = (cached.bpm, cached.musical_key) {
+        if let (Some(bpm), Some(key), Some(energy)) =
+            (cached.bpm, cached.musical_key, cached.energy)
+        {
             return Ok(AnalysisResult {
                 bpm,
                 musical_key: key,
                 confidence: 0.0, // confidence not stored in cache
                 bpm_confidence: 0.0,
                 key_confidence: 0.0,
+                energy,
                 cached: true,
             });
         }
@@ -379,7 +397,7 @@ pub fn analyze_file_cached(
             ANALYZER_VERSION,
             Some(result.bpm),
             Some(&result.musical_key),
-            None,
+            Some(result.energy),
             None,
         )
         .map_err(|e| AnalysisError::Cache(e.to_string()))?;

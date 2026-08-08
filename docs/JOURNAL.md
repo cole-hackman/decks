@@ -3002,3 +3002,58 @@ the documented process exactly could still ship a red build. Added it, with a no
 Second process lesson of the session, and the same shape as the first: the checks that catch things
 are the ones you actually run. `pnpm e2e` was on the list and I skipped it; `cargo fmt` was not on
 the list at all.
+
+## Session — 2026-08-08 — Epic 4: the Energy scale
+
+### Plan
+Close the last `partial` row that was actually buildable in this container. Energy was flagged in
+the previous session as a finding rather than started, because `GAPS.md` open question 2 asked for
+a written definition first and the mapping is a judgement call. The standing directive is to keep
+building, so: write the definition down as an ADR, implement it, and say plainly which parts are
+approximations.
+
+### What I found first
+`crates/audio-analysis/src/lib.rs` passed `None` for energy on every single analysis. Grepping for
+a non-`None` energy anywhere in a production path returned nothing — the only such values in the
+repository were two test fixtures (`organizer.rs:590`, `write_tags.rs:421`). Meanwhile six read
+surfaces consumed the column. That is the failure mode ADR-0008 exists to prevent, arrived at by
+omission rather than by a false claim: nothing lied, the column was simply always empty, and a
+tooltip reading `Energy 0.62` gave it the appearance of a measurement.
+
+### Decisions
+- **Absolute, not relative** (ADR-0015). The spec's own word. Every anchor is dBFS / Hz / BPM, so
+  the same file always yields the same number — no ranking, no percentile, no per-library
+  normalisation. Pinned by a determinism test.
+- **Four terms, no term decisive.** Loudness 0.35, drive 0.25, brightness 0.25, tempo 0.15. The
+  consequence — a silent file at 128 BPM is a 2, not a 1 — is asserted rather than smoothed away,
+  because it follows from the weights and pretending otherwise would mean special-casing silence.
+- **Brightness without an FFT.** `rms(diff(x))/rms(x) = 2·sin(π·f/fs)` for a sinusoid, so inverting
+  recovers the frequency. One pass, no dependency, and tested to 5% against 440/1000/4000 Hz plus
+  invariance under sample rate and volume.
+- **Stored floor 0.1, not 0.0**, so the `(e*10).round()` mapping that `sync_mappings.rs` and
+  `write_tags.rs` already use lands in 1–10. Lexicon's scale has no zero.
+- **`ANALYZER_VERSION` → `stratum-dsp-v2`.** Without it, v1 rows (BPM + key, NULL energy) satisfy
+  the cache lookup forever and no existing library ever gains energies.
+- **`libebur128` deliberately not pulled in**, though ADR-0012 adopted it. Loudness is one term of
+  four; the swap to gated LUFS is contained to `energy::loudness_dbfs` plus a version bump. Written
+  into the ADR as a known approximation rather than left as a silent shortcut.
+- **The scale converter lives in `lib/energy.ts`, not next to the bar.** Three consumers; a copy
+  per consumer is how the two halves of a scale drift apart. Its rounding is tested against the
+  Rust half's boundaries.
+
+### Two tests I wrote wrong first
+`silence_is_the_bottom_of_the_scale` asserted 1 and got 2. The code was right and the test was
+expressing a belief about silence I had not checked against the weights I had just chosen. Rewrote
+it to assert what actually holds — every measurable term bottoms out, tempo still counts — which is
+a more useful test than the one I meant to write.
+
+`EnergyBar.test.tsx` pinned `aria-valuenow="0.42"`. That was the old behaviour and changing it was
+the point: a screen reader announcing "0.42" reads out a number on no published scale.
+
+### Verification
+`cargo fmt --check`, `cargo test --workspace`, `cargo clippy --workspace --all-targets -D warnings`
+(clean, including `decks-desktop`), `pnpm test` (822), `pnpm typecheck`, `pnpm lint`, `pnpm e2e`
+(59 passed). Clippy caught `0.7071` as an approximation of `FRAC_1_SQRT_2` in a test — fair.
+
+### Parity
+61 done / 19 partial / 14 missing / 2 blocked / 16 deferred. `GAPS.md` open question 2 closed.

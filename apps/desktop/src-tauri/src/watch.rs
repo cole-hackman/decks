@@ -290,6 +290,7 @@ mod tests {
             confidence,
             bpm_confidence: confidence,
             key_confidence: confidence,
+            energy: 0.6,
             cached: false,
         }
     }

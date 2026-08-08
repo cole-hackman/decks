@@ -75,6 +75,7 @@ const ANALYSIS: AnalysisResult = {
   bpm: 132.0,
   musical_key: "9B",
   confidence: 0.87,
+  energy: 0.7,
   bpm_confidence: 0.9,
   key_confidence: 0.84,
   cached: false,
