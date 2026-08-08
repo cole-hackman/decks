@@ -27,6 +27,8 @@ const BASIC_OPTIONS: MixableOptions = {
   rating: { kind: "off" },
   must_have_tags: [],
   must_not_have_tags: [],
+  match_color: false,
+  added_since: null,
   limit: 25,
 };
 
@@ -59,6 +61,11 @@ function track(id: string, over: Partial<Track> = {}): Track {
     bit_rate: null,
     release_year: null,
     dj_play_count: null,
+    label: null,
+    remixer: null,
+    mix: null,
+    color: null,
+    date_added: null,
     energy: null,
     ...over,
   } as Track;
@@ -137,13 +144,26 @@ describe("MixableTracksPanel", () => {
     ).toBeInTheDocument();
   });
 
-  it("names the fields it does not offer rather than showing dead controls", async () => {
+  it("names the fields it does not offer, and why", async () => {
     renderPanel();
     await screen.findByTestId("mixable-results");
     await userEvent.click(screen.getByRole("button", { name: "Advanced rules" }));
-    expect(screen.getByTestId("advanced-rules")).toHaveTextContent(
-      /Colour, date added, Popularity, Danceability and Happiness are not offered/,
+    // Colour and date-added used to be on this list; they ship now. What is
+    // left is blocked on a withdrawn upstream API, not on a missing column,
+    // and the notice has to say which — per ADR-0008.
+    const rules = screen.getByTestId("advanced-rules");
+    expect(rules).toHaveTextContent(
+      /Popularity, Danceability and Happiness are not offered/,
     );
+    expect(rules).not.toHaveTextContent(/Colour, date added/);
+  });
+
+  it("offers the colour and added-since rules", async () => {
+    renderPanel();
+    await screen.findByTestId("mixable-results");
+    await userEvent.click(screen.getByRole("button", { name: "Advanced rules" }));
+    expect(screen.getByLabelText("Match colour")).not.toBeChecked();
+    expect(screen.getByLabelText("Added since")).toHaveValue("");
   });
 
   it("shows the compatible key set for the seed track", async () => {

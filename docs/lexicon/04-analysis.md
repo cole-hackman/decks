@@ -155,11 +155,20 @@ open as a right-hand inspector so it can be driven through a set. `Use as next t
 from the row just picked. Option sets save as templates (cache migration **v15**). Key Mixing Mode
 is a global setting with both modes, and the panel shows the resulting compatible-key set.
 
-Nine of the thirteen advanced options are implemented: BPM range, Match key, Include half/double
-BPM, Must have cue points, Genre(s), Year, Energy, Rating, Must have tag / Must not have tag.
-**Four are deliberately absent** — `Match color` and `Recently added` need colour and date-added
-columns `Track` does not carry, and Popularity / Danceability / Happiness are the Lexicon-only
-analysis fields from Epic 4. They are missing rather than present-and-inert, per ADR-0008.
+Eleven of the thirteen advanced options are implemented: BPM range, Match key, Include half/double
+BPM, Must have cue points, Genre(s), Year, Energy, Rating, Must have tag / Must not have tag, and —
+since `Track` gained colour and date-added — `Match color` and `Recently added`.
+
+`Match color` is case-insensitive, and a source track with **no** colour admits nothing rather than
+everything: the rule means "the same colour as this one", and "the same as nothing" is not a set
+worth returning. `Recently added` takes an ISO-8601 cutoff and compares lexicographically, matching
+the smartlist date rules; a track with no date is excluded, because we do not know when it arrived
+and cannot claim it is new.
+
+**Two remain absent, and not for want of a column.** Popularity / Danceability / Happiness come
+from Spotify's `audio-features` endpoint in Lexicon, which was deprecated on 2024-11-27 and returns
+403 for applications registered since; Popularity is a catalog metric that cannot be measured
+locally at all. See ADR-0012. They are missing rather than present-and-inert, per ADR-0008.
 
 Two things were fixed on the way. `score_transition` carried its own Camelot-only key parser, so
 every spelled-out key (`C minor`) scored as "Missing Key Data"; it now routes through

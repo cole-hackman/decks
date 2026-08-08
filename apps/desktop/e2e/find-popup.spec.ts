@@ -34,6 +34,11 @@ test.beforeEach(async ({ page }) => {
         bit_rate: 320,
         release_year: null,
         dj_play_count: null,
+        label: null,
+        remixer: null,
+        mix: null,
+        color: null,
+        date_added: null,
       },
       {
         id: "2",
@@ -53,6 +58,11 @@ test.beforeEach(async ({ page }) => {
         bit_rate: 320,
         release_year: null,
         dj_play_count: null,
+        label: null,
+        remixer: null,
+        mix: null,
+        color: null,
+        date_added: null,
       },
     ];
 

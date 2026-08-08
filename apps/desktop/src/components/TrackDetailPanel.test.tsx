@@ -52,6 +52,11 @@ const BASE_TRACK: Track = {
   bit_rate: null,
   release_year: 2014,
   dj_play_count: 5,
+  label: null,
+  remixer: null,
+  mix: null,
+  color: null,
+  date_added: null,
   energy: null,
 };
 

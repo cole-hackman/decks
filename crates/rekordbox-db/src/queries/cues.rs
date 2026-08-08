@@ -1,3 +1,4 @@
+use crate::queries::columns::{missing_column, pick_column, table_columns};
 use crate::types::{CueKind, HotCue};
 use anyhow::Result;
 use rusqlite::{params, Connection};
@@ -87,35 +88,6 @@ fn cue_select(conn: &Connection) -> Result<CueSelect> {
         content_expr,
         in_expr,
     })
-}
-
-fn table_columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", quote_ident(table)))?;
-    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
-    rows.collect::<rusqlite::Result<Vec<_>>>()
-        .map_err(Into::into)
-}
-
-fn pick_column(columns: &[String], candidates: &[&str]) -> Option<String> {
-    candidates.iter().find_map(|candidate| {
-        columns
-            .iter()
-            .find(|column| column.eq_ignore_ascii_case(candidate))
-            .map(|column| quote_ident(column))
-    })
-}
-
-fn quote_ident(ident: &str) -> String {
-    format!("\"{}\"", ident.replace('"', "\"\""))
-}
-
-fn missing_column(table: &str, columns: &[String], label: &str) -> anyhow::Error {
-    let available = if columns.is_empty() {
-        "none".to_owned()
-    } else {
-        columns.join(", ")
-    };
-    anyhow::anyhow!("{table} has no {label} column; available columns: {available}")
 }
 
 #[cfg(test)]

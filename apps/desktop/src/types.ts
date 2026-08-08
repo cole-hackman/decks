@@ -143,6 +143,16 @@ export interface Track {
   bit_rate: number | null;
   release_year: number | null;
   dj_play_count: number | null;
+  /** Record label, from `djmdLabel`. */
+  label: string | null;
+  /** Remixer, from `djmdArtist` via `RemixerID`. */
+  remixer: string | null;
+  /** Mix name — "Extended Mix", "Radio Edit" — from `djmdContent.Subtitle`. */
+  mix: string | null;
+  /** Rekordbox's own colour label, by name rather than id. */
+  color: string | null;
+  /** ISO-8601 as stored; format varies by library, so it is not reformatted. */
+  date_added: string | null;
   /** 0.0–1.0 audio energy, hydrated from `audio_features` cache. */
   energy: number | null;
 }
@@ -203,6 +213,11 @@ export type SmartlistField =
   | "genre"
   | "comment"
   | "file_path"
+  | "label"
+  | "remixer"
+  | "mix"
+  | "color"
+  | "date_added"
   | "musical_key"
   | "bpm"
   | "rating"
@@ -218,7 +233,13 @@ export type SmartlistField =
   | "is_archived"
   | "tags";
 
-export type SmartlistFieldKind = "text" | "key" | "number" | "bool" | "tags";
+export type SmartlistFieldKind =
+  | "text"
+  | "key"
+  | "number"
+  | "bool"
+  | "tags"
+  | "date";
 
 export type SmartlistOperator =
   | "contains"
@@ -243,6 +264,7 @@ export type SmartlistValue =
   | { type: "text"; value: string }
   | { type: "number"; value: number }
   | { type: "range"; value: [number, number] }
+  | { type: "text_range"; value: [string, string] }
   | { type: "tags"; value: string[] }
   | { type: "none" };
 
@@ -982,6 +1004,10 @@ export interface MixableOptions {
   /** Tag ids. */
   must_have_tags: string[];
   must_not_have_tags: string[];
+  /** Only candidates carrying the source track's colour. */
+  match_color: boolean;
+  /** ISO-8601 date; only candidates added on or after it. `null` is off. */
+  added_since: string | null;
   limit: number;
 }
 

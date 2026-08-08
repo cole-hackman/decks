@@ -319,6 +319,11 @@ mod tests {
             bit_rate: None,
             release_year: None,
             dj_play_count: None,
+            label: None,
+            remixer: None,
+            mix: None,
+            color: None,
+            date_added: None,
             energy: None,
         }
     }

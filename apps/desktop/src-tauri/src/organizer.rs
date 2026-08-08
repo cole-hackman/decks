@@ -582,6 +582,11 @@ mod tests {
             bit_rate: Some(320),
             release_year: None,
             dj_play_count: None,
+            label: None,
+            remixer: None,
+            mix: None,
+            color: None,
+            date_added: None,
             energy: Some(0.82),
         }
     }

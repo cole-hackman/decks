@@ -21,6 +21,11 @@ export const FIELD_KINDS: Record<SmartlistField, SmartlistFieldKind> = {
   genre: "text",
   comment: "text",
   file_path: "text",
+  label: "text",
+  remixer: "text",
+  mix: "text",
+  color: "text",
+  date_added: "date",
   musical_key: "key",
   bpm: "number",
   rating: "number",
@@ -44,6 +49,11 @@ export const FIELD_LABELS: Record<SmartlistField, string> = {
   genre: "Genre",
   comment: "Comment",
   file_path: "File path",
+  label: "Label",
+  remixer: "Remixer",
+  mix: "Mix",
+  color: "Colour",
+  date_added: "Date added",
   musical_key: "Key",
   bpm: "BPM",
   rating: "Rating",
@@ -104,6 +114,19 @@ export const OPERATORS_BY_KIND: Record<SmartlistFieldKind, SmartlistOperator[]> 
   ],
   bool: ["is_true", "is_false"],
   tags: ["has_all", "has_any", "has_none"],
+  // No `contains`: a date is compared, not searched. `equals` is a prefix
+  // match on the Rust side, so "2025-03" means "during March 2025".
+  date: [
+    "equals",
+    "not_equals",
+    "greater_than",
+    "less_than",
+    "greater_or_equal",
+    "less_or_equal",
+    "between",
+    "is_none",
+    "is_not_none",
+  ],
 };
 
 export const ALL_FIELDS = Object.keys(FIELD_LABELS) as SmartlistField[];
@@ -130,6 +153,11 @@ export function defaultValueFor(
     return op === "between"
       ? { type: "range", value: [0, 0] }
       : { type: "number", value: 0 };
+  }
+  if (kind === "date") {
+    return op === "between"
+      ? { type: "text_range", value: ["", ""] }
+      : { type: "text", value: "" };
   }
   return { type: "text", value: "" };
 }
@@ -165,6 +193,8 @@ export function describeRule(
     case "number":
       return `${head} ${value.value}`;
     case "range":
+      return `${head} ${value.value[0]}–${value.value[1]}`;
+    case "text_range":
       return `${head} ${value.value[0]}–${value.value[1]}`;
     case "tags":
       return `${head} ${value.value.length} tag(s)`;

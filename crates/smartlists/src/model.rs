@@ -43,6 +43,13 @@ pub enum Field {
     Genre,
     Comment,
     FilePath,
+    Label,
+    Remixer,
+    Mix,
+    /// Rekordbox's own colour label, matched by name.
+    Color,
+    // Date (ISO-8601 strings, compared lexicographically)
+    DateAdded,
     // Key (notation-aware equality)
     MusicalKey,
     // Numeric
@@ -73,7 +80,12 @@ impl Field {
             | Field::Album
             | Field::Genre
             | Field::Comment
-            | Field::FilePath => FieldKind::Text,
+            | Field::FilePath
+            | Field::Label
+            | Field::Remixer
+            | Field::Mix
+            | Field::Color => FieldKind::Text,
+            Field::DateAdded => FieldKind::Date,
             Field::MusicalKey => FieldKind::Key,
             Field::Bpm
             | Field::Rating
@@ -99,6 +111,14 @@ pub enum FieldKind {
     Number,
     Bool,
     Tags,
+    /// An ISO-8601 timestamp held as a string.
+    ///
+    /// Compared lexicographically rather than parsed. For ISO-8601 that gives
+    /// the same ordering as real date comparison, and it avoids inventing a
+    /// precision the source column does not have — `djmdContent.DateCreated`
+    /// is sometimes a date, sometimes a full timestamp, depending on how the
+    /// library was migrated.
+    Date,
 }
 
 /// Comparison operators. The set mirrors the vocabulary Lexicon documents for
@@ -138,6 +158,10 @@ pub enum Value {
     Text(String),
     Number(f64),
     Range(f64, f64),
+    /// Inclusive range over two ISO-8601 strings, for `DateAdded`. Separate
+    /// from `Range` because a date is not a number and coercing it to one
+    /// would lose the prefix semantics date matching depends on.
+    TextRange(String, String),
     /// Custom tag IDs. Matching is by exact tag identity — Lexicon matches full
     /// labels only, never partial, as a deliberate performance decision.
     Tags(Vec<String>),
@@ -170,16 +194,22 @@ impl Rule {
         let ok = match self.op {
             Operator::Contains | Operator::NotContains => kind == FieldKind::Text,
             Operator::Equals | Operator::NotEquals => {
-                matches!(kind, FieldKind::Text | FieldKind::Number | FieldKind::Key)
+                matches!(
+                    kind,
+                    FieldKind::Text | FieldKind::Number | FieldKind::Key | FieldKind::Date
+                )
             }
             Operator::IsNone | Operator::IsNotNone => {
-                matches!(kind, FieldKind::Text | FieldKind::Number | FieldKind::Key)
+                matches!(
+                    kind,
+                    FieldKind::Text | FieldKind::Number | FieldKind::Key | FieldKind::Date
+                )
             }
             Operator::GreaterThan
             | Operator::LessThan
             | Operator::GreaterOrEqual
             | Operator::LessOrEqual
-            | Operator::Between => kind == FieldKind::Number,
+            | Operator::Between => matches!(kind, FieldKind::Number | FieldKind::Date),
             Operator::IsTrue | Operator::IsFalse => kind == FieldKind::Bool,
             Operator::HasAll | Operator::HasAny | Operator::HasNone => kind == FieldKind::Tags,
         };

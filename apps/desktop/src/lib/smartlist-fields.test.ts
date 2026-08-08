@@ -68,4 +68,38 @@ describe("smartlist-fields", () => {
       describeRule("tags", "has_all", { type: "tags", value: ["a", "b"] }),
     ).toBe("Custom tags has all of 2 tag(s)");
   });
+
+  it("offers comparison but not search operators for a date field", () => {
+    // A date is compared, not searched — `contains` on a timestamp is noise.
+    const ops = operatorsFor("date_added");
+    expect(ops).toContain("greater_than");
+    expect(ops).toContain("between");
+    expect(ops).not.toContain("contains");
+  });
+
+  it("gives a date between rule two date operands, not two numbers", () => {
+    expect(defaultValueFor("date_added", "between")).toEqual({
+      type: "text_range",
+      value: ["", ""],
+    });
+    expect(defaultValueFor("date_added", "greater_than")).toEqual({
+      type: "text",
+      value: "",
+    });
+  });
+
+  it("treats the new library fields as text", () => {
+    for (const field of ["label", "remixer", "mix", "color"] as const) {
+      expect(operatorsFor(field)).toContain("contains");
+    }
+  });
+
+  it("describes a date range readably", () => {
+    expect(
+      describeRule("date_added", "between", {
+        type: "text_range",
+        value: ["2025-01-01", "2025-06-30"],
+      }),
+    ).toBe("Date added between 2025-01-01–2025-06-30");
+  });
 });

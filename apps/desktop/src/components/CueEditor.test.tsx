@@ -46,6 +46,11 @@ const TRACK: Track = {
   bit_rate: null,
   release_year: null,
   dj_play_count: null,
+  label: null,
+  remixer: null,
+  mix: null,
+  color: null,
+  date_added: null,
   energy: null,
 };
 

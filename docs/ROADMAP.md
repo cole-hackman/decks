@@ -149,8 +149,13 @@ Branch `claude/lexicon-file-organizer`. Specs: [`06-files.md`](lexicon/06-files.
 - [x] **Field Mappings** — per-target, overwrite vs append, multi-source combining (ID3 profile; per-DJ-app profiles and sync-time application outstanding)
 - [ ] Revive `crates/enrichment`: Find Tags & Album Art; main genre → Genre, subgenres → Custom Tags
 - [ ] Album art: fetch, embed, replace, remove, reload
-- [ ] Energy / Danceability / Popularity / Happiness from our own analysis (**not** Spotify — see
-      ADR-0012)
+- [x] **Widen `Track`** — Label, Remixer, Mix, Colour, Date added, read from `djmdLabel`,
+      `djmdColor`, `RemixerID` and `Subtitle`. Probed per connection so a library without the
+      columns still reads. Unblocks the browser columns, the smartlist vocabulary and two of
+      Mixable Tracks' missing rules
+- [ ] Energy from our own analysis. **Danceability / Popularity / Happiness are blocked, not
+      pending** — Lexicon takes them from Spotify's `audio-features`, deprecated 2024-11-27 and
+      403 for new applications, and Popularity cannot be computed locally at all (ADR-0012)
 - [ ] Beatshift detection on import/sync + Beatshift Fixer re-encode with an already-done ledger
 - [x] Find Unused Files with include/exclude extensions and DJ-folder skips
 - [x] Local Path Mappings
@@ -232,8 +237,8 @@ Branch `claude/lexicon-set-prep`. Specs: [`02-library.md`](lexicon/02-library.md
       drag-to-reorder not done; the picker orders by tick order
 - [x] Key conversion leading-zero option — a Sync setting, applied after conversion and
       independently of it. **Colors → nearest is blocked**: `Track` has no colour field and no
-      change kind writes `ColorID`, so there is nothing to map; the flag stays accepted and
-      unexposed rather than shipping a switch that does nothing
+      change kind writes `ColorID`. `Track` carries colour now, so it is read, shown and matched
+      on; the Sync flag stays accepted and unexposed until something can write it back
 
 ---
 

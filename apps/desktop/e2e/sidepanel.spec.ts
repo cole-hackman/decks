@@ -19,6 +19,11 @@ test.beforeEach(async ({ page }) => {
         bit_rate: 320,
         release_year: 2020,
         dj_play_count: 0,
+        label: null,
+        remixer: null,
+        mix: null,
+        color: null,
+        date_added: null,
         energy: null,
       };
 
