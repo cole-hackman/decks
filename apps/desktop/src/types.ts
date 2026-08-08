@@ -126,6 +126,8 @@ export interface AnalysisResult {
   confidence: number;
   bpm_confidence: number;
   key_confidence: number;
+  /** Stored 0.1–1.0; `energyToDisplay` converts to the 1–10 the user sees. */
+  energy: number;
   cached: boolean;
 }
 

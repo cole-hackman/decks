@@ -11,6 +11,7 @@ import {
   playTrack,
   revealInFinder,
 } from "../ipc";
+import { energyToDisplay } from "../lib/energy";
 import type { Track } from "../types";
 
 interface Options {
@@ -68,7 +69,7 @@ export function useTrackContextActions({
           toast({
             variant: "success",
             message: `${track.title ?? "Track"} analysed`,
-            detail: `BPM ${result.bpm.toFixed(1)} · Key ${result.musical_key} · ${(result.confidence * 100).toFixed(0)}% conf.`,
+            detail: `BPM ${result.bpm.toFixed(1)} · Key ${result.musical_key} · Energy ${energyToDisplay(result.energy)} · ${(result.confidence * 100).toFixed(0)}% conf.`,
           });
         })
         .catch((e: unknown) => {

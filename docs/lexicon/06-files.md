@@ -173,7 +173,16 @@ empty is not written.** Otherwise ticking "Artist" on a library that happens not
 would blank a perfectly good tag in the file. Those tracks come back as `skipped` and the UI says
 how many.
 
-Still missing: field-mapping projection and auto-write-on-change.
+Field-mapping projection ships — `write_tags::apply_mappings` runs the same profile machinery as
+Sync, so Lexicon-only fields reach real tag fields on the way out.
+
+Auto-write ships too, but **narrower than the manual's "whenever a change is detected"**: it fires
+on watch-folder arrivals only, writes BPM and key only, and refuses below 0.75 confidence, because
+overwriting a tag the file already carried with a low-confidence guess is worse than not writing.
+Still missing: a trigger on library changes generally, rather than on new arrivals.
+
+(An earlier revision of this section and of the `PARITY.md` row claimed field mappings and
+auto-write were both absent. They had shipped in Epic 4; the notes had not caught up.)
 
 *Epic* — **4**.
 

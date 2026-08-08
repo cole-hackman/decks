@@ -1,5 +1,54 @@
 # Status
 
+## 2026-08-08 — Energy gets a scale, and stops being an empty column
+
+`cache.audio_features.energy` had existed for a long time. It hydrated a column, fed a smartlist
+field, a Mixable Tracks rule, both Field Mapping profiles, the Track Timeline and Playlist Tools'
+energy sort — six read surfaces — and **no production path had ever written a non-NULL value into
+it.** The only non-NULL energies anywhere in the repository were test fixtures. Every one of those
+surfaces was reading a column that was always empty, and the browser's tooltip was reporting a
+raw `0.62` on no published scale at all.
+
+**ADR-0015 defines the scale**, which `GAPS.md` open question 2 had asked for explicitly *before*
+any implementation — the reason being that Lexicon itself ships two mutually incompatible energy
+scales, and a third invented by accident would be worse than none. It is an absolute 1–10:
+loudness (0.35), percussive drive (0.25), brightness (0.25), tempo (0.15), each anchored to a fixed
+physical quantity — dBFS, a level-independent ratio, Hz, BPM. Absolute is the spec's own word, and
+it is what rules out ranking or percentile normalisation: a track's number must not move because
+the library moved around it.
+
+Some of the shape came from asking what would be wrong rather than what would be easy. Loudness
+takes the *louder half* of the envelope, because a long ambient intro otherwise drags a genuinely
+loud track down. Drive counts *rises only*, because signed differences over a whole track sum to
+about zero by construction. Drive and brightness are both ratios, so mastering level moves the
+loudness term and nothing else.
+
+Brightness is computed without an FFT: for a sinusoid at frequency `f`,
+`rms(diff(x)) / rms(x) = 2·sin(π·f/fs)` exactly, so inverting recovers the frequency. One pass over
+the samples, no dependency, and it is tested against synthesised sines at 440 / 1000 / 4000 Hz to
+within 5% — and pinned to be invariant under both sample rate and volume, either of which would
+otherwise make the same tone read as a different track.
+
+**A silent file at 128 BPM scores 2, not 1**, and that is pinned by test rather than papered over.
+Tempo is still a real measurement of that file, and it is 15% of the score. No single term can
+carry the number; the consequence is that no single term can sink it either.
+
+**Known approximation, stated rather than hidden.** ADR-0012 adopted `libebur128` for ITU-R BS.1770
+loudness and a gated LUFS reading would be a better loudness term than frame RMS. It is not pulled
+in because loudness is one term of four and the crate is not otherwise in the tree; the swap is
+contained to one function plus a version bump. That is in the ADR, not left implicit.
+
+`ANALYZER_VERSION` is bumped to `stratum-dsp-v2`. A v1 row has BPM and key but a NULL energy, and
+without the bump it would satisfy the cache lookup forever — no existing library would ever gain
+energies, and the feature would look shipped while doing nothing.
+
+No new UI: `analyze_file_cached` is the single fill path, so the context-menu Analyse, watch-folder
+arrivals and the agent tools all gain it at once. What did change is what the user reads — the
+Energy bar's tooltip and ARIA range now say "Energy 7 of 10" instead of `0.42`, and the analysis
+toast reports it alongside BPM and key.
+
+Parity: **61 done / 19 partial / 14 missing / 2 blocked / 16 deferred.**
+
 ## 2026-08-07 — A drag source, and why ANLZ writes stay unbuilt
 
 Two things: the last Library & browser gap, and an investigation that closes off four others by

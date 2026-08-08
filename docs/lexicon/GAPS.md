@@ -86,8 +86,11 @@ Verified in the Claude Code container on 2026-08-06, and relevant to whoever pic
    `decks` uses Camelot throughout, including a palette explicitly labelled as Mixed In Key's.
    Before this repo goes public under GPL-3 we should decide whether to follow suit. See
    `04-analysis.md` and `PARITY.md`.
-2. **Energy scale.** Lexicon documents an *absolute* energy scale and a second, incompatible one
-   from Spotify. Spotify's `audio-features` endpoint is deprecated and unavailable to new
-   applications, so we need our own definition and should write it down before implementing.
+2. ~~**Energy scale.**~~ **Resolved** — **ADR-0015** defines it: absolute 1–10 from loudness,
+   drive, brightness and tempo, anchored to fixed physical quantities. Spotify's endpoint is
+   deprecated and closed to new applications, so its scale was never available to adopt. The
+   weights are a judgement call tuned against synthesised signals — `fixtures/audio/` holds only a
+   `.gitkeep`, so there is nothing in the repository to validate against — and are stated in the
+   ADR so they can be argued with in one place.
 3. **Undo vs staged changes.** `decks` gates changes before they apply; Lexicon offers 60-minute
    undo after. These are different safety models and we should decide whether we want both.

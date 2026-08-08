@@ -33,9 +33,20 @@ describe("EnergyBar", () => {
     expect(fillWidth()).toBe("0%");
   });
 
-  it("exposes ARIA progressbar role with current value", () => {
+  it("announces the 1–10 scale, not the stored fraction", () => {
+    // A screen reader saying "0.42" reads out a number on no published scale.
+    // The scale is 1–10 (ADR-0015), so that is what the ARIA range says too.
     render(<EnergyBar value={0.42} />);
     const bar = screen.getByRole("progressbar");
-    expect(bar).toHaveAttribute("aria-valuenow", "0.42");
+    expect(bar).toHaveAttribute("aria-valuenow", "4");
+    expect(bar).toHaveAttribute("aria-valuemin", "1");
+    expect(bar).toHaveAttribute("aria-valuemax", "10");
+    expect(bar).toHaveAttribute("title", "Energy 4 of 10");
+  });
+
+  it("still fills proportionally to the stored value", () => {
+    // The bar's width is the one place the raw 0–1 is still the right unit.
+    render(<EnergyBar value={0.42} />);
+    expect(fillWidth()).toBe("42%");
   });
 });

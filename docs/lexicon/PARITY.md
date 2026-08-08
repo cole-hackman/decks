@@ -17,7 +17,7 @@ regardless of how much of Lexicon they represent.
 | Interop & sync | 8 | 3 | 1 | 0 | 11 |
 | Library & browser | 17 | 0 | 1 | 0 | 0 |
 | Smartlists | 2 | 1 | 0 | 0 | 0 |
-| Analysis | 2 | 4 | 3 | 2 | 0 |
+| Analysis | 3 | 3 | 3 | 2 | 0 |
 | Player, cues, generator | 10 | 6 | 0 | 0 | 0 |
 | Files | 7 | 4 | 0 | 0 | 0 |
 | Health | 3 | 0 | 1 | 0 | 0 |
@@ -25,7 +25,7 @@ regardless of how much of Lexicon they represent.
 | Streaming | 1 | 1 | 7 | 0 | 0 |
 | History & backup | 3 | 0 | 0 | 0 | 2 |
 | Extensibility | 0 | 0 | 0 | 0 | 3 |
-| **Total** | **60** | **20** | **14** | **2** | **16** |
+| **Total** | **61** | **19** | **14** | **2** | **16** |
 
 The shape of the work: library *hygiene*, *editing* and *set preparation* are broadly covered.
 What is thin is *automation* — nothing runs unprompted except auto-analyse — and *enrichment*,
@@ -108,7 +108,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Waveform | partial | Reads native Pioneer ANLZ (arguably better); no custom colours, no bulk pre-gen | 2 |
 | Key detection | partial | Chroma-based; single algorithm | 6 |
 | **Camelot → Open Key posture** | **decision needed** | Lexicon avoids Camelot for licensing; we use it everywhere incl. a "Mixed In Key" palette | see GAPS |
-| Energy | partial | Cached + displayed; no defined scale, no deliberate fill | 4 |
+| Energy | **done** | Absolute 1–10 scale defined in ADR-0015 (loudness / drive / brightness / tempo, fixed physical anchors); filled by every `analyze_file_cached` path | 4 |
 | Danceability / Popularity / Happiness | **blocked** | Lexicon sources all three from Spotify's `audio-features` endpoint, deprecated 2024-11-27 and 403 for applications registered since (ADR-0012). Danceability is approximable from onset density; **Popularity is a catalog metric that cannot be computed locally at all**. Previously mislabelled `missing`, which implied it was merely unbuilt | 4 |
 | Auto-analyze on add | **missing** | | 4 |
 | Mixable Tracks | **done** | Panel reachable from the track context menu and the header; 11 of 13 rules, `Use as next track`, saveable templates. `Match colour` and `Recently added` ship now that `Track` carries the fields. The 2 that remain (Popularity/Danceability/Happiness) are blocked upstream, not unbuilt | 4, 6 |
@@ -146,7 +146,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
 | Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9, Send to entry; no picker popup | 4 |
-| Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
+| Write Tags (ID3) | partial | Bulk flow, per-field selection, **and field-mapping projection** (`write_tags::apply_mappings`) all ship; auto-write ships too but is narrower than the spec's "whenever a change is detected" — it fires on watch-folder arrivals only, writes BPM and key only, and refuses below 0.75 confidence. **This row's note previously claimed both were missing; they shipped in Epic 4** | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
 | Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |

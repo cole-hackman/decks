@@ -85,9 +85,18 @@ doesn't always hold given how music is structured.
 a different algorithm, produces different numbers, and fails for anything not in Spotify's catalog.
 Two sources, two scales, documented as such.
 
-*decks status* — **partial.** `cache.audio_features.energy` exists and hydrates an Energy column in
-the track table via `hydrate_energy` / `get_energy_by_uris`. No documented scale, no analyzer path
-that fills it deliberately at scale.
+*decks status* — **done.** The scale is defined in **ADR-0015**: an absolute 1–10 built from
+loudness (0.35), percussive drive (0.25), brightness (0.25) and tempo (0.15), each anchored to a
+fixed physical quantity (dBFS, a level-independent ratio, Hz, BPM) so a track's number never moves
+because the library moved around it. `crates/audio-analysis/src/energy.rs` implements it and
+`analyze_file_cached` fills it, so every existing caller — the context-menu Analyse, watch-folder
+arrivals, the agent tools — gains it at once. `ANALYZER_VERSION` is bumped to `stratum-dsp-v2` so
+pre-existing cache rows, which have BPM and key but a NULL energy, do not satisfy the lookup
+forever.
+
+The loudness term is frame RMS rather than the gated ITU-R BS.1770 measurement ADR-0012 adopted
+`libebur128` for; that substitution is contained to one function plus a version bump, and is
+recorded in ADR-0015 as a known approximation rather than left implicit.
 
 *Epic* — **4**.
 
