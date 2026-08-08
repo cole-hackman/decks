@@ -146,7 +146,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Rename patterns (`%field%`, `{}` optional) | **done** | `crates/file-organizer::pattern`; nesting rejected, renders trimmed | 4 |
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
 | Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9, Send to entry; no picker popup | 4 |
-| Write Tags (ID3) | partial | Bulk flow + per-field selection done; no field mappings, no auto-write | 4 |
+| Write Tags (ID3) | partial | Bulk flow, per-field selection, **and field-mapping projection** (`write_tags::apply_mappings`) all ship; auto-write ships too but is narrower than the spec's "whenever a change is detected" — it fires on watch-folder arrivals only, writes BPM and key only, and refuses below 0.75 confidence. **This row's note previously claimed both were missing; they shipped in Epic 4** | 4 |
 | Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
 | Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |
