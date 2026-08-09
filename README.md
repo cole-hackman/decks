@@ -1,165 +1,136 @@
 # decks
 
-> Local-first AI DJ assistant for Rekordbox 7
+Local-first AI library assistant for Rekordbox DJs — audit, clean, and
+re-cue a music library with a Claude agent that can only act through
+reviewable staged changes.
 
-**Status:** MVP implementation in progress. Core desktop workflows and local MCP tooling are implemented; real-library validation and `v0.1.0` release verification remain.
+**Status:** MVP in progress. Core desktop workflows and the local MCP
+tooling work; real-library validation and a first tagged release (v0.1.0)
+remain.
 
-`decks` is a native desktop app that sits next to Rekordbox 7 and helps you maintain a clean, well-tagged, well-cued library. It reads your Rekordbox SQLCipher database directly, surfaces problems and opportunities across the library, lets a local Claude agent propose changes, and exports approved edits back to Rekordbox via XML (or — opt-in — applies them in-place under a write guard).
+<!-- SCREENSHOT: the differentiator shot — the chat panel proposing changes
+with the staged-changes diff view open next to the track table (Proposed →
+Accepted lifecycle visible). Second choice: track detail with the native
+ANLZ color waveform. Keep under 5MB. -->
 
-Everything runs on your machine. Your library never leaves your laptop except via enrichment APIs you explicitly enable, and those calls go through a local cache first.
+## The problem
 
----
+Rekordbox is built for performing, not for library hygiene. Normalizing
+artist and title formatting across thousands of tracks, finding tracks with
+no cues or no playlist, spotting audio duplicates, and relocating broken
+file paths are all one-track-at-a-time chores in its UI. The paid benchmark
+for this job is Lexicon DJ; decks is working toward Lexicon parity within
+Rekordbox (the parity matrix in `docs/lexicon/PARITY.md` drives the
+roadmap) as a local-first desktop app with an agent attached — one that can
+see only what you've shown it and can only write through staged,
+reversible changes.
 
-## Why decks
+<!-- TODO: verify — one line on provenance (built against your own library?
+what chore triggered it?). See README-QUESTIONS.md. -->
 
-Rekordbox's UI is great for performance but tedious for library hygiene at scale: normalizing artist/title formatting across thousands of tracks, finding tracks missing cues or playlist membership, identifying audio duplicates, relocating broken file paths, or staging bulk metadata edits. `decks` treats the library as a first-class object you can query, audit, and edit safely — with a Claude agent on the side that can see only what you've shown it and can only write through reviewable, reversible staged changes.
+## How it works
 
-## Features
+- A Tauri 2 desktop app: React/TypeScript frontend over a Rust workspace
+  (~20 crates, one per bounded concern), with typed IPC between them.
+- `crates/rekordbox-db` opens Rekordbox 7's SQLCipher `master.db` directly,
+  read-only, and parses the native ANLZ files (beat grids, color
+  waveforms). Audio features, waveform peaks, fingerprints, and chat
+  history live in a local SQLite (WAL) cache.
+- Every mutation — from the agent, Smart Fixes, Cleanup, or the Duplicates
+  view — is a staged change: `Proposed → Accepted/Rejected →
+  Exported/Applied`, previewable as a diff. The default egress is
+  round-trip-tested Rekordbox XML export; an opt-in Sync flow writes
+  directly to `master.db` under a `WriteGuard`.
+- The same Rust tool service backs three surfaces at once: the in-app
+  Claude chat panel, an MCP server (`decks mcp` / `decks mcp-http`) usable
+  from any MCP host on your existing subscription, and a `decks tools call`
+  CLI.
+- Everything runs on your machine. No telemetry; enrichment APIs
+  (MusicBrainz, opt-in Discogs) only fire if enabled, through a local
+  cache. The Anthropic key lives in the OS keychain.
 
-### Library access & browsing
+## Running it
 
-- **SQLCipher reader.** Direct read-only access to Rekordbox 7's `master.db` (`crates/rekordbox-db`). Writes are gated behind an explicit, opt-in Sync flow under a `WriteGuard` that refuses to run while Rekordbox is open (WAL-lock probe) and takes a timestamped backup before the first write of a session (see [ADR-0010](docs/DECISIONS.md)).
-- **Virtualized track table.** Filterable, sortable, resizable columns; multi-select; right-click context actions. Energy column hydrated from the local feature cache; Key values tinted with the Mixed In Key Camelot palette; inline Tag chips when bindings exist.
-- **Track detail panel.** Metadata, cues, and a high-fidelity native Pioneer ANLZ color waveform (PWAV/PWV3/PWV4/PWV5) — not a re-decoded approximation.
-- **Native audio preview.** Play/pause, seek, and interactive waveform scrubbing via `rodio`, with an end-of-track event so transport state stays consistent.
-- **Analytics dashboard.** Genre / key / BPM distributions rendered with recharts.
-- **Persistent filters.** Per-library filter state in `localStorage`, keyed by library path so multiple libraries don't collide.
+Requires Rust stable, Node 20+, pnpm 9+, and a Rekordbox 7 library
+(`master.db`) to point at.
 
-### Workflow views
+    git clone https://github.com/cole-hackman/decks
+    cd decks
+    ./scripts/dev.sh
 
-- **Inbox** — tracks missing metadata, cues, or playlist membership, with one-click audit.
-- **Incoming** — ingest new files from the filesystem, fuzzy-match against the library, and stage adds. Backend CSV parsing with column-mapping UI for batch imports.
-- **Track Matcher** — manual review surface for ambiguous matches (`crates/track-matcher`).
-- **Smart Fixes** — title/artist normalization: case, encoded chars, garbage suffixes, URLs, promo tags, extracted remixer/artist (`crates/smart-fixes`).
-- **Cleanup** — broken-path Relocate workflow with fuzzy filename + size matching (`crates/relocate`), plus audio-fingerprint duplicate detection (chromagram hash + Hamming grouping).
-- **Duplicates** — library-wide duplicate scan combining exact title/artist, fuzzy title, and audio-fingerprint strategies in a single view; per-group "keep one" picker archives the rest.
-- **Custom Tags** — manage user tags with picker modal, usage badges, and bulk apply (T-key shortcut).
-- **Archive** — review and restore previously archived tracks.
-- **Sync** — apply staged changes back to `master.db` with options for `cue_destination` (memory/hot/both), `keep_grids`, and `convert_keys` (Camelot / Open Key / original).
+Tests run against synthetic fixture libraries in `fixtures/` — no real
+library needed:
 
-### Agent & change pipeline
+    cargo test --workspace
+    pnpm test && pnpm typecheck && pnpm lint
+    pnpm e2e                            # Playwright
+    ./scripts/real-library-smoke.sh     # data-layer smoke vs a real master.db copy
 
-- **In-app Claude chat panel.** Read-only tools by default; staged changes accumulate as a reviewable batch with inline diffs. Conversation history persists in a local SQLite (WAL) cache.
-- **Staged-change lifecycle.** Every mutation flows through `Proposed → Accepted/Rejected → Exported/Applied`. Supported change types: track metadata, cues, playlists, track delete.
-- **Bulk "Add intro cues" tool.** Reads the real ANLZ beat grid to stage perfect 1.1 downbeat memory cues + 4-bar loops.
-- **Rekordbox XML export.** Default safe egress for accepted changes; round-trip tested (`crates/rekordbox-xml`).
+## Scope and non-goals
 
-### Local MCP server (provider-neutral)
+**In scope:** Rekordbox 7, deep — browsing, auditing, smart fixes,
+duplicates, relocation, cues, smartlists, staged edits back to the
+library.
 
-`decks` ships a CLI that exposes its library tools over MCP so any MCP host — Claude Code, Gemini CLI, OpenAI Responses API, Cursor — can call them with your subscription instead of the desktop chat panel.
+**Not in scope (deliberately, for now):**
 
-```sh
-# stdio transport (Claude Code, Gemini CLI)
-decks mcp
+- Other DJ software (Serato, Traktor, Engine DJ, VirtualDJ) and USB/CDJ
+  export — deferred until Rekordbox parity is done.
+- Cloud anything: no sync, no backup service, no mobile app.
+- Silent fixes. Playlist duplicate entries are surfaced, not auto-removed;
+  every change is staged for review.
 
-# local HTTP transport (OpenAI Responses API remote MCP)
-decks mcp-http --bind 127.0.0.1:8765
+## Tradeoffs
 
-# direct diagnostic invocation
-decks tools call library_search --library /path/to/master.db --json '{"query":"UKG"}'
-```
+**Staged changes everywhere, direct writes almost nowhere.** The founding
+invariant was "never mutate `master.db`" — all edits stage into a
+reviewable batch and leave via XML export the user imports manually. That
+bought trust (an agent can propose bulk edits to a library you care about
+with zero blast radius) and cost friction: for "rename one genre across
+200 tracks," quit-Rekordbox-and-import is a heavy loop. ADR-0010 formally
+relaxed the invariant for one path: an opt-in Sync that writes in-place,
+gated by a `WriteGuard` that probes Rekordbox's WAL lock, takes a
+timestamped backup on first write, and commits atomically — reducing the
+worst case from "library destroyed" to "copy the `.bak` back."
 
-Available tools (read-only): `library_search`, `library_get_track`, `library_list_playlists`, `library_get_playlist`, `library_list_cues`, `health_orphan_scan`, `health_duplicate_scan`, `health_fuzzy_duplicate_scan`, `health_broken_link_scan`, `staging_list_changes`. XML export is intentionally omitted from MCP discovery until the shared tool service owns the export path.
+**Tauri 2 over Electron.** The core logic is Rust (SQLCipher access, audio
+analysis, DSP), so Tauri lets the frontend call it directly instead of
+through an FFI or subprocess boundary, and ships a ~5–10 MB binary using
+30–80 MB of memory — which matters when Rekordbox and a DAW are open next
+to it. The cost: the system WebView differs per OS (Safari, WebView2,
+WebKitGTK), so rendering must be verified on each platform instead of once
+in a bundled Chromium.
 
-See [docs/MCP.md](docs/MCP.md) for full setup including Claude Code, Gemini CLI, and OpenAI Responses API.
+## Known limitations and failure modes
 
-### Privacy & safety guarantees
+- It has not been validated against a real library at scale yet — that's
+  the line between here and v0.1.0. Synthetic fixtures cover the test
+  suites; real Rekordbox databases have column variants and ANLZ quirks
+  the fixtures don't.
+- The whole foundation is a reverse-engineered format: SQLCipher schema
+  and ANLZ binary parsing (vendored and adapted from MIT-licensed
+  reklawdbox). A Rekordbox update can break reads — and the Sync write
+  path — overnight.
+- An agent session once shipped a non-compiling workspace while its notes
+  claimed "verified clean." ADR-0009 is the scar: agent-built work is
+  untrusted until the full verification suite passes, and "done" claims
+  without captured command output don't count.
+- CI runs the Rust suite (fmt, clippy, tests) on macOS and Windows plus
+  frontend typecheck/lint/vitest — but the Playwright e2e suite and the
+  real-library smoke are local-only gates, and Linux isn't in the matrix.
+- No telemetry cuts both ways: nothing phones home, and nothing tells me
+  what broke on someone else's machine.
 
-- **No telemetry.** No analytics. No remote logging.
-- **`master.db` is read-only by default.** Writes only happen through the explicit Sync flow, behind a `WriteGuard`.
-- **Refuses to write while Rekordbox is running.** WAL lock is probed before any mutation.
-- **Per-session backup.** First write of a session creates a timestamped copy of `master.db` next to the original.
-- **Anthropic API key stored in the OS keychain.** Never written to disk in plaintext or committed config.
+## What I'd do next
 
-## Architecture
+1. Real-library validation and the v0.1.0 release — the smoke harness
+   exists; it needs to be run in anger against large libraries.
+2. Work down the Lexicon parity matrix (`docs/lexicon/PARITY.md`) — one
+   epic per branch, already queued in `docs/ROADMAP.md`.
+3. Put Linux in the CI matrix and get e2e running in CI, so the
+   three-WebView cost of the Tauri decision is actually paid down.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  React / TypeScript frontend  (apps/desktop/src)        │
-│  Vite · Tailwind · Radix UI · Zustand · TanStack Query  │
-├─────────────────────────────────────────────────────────┤
-│  Tauri IPC layer  (apps/desktop/src-tauri)              │
-│  Typed commands + events bridging frontend ↔ Rust core  │
-├─────────────────────────────────────────────────────────┤
-│  Rust core  (crates/*)                                  │
-│  rekordbox-db · rekordbox-xml · audio-analysis          │
-│  audio-tags · stratum-dsp · relocate · smart-fixes      │
-│  track-matcher · agent-tools · changes · cache          │
-│  classify · scoring · enrichment · embeddings · ranker  │
-│  plugins · decks-core (facade)                          │
-└─────────────────────────────────────────────────────────┘
-```
+## Stack
 
-- **Tauri 2** desktop shell — system WebView, no Chromium ([ADR-0001](docs/DECISIONS.md)).
-- **Rust workspace** with one crate per bounded concern.
-- **TypeScript/React** frontend, fully typed IPC.
-- **Local SQLite (WAL) cache** for audio features, waveform peaks, conversation history, and fingerprints (`crates/cache`).
-- **Shared tool service** (`crates/agent-tools`) — the same Rust functions back the in-app chat, the MCP server, and the `decks tools call` CLI.
-
-See [docs/architecture.md](docs/architecture.md) for the full design, [docs/data-model.md](docs/data-model.md) for schema details, and [docs/DECISIONS.md](docs/DECISIONS.md) for the ADR log.
-
-## Repository layout
-
-```
-apps/
-  desktop/        Tauri 2 + React frontend & src-tauri backend
-  cli/            `decks` CLI (mcp, mcp-http, tools call)
-crates/
-  rekordbox-db    SQLCipher reader + ANLZ beat-grid parser
-  rekordbox-xml   Rekordbox XML parse/emit (round-trip tested)
-  audio-analysis  Decoding, peak extraction, fingerprinting
-  audio-tags      ID3 / tag reading
-  cache           SQLite WAL cache (features, waveforms, conversation)
-  changes         Staged-change lifecycle + applier + key formats
-  relocate        Broken-path matching (fuzzy filename + size)
-  smart-fixes     Title/artist normalization
-  track-matcher   Fuzzy library matching for incoming tracks
-  agent-tools     Shared tool service (chat + MCP + CLI)
-  decks-core      Facade re-export crate
-  stratum-dsp · classify · scoring · enrichment ·
-  embeddings · ranker · prodjlink · plugins
-docs/             Architecture, ADRs, MCP, manual test plan, journal
-scripts/          dev.sh, release.sh, real-library-smoke.sh, …
-fixtures/         Synthetic test libraries (real fixtures gitignored)
-```
-
-## Development
-
-```sh
-# Prerequisites: Rust stable, Node 20+, pnpm 9+
-./scripts/dev.sh
-```
-
-Common workflows:
-
-```sh
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-pnpm test                     # vitest
-pnpm typecheck && pnpm lint
-pnpm e2e                      # Playwright
-pnpm --filter desktop tauri build   # produce a packaged .app / DMG
-./scripts/real-library-smoke.sh     # data-layer smoke against a real master.db
-```
-
-See [docs/MANUAL_TEST_PLAN.md](docs/MANUAL_TEST_PLAN.md) for the human-in-the-loop verification checklist, and [docs/STATUS.md](docs/STATUS.md) for current implementation state.
-
-## Attribution
-
-Core Rust logic vendored and adapted from [reklawdbox](https://github.com/ryan-voitiskis/reklawdbox) (MIT, Ryan Voitiskis). See [NOTICE](NOTICE).
-
-## Roadmap
-
-`decks` is working toward feature parity with [Lexicon DJ](https://www.lexicondj.com) within
-Rekordbox. See [docs/ROADMAP.md](docs/ROADMAP.md) for the epic queue,
-[docs/lexicon/](docs/lexicon/) for the reference specification, and
-[docs/lexicon/PARITY.md](docs/lexicon/PARITY.md) for the current feature matrix.
-
-## License
-
-GPL-3.0-or-later — see [LICENSE](LICENSE).
-
-Relicensed from MIT in 2026 so the project can use copyleft analysis libraries
-(libKeyFinder, aubio, audiowaveform) that have no permissive equivalent. The
-vendored reklawdbox code was MIT, which is GPL-compatible; attribution is
-preserved in [NOTICE](NOTICE). See ADR-0011 in [docs/DECISIONS.md](docs/DECISIONS.md).
+Tauri 2 · Rust · React · TypeScript · Vite · Tailwind · SQLite/SQLCipher ·
+GPL-3.0-or-later
