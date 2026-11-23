@@ -415,15 +415,13 @@ pub fn execute(
 
     let mut entries = Vec::new();
     let mut failed = Vec::new();
-    let mut taken: HashSet<String> = HashSet::new();
 
     for item in &plan.deletable {
-        let stored_as = free_name(&item.source, &taken);
+        let stored_as = free_name(&item.source, &files_dir);
         let dest = files_dir.join(&stored_as);
 
         match relocate_file(&item.source, &dest) {
             Ok(()) => {
-                taken.insert(stored_as.clone());
                 entries.push(ManifestEntry {
                     track_id: item.track_id.clone(),
                     original_path: item.source.clone(),
@@ -460,39 +458,103 @@ pub fn execute(
 
 /// Move a file, falling back to copy-then-remove across filesystems.
 ///
-/// The copy is verified by length before the source is removed. A failed
-/// verification leaves *both* copies rather than removing the original — the
-/// caller can clean up a duplicate; nobody can clean up a lost file.
-fn relocate_file(source: &Path, dest: &Path) -> io::Result<()> {
+/// Never overwrites: an occupied destination is an error. The copy is flushed
+/// and compared byte for byte before the source is removed. A failed
+/// verification keeps the original — a duplicate can be cleaned up, a lost file
+/// cannot.
+pub fn relocate_file(source: &Path, dest: &Path) -> io::Result<()> {
+    if std::fs::symlink_metadata(dest).is_ok() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("{} already exists", dest.display()),
+        ));
+    }
     match std::fs::rename(source, dest) {
         Ok(()) => return Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(e),
         Err(_) => {}
     }
-
-    let copied = std::fs::copy(source, dest)?;
-    let original = std::fs::metadata(source)?.len();
-    if copied != original {
-        let _ = std::fs::remove_file(dest);
-        return Err(io::Error::other(format!(
-            "copy verification failed: {copied} of {original} bytes; original left in place"
-        )));
-    }
-    std::fs::remove_file(source)
+    copy_verify_remove(source, dest, |s, d| std::fs::copy(s, d))
 }
 
-/// A filename free within this batch, suffixing ` (2)`, ` (3)`, … on collision.
+/// The cross-filesystem half of [`relocate_file`], with the copy injected so a
+/// bad one can be tested.
+fn copy_verify_remove(
+    source: &Path,
+    dest: &Path,
+    copy: impl Fn(&Path, &Path) -> io::Result<u64>,
+) -> io::Result<()> {
+    let verified = copy(source, dest).and_then(|_| {
+        flush(dest)?;
+        same_contents(source, dest)
+    });
+    match verified {
+        Ok(true) => std::fs::remove_file(source),
+        Ok(false) => {
+            let _ = std::fs::remove_file(dest);
+            Err(io::Error::other(
+                "copy verification failed; original left in place",
+            ))
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(dest);
+            Err(e)
+        }
+    }
+}
+
+/// Push a fresh copy to disk before it is read back.
+///
+/// A copy inherits read-only from its source, and Windows will not flush a
+/// handle that cannot write; that one case is left to the comparison.
+fn flush(path: &Path) -> io::Result<()> {
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .or_else(|_| std::fs::File::open(path))?;
+    match file.sync_all() {
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => Ok(()),
+        other => other,
+    }
+}
+
+fn same_contents(a: &Path, b: &Path) -> io::Result<bool> {
+    use std::io::{BufRead, BufReader};
+    if std::fs::metadata(a)?.len() != std::fs::metadata(b)?.len() {
+        return Ok(false);
+    }
+    let mut a = BufReader::with_capacity(1 << 20, std::fs::File::open(a)?);
+    let mut b = BufReader::with_capacity(1 << 20, std::fs::File::open(b)?);
+    loop {
+        let left = a.fill_buf()?;
+        let right = b.fill_buf()?;
+        let n = left.len().min(right.len());
+        if n == 0 {
+            return Ok(left.len() == right.len());
+        }
+        if left[..n] != right[..n] {
+            return Ok(false);
+        }
+        a.consume(n);
+        b.consume(n);
+    }
+}
+
+/// A filename free in `dir`, suffixing ` (2)`, ` (3)`, … on collision.
 ///
 /// Two tracks can share a basename and both be real; overwriting one with the
 /// other inside the quarantine would destroy the very file we are preserving.
-fn free_name(source: &Path, taken: &HashSet<String>) -> String {
+/// The directory itself is asked, because only it knows whether `Cover.jpg` and
+/// `cover.jpg` are the same name there.
+fn free_name(source: &Path, dir: &Path) -> String {
     let base = source
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| "file".to_string());
+    let taken = |name: &str| std::fs::symlink_metadata(dir.join(name)).is_ok();
 
-    if !taken.contains(&base) {
+    if !taken(&base) {
         return base;
     }
 
@@ -502,7 +564,7 @@ fn free_name(source: &Path, taken: &HashSet<String>) -> String {
     };
     for n in 2.. {
         let candidate = format!("{stem} ({n}){ext}");
-        if !taken.contains(&candidate) {
+        if !taken(&candidate) {
             return candidate;
         }
     }
@@ -967,24 +1029,115 @@ mod tests {
 
     #[test]
     fn colliding_basenames_get_suffixed_inside_the_batch() {
-        let mut taken = HashSet::new();
-        assert_eq!(free_name(Path::new("/a/x.mp3"), &taken), "x.mp3");
-        taken.insert("x.mp3".to_string());
-        assert_eq!(free_name(Path::new("/b/x.mp3"), &taken), "x (2).mp3");
-        taken.insert("x (2).mp3".to_string());
-        assert_eq!(free_name(Path::new("/c/x.mp3"), &taken), "x (3).mp3");
+        let dir = TempDir::new("names");
+        assert_eq!(free_name(Path::new("/a/x.mp3"), dir.path()), "x.mp3");
+        std::fs::write(dir.path().join("x.mp3"), b"").unwrap();
+        assert_eq!(free_name(Path::new("/b/x.mp3"), dir.path()), "x (2).mp3");
+        std::fs::write(dir.path().join("x (2).mp3"), b"").unwrap();
+        assert_eq!(free_name(Path::new("/c/x.mp3"), dir.path()), "x (3).mp3");
     }
 
     #[test]
     fn an_extensionless_name_still_suffixes() {
-        let taken: HashSet<String> = ["track".to_string()].into_iter().collect();
-        assert_eq!(free_name(Path::new("/a/track"), &taken), "track (2)");
+        let dir = TempDir::new("noext");
+        std::fs::write(dir.path().join("track"), b"").unwrap();
+        assert_eq!(free_name(Path::new("/a/track"), dir.path()), "track (2)");
     }
 
     #[test]
     fn a_dotfile_is_not_treated_as_all_extension() {
-        let taken: HashSet<String> = [".hidden".to_string()].into_iter().collect();
-        assert_eq!(free_name(Path::new("/a/.hidden"), &taken), ".hidden (2)");
+        let dir = TempDir::new("dotfile");
+        std::fs::write(dir.path().join(".hidden"), b"").unwrap();
+        assert_eq!(
+            free_name(Path::new("/a/.hidden"), dir.path()),
+            ".hidden (2)"
+        );
+    }
+
+    #[test]
+    fn names_that_differ_only_in_case_are_both_kept() {
+        let dir = TempDir::new("case");
+        let music = dir.path().join("music");
+        for (sub, name, body) in [("a", "Cover.jpg", "one"), ("b", "cover.jpg", "two")] {
+            std::fs::create_dir_all(music.join(sub)).unwrap();
+            std::fs::write(music.join(sub).join(name), body).unwrap();
+        }
+        let guards = GuardOptions {
+            music_roots: vec![music.clone()],
+            quarantine_root: dir.path().join("q"),
+            allow_playlist_members: false,
+        };
+        let candidates = [music.join("a/Cover.jpg"), music.join("b/cover.jpg")]
+            .map(|p| candidate("t", &p.to_string_lossy()));
+        let p = plan(&candidates, &guards, &facts_for);
+        let receipt = execute(&p, &guards.quarantine_root, "lib", "test", 0).unwrap();
+
+        assert!(receipt.failed.is_empty());
+        let files = guards
+            .quarantine_root
+            .join(&receipt.manifest.batch_id)
+            .join(FILES_SUBDIR);
+        let mut bodies: Vec<_> = receipt
+            .manifest
+            .entries
+            .iter()
+            .map(|e| std::fs::read_to_string(files.join(&e.stored_as)).unwrap())
+            .collect();
+        bodies.sort();
+        assert_eq!(bodies, ["one", "two"]);
+    }
+
+    // ── Moving ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn moving_never_overwrites_the_destination() {
+        let dir = TempDir::new("move-occupied");
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::write(&a, b"one").unwrap();
+        std::fs::write(&b, b"two").unwrap();
+        assert!(relocate_file(&a, &b).is_err());
+        assert_eq!(std::fs::read(&a).unwrap(), b"one");
+        assert_eq!(std::fs::read(&b).unwrap(), b"two");
+    }
+
+    #[test]
+    fn a_good_copy_removes_the_original() {
+        let dir = TempDir::new("copy-ok");
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::write(&a, vec![7u8; 3 << 20]).unwrap();
+        copy_verify_remove(&a, &b, |s, d| std::fs::copy(s, d)).unwrap();
+        assert!(!a.exists());
+        assert_eq!(std::fs::read(&b).unwrap(), vec![7u8; 3 << 20]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_read_only_file_can_still_be_moved() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new("copy-ro");
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::write(&a, b"audio").unwrap();
+        std::fs::set_permissions(&a, std::fs::Permissions::from_mode(0o444)).unwrap();
+        copy_verify_remove(&a, &b, |s, d| std::fs::copy(s, d)).unwrap();
+        assert!(!a.exists());
+        assert_eq!(std::fs::read(&b).unwrap(), b"audio");
+    }
+
+    #[test]
+    fn a_short_or_altered_copy_keeps_the_original() {
+        let dir = TempDir::new("copy-bad");
+        let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+        std::fs::write(&a, b"original").unwrap();
+        for bad in [&b"orig"[..], &b"0riginal"[..]] {
+            let err = copy_verify_remove(&a, &b, |_, d| {
+                std::fs::write(d, bad)?;
+                Ok(8)
+            })
+            .unwrap_err();
+            assert!(err.to_string().contains("original left in place"));
+            assert_eq!(std::fs::read(&a).unwrap(), b"original");
+            assert!(!b.exists());
+        }
     }
 
     // ── Round trip on a real temp directory ──────────────────────────────────

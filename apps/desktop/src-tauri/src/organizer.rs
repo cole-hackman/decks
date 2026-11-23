@@ -262,10 +262,9 @@ pub async fn preview_organize(
 
 /// Move one file, creating the destination's parent directories.
 ///
-/// `fs::rename` fails across filesystems, which is the common case when moving
-/// from a download folder on an internal disk to a music library on an external
-/// one — so fall back to copy-then-remove. The copy is verified before the
-/// original goes.
+/// Moving from a download folder on an internal disk to a library on an
+/// external one is the common case, so this goes through `relocate_file`, which
+/// verifies a cross-filesystem copy before the original goes.
 fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
     if destination.exists() {
         return Err(format!(
@@ -276,16 +275,24 @@ fn move_file(source: &Path, destination: &Path) -> Result<(), String> {
     if let Some(parent) = destination.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
-    match std::fs::rename(source, destination) {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            std::fs::copy(source, destination)
-                .map_err(|e| format!("copy to {}: {e}", destination.display()))?;
-            std::fs::remove_file(source)
-                .map_err(|e| format!("remove {}: {e}", source.display()))?;
-            Ok(())
-        }
-    }
+    file_organizer::trash::relocate_file(source, destination)
+        .map_err(|e| format!("move to {}: {e}", destination.display()))
+}
+
+/// Move a file and stage the library's side of it as one step.
+///
+/// If staging fails the file goes back: a moved file with no staged change is a
+/// broken track with nothing to explain it.
+fn move_and_stage<T>(
+    source: &Path,
+    destination: &Path,
+    stage: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    move_file(source, destination)?;
+    stage().map_err(|e| match move_file(destination, source) {
+        Ok(()) => format!("{e}; file left at its original path"),
+        Err(back) => format!("{e}; file is now at {}: {back}", destination.display()),
+    })
 }
 
 /// Execute a reviewed plan.
@@ -309,29 +316,33 @@ pub async fn apply_organize(
             let source = PathBuf::from(&row.source);
             let destination = PathBuf::from(destination);
 
-            if let Err(e) = move_file(&source, &destination) {
-                result.failed.push((row.track_id.clone(), e));
-                continue;
-            }
-
             let file_name = destination
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned());
-            let staged = cache
-                .stage_change(changes::NewChange {
-                    library_path: Some(library_path.clone()),
-                    kind: changes::ChangeKind::TrackRelocate,
-                    target_id: Some(row.track_id.clone()),
-                    field: None,
-                    old_value: Some(serde_json::json!(row.source)),
-                    new_value: Some(serde_json::json!({
-                        "folder_path": destination.to_string_lossy(),
-                        "file_name": file_name,
-                    })),
-                    reason: Some("Move & Rename".to_string()),
-                    confidence: Some(1.0),
-                })
-                .map_err(|e| e.to_string())?;
+            let staged = move_and_stage(&source, &destination, || {
+                cache
+                    .stage_change(changes::NewChange {
+                        library_path: Some(library_path.clone()),
+                        kind: changes::ChangeKind::TrackRelocate,
+                        target_id: Some(row.track_id.clone()),
+                        field: None,
+                        old_value: Some(serde_json::json!(row.source)),
+                        new_value: Some(serde_json::json!({
+                            "folder_path": destination.to_string_lossy(),
+                            "file_name": file_name,
+                        })),
+                        reason: Some("Move & Rename".to_string()),
+                        confidence: Some(1.0),
+                    })
+                    .map_err(|e| e.to_string())
+            });
+            let staged = match staged {
+                Ok(staged) => staged,
+                Err(e) => {
+                    result.failed.push((row.track_id.clone(), e));
+                    continue;
+                }
+            };
 
             result.moved.push(row.track_id);
             result.staged.push(staged.id);
@@ -668,6 +679,21 @@ mod tests {
 
         assert!(move_file(&a, &b).is_err());
         assert_eq!(std::fs::read(&b).unwrap(), b"two");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_move_that_cannot_be_staged_puts_the_file_back() {
+        let dir = std::env::temp_dir().join(format!("decks-organizer-bk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a.mp3");
+        let dest = dir.join("House").join("a.mp3");
+        std::fs::write(&a, b"one").unwrap();
+
+        let err = move_and_stage(&a, &dest, || Err::<(), _>("cache locked".into())).unwrap_err();
+        assert!(err.contains("cache locked"));
+        assert_eq!(std::fs::read(&a).unwrap(), b"one");
+        assert!(!dest.exists());
         std::fs::remove_dir_all(&dir).ok();
     }
 
