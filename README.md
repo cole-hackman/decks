@@ -83,9 +83,6 @@ drives the roadmap) as a local-first desktop app with an agent attached — one
 that can see only what you've shown it and can only write through staged,
 reversible changes.
 
-<!-- TODO: verify — one line on provenance (built against your own library?
-what chore triggered it?). See README-QUESTIONS.md. -->
-
 ---
 
 ## 🔧 How it works
