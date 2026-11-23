@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(~/Library/Pioneer/**)",
+      "Edit(~/Library/Application Support/Pioneer/**)",
+      "Edit(~/Library/Application Support/app.decks.desktop/**)",
+      "Edit(~/Music/**)",
+      "Edit(//Volumes/**)",
+      "Bash(*Library/Pioneer*)",
+      "Bash(*Application Support/Pioneer*)",
+      "Bash(*Application\\ Support/Pioneer*)",
+      "Bash(rm *Music/*)",
+      "Bash(mv *Music/*)",
+      "Bash(cp *Music/*)",
+      "Bash(rsync *Music/*)",
+      "Bash(rm */Volumes/*)",
+      "Bash(mv */Volumes/*)",
+      "Bash(cp */Volumes/*)",
+      "Bash(rsync */Volumes/*)",
+      "Bash(sqlite3 *master.db*)",
+      "Bash(sqlcipher *master.db*)",
+      "Bash(*real-library-smoke.sh*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)"
+    ]
+  }
+}
