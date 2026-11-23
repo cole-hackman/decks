@@ -8,6 +8,7 @@
 - Music folders: `/`, a home folder, anything containing one and whole volumes are not accepted. Suggestions stop one level deeper under `/Users` and `/Volumes`, and a stored root that is too broad is ignored.
 - Moves: Move & Rename and the quarantine share one move that never overwrites and compares a cross-volume copy byte for byte before removing the original. A move that cannot be staged is put back.
 - Find Unused Files: deleting moves files into the deleted-audio quarantine, only inside the configured music folders. Path matching is Unicode-form-insensitive and follows links; databases and DJ-software folders are refused.
+
 ## 2026-08-08 — Epic 7, scoped honestly: Track Matcher done, store links built, the rest named
 
 The instruction was "integrate all the ones you can". The useful part of this session was working
