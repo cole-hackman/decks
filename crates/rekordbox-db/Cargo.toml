@@ -16,3 +16,8 @@ chrono = "0.4"
 [dev-dependencies]
 tempfile = "3"
 rusqlite = { version = "0.34", features = ["bundled-sqlcipher-vendored-openssl"] }
+
+# The fixture generator's path rules are unit-tested.
+[[example]]
+name = "seed_test_library"
+test = true
