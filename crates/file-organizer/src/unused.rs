@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::trash::{self, DeleteCandidate, DeletePlan, GuardOptions, Refusal, Refused};
+
 /// Directory names never descended into.
 ///
 /// The DJ-app folders hold cue points, grids and playlists that live nowhere
@@ -110,12 +112,27 @@ impl Default for ExtensionFilter {
 ///
 /// Keys are lower-cased with separators normalised, because Rekordbox and the
 /// filesystem do not reliably agree on case or separator, and a case-only
-/// mismatch here would offer a track in the library for deletion.
+/// mismatch here would offer a track in the library for deletion. The same goes
+/// for Unicode form: "é" is one code point in some path stores and two in
+/// others, so keys are always NFC. Each path is also recorded as the filesystem
+/// resolves it, so a folder reached through a link still matches.
 #[derive(Debug, Default)]
 pub struct KnownPaths(HashSet<String>);
 
 fn key(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/").to_lowercase()
+    use unicode_normalization::UnicodeNormalization;
+    // Lower-casing can itself produce decomposed characters, so normalise after.
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .nfc()
+        .collect::<String>()
+        .to_lowercase()
+        .nfc()
+        .collect()
+}
+
+fn canonical_key(path: &Path) -> Option<String> {
+    std::fs::canonicalize(path).ok().map(|p| key(&p))
 }
 
 impl KnownPaths {
@@ -124,11 +141,17 @@ impl KnownPaths {
         I: IntoIterator<Item = S>,
         S: AsRef<Path>,
     {
-        KnownPaths(paths.into_iter().map(|p| key(p.as_ref())).collect())
+        let mut keys = HashSet::new();
+        for path in paths {
+            let path = path.as_ref();
+            keys.insert(key(path));
+            keys.extend(canonical_key(path));
+        }
+        KnownPaths(keys)
     }
 
     pub fn contains(&self, path: &Path) -> bool {
-        self.0.contains(&key(path))
+        self.0.contains(&key(path)) || canonical_key(path).is_some_and(|k| self.0.contains(&k))
     }
 
     pub fn len(&self) -> usize {
@@ -219,6 +242,117 @@ pub fn scan(
     Ok(out)
 }
 
+/// Extensions that hold a DJ library or other database, never a stray file.
+const DATABASE_EXTENSIONS: &[&str] = &["db", "edb", "nml", "sqlite", "sqlite3"];
+
+/// Whether a file belongs to the library itself, or to DJ software.
+///
+/// `master.db` and everything named after it (`-wal`, `-shm`, `.bak.*`), any
+/// other database, and anything under a folder the scan would have skipped.
+/// Only components below `root` count, so a music folder that happens to sit
+/// inside a skipped name is still usable when the user configured it.
+fn is_protected(path: &Path, library: &Path, root: &Path) -> bool {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let extension = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if DATABASE_EXTENSIONS.contains(&extension.as_str()) {
+        return true;
+    }
+    if let Some(library_name) = library.file_name() {
+        if name.starts_with(&library_name.to_string_lossy().to_lowercase()) {
+            return true;
+        }
+    }
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .parent()
+        .is_some_and(|dirs| {
+            dirs.components()
+                .any(|c| is_skipped_directory(&c.as_os_str().to_string_lossy()))
+        })
+}
+
+/// Decide which scanned files may be moved to the quarantine.
+///
+/// Every path is judged again here rather than trusted from the scan: the
+/// library, the disk and the configured folders can all have changed since.
+/// Containment is checked on the resolved path as well as the literal one, so a
+/// linked folder inside a music root cannot lead outside it.
+pub fn plan_quarantine(
+    paths: &[PathBuf],
+    known: &KnownPaths,
+    library: &Path,
+    opts: &GuardOptions,
+) -> Result<DeletePlan, String> {
+    if known.is_empty() {
+        return Err(
+            "refusing to move files with an empty library — everything would look unused".into(),
+        );
+    }
+
+    let roots: Vec<PathBuf> = opts
+        .music_roots
+        .iter()
+        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .collect();
+    let quarantine = std::fs::canonicalize(&opts.quarantine_root).ok();
+
+    let mut refused = Vec::new();
+    let mut candidates = Vec::new();
+    for path in paths {
+        let mut refuse = |reason: Refusal| {
+            refused.push(Refused {
+                track_id: String::new(),
+                path: path.clone(),
+                message: reason.message(),
+                reason,
+            })
+        };
+
+        // Resolve the folder, not the file: a file that is itself a link has to
+        // reach `trash::plan` as a link to be refused as one.
+        let resolved = match (path.parent(), path.file_name()) {
+            (Some(dir), Some(name)) => std::fs::canonicalize(dir).ok().map(|d| d.join(name)),
+            _ => None,
+        };
+        let Some(resolved) = resolved else {
+            refuse(Refusal::Missing);
+            continue;
+        };
+        if quarantine.as_ref().is_some_and(|q| resolved.starts_with(q)) {
+            refuse(Refusal::AlreadyQuarantined);
+            continue;
+        }
+        let Some(root) = roots.iter().find(|r| resolved.starts_with(r)) else {
+            refuse(Refusal::OutsideMusicRoots);
+            continue;
+        };
+        if known.contains(path) || known.contains(&resolved) {
+            refuse(Refusal::InLibrary);
+            continue;
+        }
+        if is_protected(&resolved, library, root) {
+            refuse(Refusal::Protected);
+            continue;
+        }
+        candidates.push(DeleteCandidate {
+            track_id: String::new(),
+            path: path.clone(),
+            playlists: vec![],
+            shared_with: vec![],
+        });
+    }
+
+    let mut plan = trash::plan(&candidates, opts, &trash::facts_for);
+    plan.refused.extend(refused);
+    Ok(plan)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,6 +429,145 @@ mod tests {
         let f = filter(ExtensionMode::Include, "png");
         assert!(!is_unused(Path::new("/m/b.mp3"), &known, &f));
         assert!(is_unused(Path::new("/m/cover.png"), &known, &f));
+    }
+
+    #[test]
+    fn known_paths_match_in_either_unicode_form() {
+        let composed = "/Music/Beyonc\u{e9}.mp3";
+        let decomposed = "/Music/Beyonce\u{301}.mp3";
+        assert!(KnownPaths::new([composed]).contains(Path::new(decomposed)));
+        assert!(KnownPaths::new([decomposed]).contains(Path::new(composed)));
+        // Upper-case forms too, since both normalisations have to agree.
+        assert!(KnownPaths::new(["/Music/BEYONCE\u{301}.mp3"]).contains(Path::new(composed)));
+    }
+
+    #[test]
+    fn a_scan_does_not_report_a_library_track_stored_in_the_other_unicode_form() {
+        let dir = std::env::temp_dir().join(format!("decks-unused-nfd-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Beyonce\u{301}.mp3"), b"audio").unwrap();
+
+        let known = KnownPaths::new([dir.join("Beyonc\u{e9}.mp3")]);
+        let got = scan(
+            std::slice::from_ref(&dir),
+            &known,
+            &ExtensionFilter::default(),
+        )
+        .unwrap();
+        assert!(got.files.is_empty(), "reported: {:?}", got.files);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A music root, a quarantine and a library file, all under one temp dir.
+    fn quarantine_setup(tag: &str) -> (PathBuf, GuardOptions, KnownPaths, PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("decks-unused-plan-{tag}-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        for d in ["music/House", "music/PioneerDJ", "outside"] {
+            std::fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        for f in [
+            "music/House/known.mp3",
+            "music/House/stray.png",
+            "music/PioneerDJ/analysis.dat",
+            "music/master.db",
+            "music/master.db-wal",
+            "outside/other.png",
+        ] {
+            std::fs::write(dir.join(f), b"bytes").unwrap();
+        }
+        let opts = GuardOptions {
+            music_roots: vec![dir.join("music")],
+            quarantine_root: dir.join("quarantine"),
+            allow_playlist_members: false,
+        };
+        let known = KnownPaths::new([dir.join("music/House/known.mp3")]);
+        let library = dir.join("music/master.db");
+        (dir, opts, known, library)
+    }
+
+    fn refusal(dir: &Path, rel: &str, opts: &GuardOptions) -> Refusal {
+        let known = KnownPaths::new([dir.join("music/House/known.mp3")]);
+        let plan =
+            plan_quarantine(&[dir.join(rel)], &known, &dir.join("music/master.db"), opts).unwrap();
+        assert!(plan.deletable.is_empty(), "{rel} was not refused");
+        plan.refused[0].reason.clone()
+    }
+
+    #[test]
+    fn only_a_stray_file_under_a_music_root_is_planned() {
+        let (dir, opts, known, library) = quarantine_setup("ok");
+        let plan = plan_quarantine(
+            &[dir.join("music/House/stray.png")],
+            &known,
+            &library,
+            &opts,
+        )
+        .unwrap();
+        assert_eq!(plan.deletable.len(), 1);
+        assert!(plan.refused.is_empty());
+
+        assert_eq!(
+            refusal(&dir, "outside/other.png", &opts),
+            Refusal::OutsideMusicRoots
+        );
+        assert_eq!(
+            refusal(&dir, "music/House/known.mp3", &opts),
+            Refusal::InLibrary
+        );
+        assert_eq!(
+            refusal(&dir, "music/PioneerDJ/analysis.dat", &opts),
+            Refusal::Protected
+        );
+        assert_eq!(refusal(&dir, "music/master.db", &opts), Refusal::Protected);
+        assert_eq!(
+            refusal(&dir, "music/master.db-wal", &opts),
+            Refusal::Protected
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn planning_refuses_an_empty_library_and_unconfigured_roots() {
+        let (dir, mut opts, known, library) = quarantine_setup("closed");
+        let stray = [dir.join("music/House/stray.png")];
+        assert!(plan_quarantine(&stray, &KnownPaths::default(), &library, &opts).is_err());
+
+        opts.music_roots.clear();
+        let plan = plan_quarantine(&stray, &known, &library, &opts).unwrap();
+        assert!(plan.deletable.is_empty());
+        assert_eq!(plan.refused[0].reason, Refusal::OutsideMusicRoots);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_folder_cannot_lead_outside_the_music_roots() {
+        let (dir, opts, _, _) = quarantine_setup("link");
+        std::os::unix::fs::symlink(dir.join("outside"), dir.join("music/linked")).unwrap();
+        assert_eq!(
+            refusal(&dir, "music/linked/other.png", &opts),
+            Refusal::OutsideMusicRoots
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_planned_file_is_moved_to_the_quarantine_and_can_come_back() {
+        let (dir, opts, known, library) = quarantine_setup("roundtrip");
+        let stray = dir.join("music/House/stray.png");
+        let plan = plan_quarantine(std::slice::from_ref(&stray), &known, &library, &opts).unwrap();
+        let receipt = trash::execute(&plan, &opts.quarantine_root, "lib", "test", 0).unwrap();
+        assert!(!stray.exists());
+
+        trash::restore(&opts.quarantine_root, &receipt.manifest.batch_id).unwrap();
+        assert_eq!(std::fs::read(&stray).unwrap(), b"bytes");
+        // Not a library track, so it must not show up as a deleted one.
+        assert!(trash::quarantined_tracks(&opts.quarantine_root, "lib")
+            .unwrap()
+            .is_empty());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     fn temp_tree(tag: &str) -> PathBuf {

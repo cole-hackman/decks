@@ -465,10 +465,11 @@ export interface UnusedScan {
   errors: string[];
 }
 
-export interface DeleteReport {
-  deleted: string[];
+export interface QuarantineReport {
+  quarantined: string[];
   failed: [string, string][];
-  report_path: string | null;
+  /** Manifest of the batch the files were moved into. */
+  manifest_path: string | null;
 }
 
 export interface TagFieldSelection {
@@ -1267,6 +1268,8 @@ export type Refusal =
   | { kind: "not_a_regular_file" }
   | { kind: "symlink" }
   | { kind: "outside_music_roots" }
+  | { kind: "in_library" }
+  | { kind: "protected" }
   | { kind: "shared_with_tracks"; track_ids: string[] }
   | { kind: "still_in_playlists"; playlists: string[] }
   | { kind: "already_quarantined" };

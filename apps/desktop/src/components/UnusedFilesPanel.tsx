@@ -80,16 +80,18 @@ export function UnusedFilesPanel({ libraryPath }: Props) {
     setBusy(true);
     try {
       const report = await deleteUnusedFiles(libraryPath, [...selected]);
-      const suffix = report.report_path ? ` Record: ${report.report_path}` : "";
+      const suffix = report.manifest_path
+        ? ` Record: ${report.manifest_path}`
+        : "";
       if (report.failed.length > 0) {
         toast({
           variant: "error",
-          message: `Deleted ${report.deleted.length}, failed ${report.failed.length}: ${report.failed[0][1]}.${suffix}`,
+          message: `Moved ${report.quarantined.length}, failed ${report.failed.length}: ${report.failed[0][1]}.${suffix}`,
         });
       } else {
         toast({
           variant: "success",
-          message: `Deleted ${report.deleted.length} file(s).${suffix}`,
+          message: `Moved ${report.quarantined.length} file(s) to Deleted audio.${suffix}`,
         });
       }
       setScan(null);
@@ -112,7 +114,8 @@ export function UnusedFilesPanel({ libraryPath }: Props) {
       </h3>
       <p className="mb-2 text-[11px] text-muted">
         Lists files under a folder that the library does not reference. Deleting
-        them cannot be undone.
+        moves them to Settings → Deleted audio, where they can be restored. Only
+        files inside your music folders can be deleted.
       </p>
 
       <div className="mb-2 grid gap-2 md:grid-cols-3">
@@ -187,7 +190,7 @@ export function UnusedFilesPanel({ libraryPath }: Props) {
                   className="rounded bg-red-500 px-2 py-0.5 text-white hover:bg-red-600 disabled:opacity-50"
                   onClick={() => void runDelete()}
                 >
-                  Permanently delete {selected.size} file(s)
+                  Move {selected.size} file(s) to Deleted audio
                 </button>
                 <button
                   type="button"
@@ -213,9 +216,10 @@ export function UnusedFilesPanel({ libraryPath }: Props) {
 
       {confirming && (
         <p className="mb-2 text-xs text-red-400" role="alert">
-          This deletes {selected.size} file(s) ({formatBytes(selectedBytes)}) from
-          disk. It cannot be undone. A record of what was deleted is written to the
-          app's data folder.
+          WARNING: this moves {selected.size} file(s) (
+          {formatBytes(selectedBytes)}) out of {root.trim()} and into Deleted audio.
+          Other software that uses them will no longer find them. Restore them from
+          Settings; emptying the batch there is permanent.
         </p>
       )}
 

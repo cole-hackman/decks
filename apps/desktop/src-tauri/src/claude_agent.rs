@@ -7,7 +7,7 @@
 //!   text?: string, tool_name?: string }
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use serde::Serialize;
@@ -153,6 +153,61 @@ fn emit(app: &AppHandle, event_name: &str, ev: StreamEvent) {
     let _ = app.emit(event_name, ev);
 }
 
+/// Cap on agent turns per message, so one request cannot loop indefinitely.
+const MAX_TURNS: &str = "40";
+
+/// Arguments for the chat subprocess.
+///
+/// This is a library chat surface, so the session gets exactly one set of
+/// tools: the bundled rekordagent server. Built-in tools are off, only the MCP
+/// config passed here is loaded, and the user's own settings, plugins and
+/// skills are not read. `--print` cannot prompt, so `dontAsk` declines anything
+/// that is not on the allowlist rather than waiting for an answer.
+fn build_args(system: String, decks_bin: Option<&Path>) -> Vec<String> {
+    let mut args: Vec<String> = [
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--setting-sources",
+        "",
+        "--settings",
+        r#"{"disableAllHooks":true}"#,
+        "--strict-mcp-config",
+        "--tools",
+        "",
+        "--disable-slash-commands",
+        "--no-chrome",
+        "--permission-mode",
+        "dontAsk",
+        "--max-turns",
+        MAX_TURNS,
+    ]
+    .map(String::from)
+    .to_vec();
+
+    if let Some(bin) = decks_bin {
+        let mcp_config = serde_json::json!({
+            "mcpServers": {
+                "rekordagent": {
+                    "command": bin.to_string_lossy(),
+                    "args": ["mcp"],
+                }
+            }
+        })
+        .to_string();
+        args.extend([
+            "--mcp-config".into(),
+            mcp_config,
+            "--allowedTools".into(),
+            "mcp__rekordagent__*".into(),
+        ]);
+    }
+
+    args.extend(["--system-prompt".into(), system]);
+    args
+}
+
 /// Spawn `claude -p` and stream its output back via `claude-stream:{event_id}`.
 pub async fn run(
     app: AppHandle,
@@ -179,41 +234,10 @@ pub async fn run(
         format!("{history}\n\nHuman: {message}")
     };
 
-    let mut args: Vec<String> = vec![
-        "--print".into(),
-        "--output-format".into(),
-        "stream-json".into(),
-        "--verbose".into(),
-        "--settings".into(),
-        r#"{"hooks":{}}"#.into(),
-        // Prevent claude from running coding tools — this is a chat surface.
-        "--disallowedTools".into(),
-        "Bash,Edit,Write,Read,NotebookEdit,WebFetch,WebSearch".into(),
-        "--system-prompt".into(),
-        system,
-    ];
-
     // Auto-wire the rekordagent MCP server so library tools are available
-    // without the user having to `claude mcp add` it themselves. Bypass
-    // permissions because (a) the spawn is fully local and (b) `--print`
-    // mode cannot prompt interactively.
-    if let Some(decks_bin) = find_decks_binary() {
-        let mcp_config = serde_json::json!({
-            "mcpServers": {
-                "rekordagent": {
-                    "command": decks_bin.to_string_lossy(),
-                    "args": ["mcp"],
-                }
-            }
-        })
-        .to_string();
-        args.extend([
-            "--mcp-config".into(),
-            mcp_config,
-            "--permission-mode".into(),
-            "bypassPermissions".into(),
-        ]);
-    } else {
+    // without the user having to `claude mcp add` it themselves.
+    let decks_bin = find_decks_binary();
+    if decks_bin.is_none() {
         emit(
             &app,
             &event_name,
@@ -223,6 +247,7 @@ pub async fn run(
             ),
         );
     }
+    let args = build_args(system, decks_bin.as_deref());
 
     let mut child = match Command::new(&binary)
         .args(&args)
@@ -369,6 +394,54 @@ mod tests {
         // terminate the read loop. Only `type:"result"` does.
         let line = r#"{"type":"system","subtype":"hook_started"}"#;
         assert!(parse_stream_line(line).is_none());
+    }
+
+    /// The value following `flag`.
+    fn value<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+        let at = args.iter().position(|a| a == flag)?;
+        args.get(at + 1).map(String::as_str)
+    }
+
+    #[test]
+    fn the_chat_session_only_gets_the_bundled_library_tools() {
+        let args = build_args("sys".into(), Some(Path::new("/opt/decks")));
+        assert_eq!(value(&args, "--tools"), Some(""));
+        assert_eq!(value(&args, "--allowedTools"), Some("mcp__rekordagent__*"));
+        assert!(args.iter().any(|a| a == "--strict-mcp-config"));
+
+        let config: serde_json::Value =
+            serde_json::from_str(value(&args, "--mcp-config").unwrap()).unwrap();
+        let servers = config["mcpServers"].as_object().unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers["rekordagent"]["command"], "/opt/decks");
+    }
+
+    #[test]
+    fn the_chat_session_never_skips_permission_checks() {
+        for bin in [None, Some(Path::new("/opt/decks"))] {
+            let args = build_args("sys".into(), bin);
+            assert_eq!(value(&args, "--permission-mode"), Some("dontAsk"));
+            assert!(!args.iter().any(|a| a.contains("bypassPermissions")));
+            assert!(!args.iter().any(|a| a.contains("dangerously")));
+        }
+    }
+
+    #[test]
+    fn the_chat_session_ignores_user_settings_and_hooks() {
+        let args = build_args("sys".into(), None);
+        assert_eq!(value(&args, "--setting-sources"), Some(""));
+        assert!(value(&args, "--settings")
+            .unwrap()
+            .contains("disableAllHooks"));
+        assert!(value(&args, "--max-turns").is_some());
+    }
+
+    #[test]
+    fn without_the_library_server_the_session_still_loads_no_other_tools() {
+        let args = build_args("sys".into(), None);
+        assert!(args.iter().any(|a| a == "--strict-mcp-config"));
+        assert!(!args.iter().any(|a| a == "--mcp-config"));
+        assert!(!args.iter().any(|a| a == "--allowedTools"));
     }
 
     #[test]

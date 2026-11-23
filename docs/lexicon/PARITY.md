@@ -147,7 +147,7 @@ withdrawn in 2024 (ADR-0012), with Popularity uncomputable locally under any cir
 | Special subfolder patterns | **done** | Bitrate buckets, first tag, current year/month/decade, plus release decade | 4 |
 | Quick move + favourite folders | partial | Remembered folders, favourites, hotkeys 1–9, Send to entry; no picker popup | 4 |
 | Write Tags (ID3) | partial | Bulk flow, per-field selection, **and field-mapping projection** (`write_tags::apply_mappings`) all ship; auto-write ships too but is narrower than the spec's "whenever a change is detected" — it fires on watch-folder arrivals only, writes BPM and key only, and refuses below 0.75 confidence. **This row's note previously claimed both were missing; they shipped in Epic 4** | 4 |
-| Find Unused Files | **done** | Extension filter, DJ-folder skips, path export, deletion record | 4 |
+| Find Unused Files | **done** | Extension filter, DJ-folder skips, path export; deletes into the quarantine, inside music folders only | 4 |
 | Local Path Mappings | **done** | Longest-prefix, component-wise, cross-platform separators | 4 |
 | Delete from disk | **done** | Quarantine + manifest rather than `unlink`; seven refusals, one overridable; fail-closed on unconfigured music folders; `purge` is the separate irreversible step | 6 |
 | Automatic Actions settings group | partial | Group + **auto-analyse and auto-write-tags** work; other three disabled with reasons. Auto-write requires analysis, writes only BPM and key, and refuses below 0.75 confidence — overwriting a tag with a guess is worse than not writing. Its old blocker cited field mappings, which had shipped in Epic 4 | 4 |

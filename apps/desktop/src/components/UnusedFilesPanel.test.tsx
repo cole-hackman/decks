@@ -25,9 +25,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(scanUnusedFiles).mockResolvedValue(SCAN);
   vi.mocked(deleteUnusedFiles).mockResolvedValue({
-    deleted: ["/Music/cover.png"],
+    quarantined: ["/Music/cover.png"],
     failed: [],
-    report_path: "/data/reports/deleted-1.txt",
+    manifest_path: "/data/deleted-audio/b1/manifest.json",
   });
 });
 
@@ -91,12 +91,12 @@ describe("UnusedFilesPanel", () => {
     await user.click(screen.getByRole("button", { name: /Delete 1 file\(s\)…/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /cannot be undone/,
+      /WARNING: this moves 1 file\(s\).*out of \/Music/,
     );
     expect(deleteUnusedFiles).not.toHaveBeenCalled();
 
     await user.click(
-      screen.getByRole("button", { name: /Permanently delete 1 file\(s\)/ }),
+      screen.getByRole("button", { name: /Move 1 file\(s\) to Deleted audio/ }),
     );
     await waitFor(() => {
       expect(deleteUnusedFiles).toHaveBeenCalledWith("/lib.db", [
@@ -123,29 +123,29 @@ describe("UnusedFilesPanel", () => {
     await user.click(screen.getByRole("button", { name: "Select all" }));
     await user.click(screen.getByRole("button", { name: /Delete 2 file\(s\)…/ }));
     await user.click(
-      screen.getByRole("button", { name: /Permanently delete 2 file\(s\)/ }),
+      screen.getByRole("button", { name: /Move 2 file\(s\) to Deleted audio/ }),
     );
     expect(
-      await screen.findByText(/deleted-1\.txt/),
+      await screen.findByText(/b1\/manifest\.json/),
     ).toBeInTheDocument();
   });
 
   it("reports files that could not be deleted", async () => {
     const user = userEvent.setup();
     vi.mocked(deleteUnusedFiles).mockResolvedValue({
-      deleted: [],
-      failed: [["/Music/cover.png", "now referenced by the library"]],
-      report_path: null,
+      quarantined: [],
+      failed: [["/Music/cover.png", "Now referenced by the library."]],
+      manifest_path: null,
     });
     renderPanel();
     await scanFor(user);
     await user.click(screen.getByLabelText("Select /Music/cover.png"));
     await user.click(screen.getByRole("button", { name: /Delete 1 file\(s\)…/ }));
     await user.click(
-      screen.getByRole("button", { name: /Permanently delete 1 file\(s\)/ }),
+      screen.getByRole("button", { name: /Move 1 file\(s\) to Deleted audio/ }),
     );
     expect(
-      await screen.findByText(/now referenced by the library/),
+      await screen.findByText(/Now referenced by the library/),
     ).toBeInTheDocument();
   });
 

@@ -65,7 +65,7 @@ describe("DeletedAudioSection", () => {
 
   it("suggests folders from the library and adds the one that is picked", async () => {
     vi.mocked(ipc.suggestMusicRoots).mockResolvedValue([
-      { path: "/Users/cole", track_count: 4213 },
+      { path: "/Users/cole/Music", track_count: 4213 },
     ]);
     const user = userEvent.setup();
     renderSection();
@@ -74,12 +74,12 @@ describe("DeletedAudioSection", () => {
       await screen.findByRole("button", { name: "Suggest from library" }),
     );
     const suggestions = await screen.findByTestId("root-suggestions");
-    expect(suggestions).toHaveTextContent("/Users/cole");
+    expect(suggestions).toHaveTextContent("/Users/cole/Music");
     expect(suggestions).toHaveTextContent("4213 tracks");
 
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() =>
-      expect(ipc.setMusicRoots).toHaveBeenCalledWith(["/Users/cole"]),
+      expect(ipc.setMusicRoots).toHaveBeenCalledWith(["/Users/cole/Music"]),
     );
   });
 

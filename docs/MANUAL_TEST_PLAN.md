@@ -6,7 +6,8 @@
 
 - Real Rekordbox 7 `master.db` for local validation.
 - Disposable Rekordbox library for XML import validation.
-- Synthetic fixture library generated with `./scripts/seed-test-library.sh`.
+- Synthetic fixture library generated with `./scripts/seed-test-library.sh`. It writes only
+  inside `fixtures/tiny-library` or a temporary directory.
 
 ## Automated Read-Only Smoke (run this FIRST)
 
@@ -40,7 +41,7 @@ human-required items.
 
 - [ ] Launch app in dev mode with `./scripts/dev.sh`.
 - [ ] If no library is configured, first-run wizard appears.
-- [ ] Select a real Rekordbox 7 `master.db`.
+- [ ] Select a copy of a Rekordbox 7 `master.db`.
 - [auto] App validates DB and shows a nonzero track count. *(smoke: `library_search`)*
 - [ ] Track table loads and scrolls smoothly.
 - [auto] Filter input matches title, artist, album, and genre. *(smoke: `library_search` exercises the same query path)*

@@ -3159,3 +3159,16 @@ toolchains filled the disk — `cargo clean` plus removing the old one freed 31 
 
 ### Parity
 62 done / 21 partial / 11 missing / 2 blocked / 16 deferred.
+
+## Session — 2026-11-23 — Guards on destructive paths
+
+### Plan
+Tighten what can move, replace or delete files. No schema change, nothing written to `master.db`.
+
+### Shipped
+- Chat: the assistant session loads only the bundled rekordagent tools.
+- Dev builds: config, cache and quarantine live under `app.decks.desktop.dev`, apart from the installed app.
+- Fixture generator: writes only inside `fixtures/tiny-library` or a temporary directory.
+- Music folders: `/`, a home folder, anything containing one and whole volumes are not accepted.
+- Moves: Move & Rename and the quarantine share one move that never overwrites and compares a cross-volume copy byte for byte before removing the original.
+- Find Unused Files: deleting moves files into the deleted-audio quarantine, only inside the configured music folders.

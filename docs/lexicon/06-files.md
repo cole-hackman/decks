@@ -207,15 +207,19 @@ missing-file scan. Aimed at reclaiming disk space.
 *decks status* — **done.** `crates/file-organizer::unused` implements the sweep;
 `UnusedFilesPanel` (inside Move & Rename) runs it. Include/exclude extension filtering with an
 empty list meaning "no filter" in either mode; the DJ-folder skip list plus OS and VCS
-directories, matched case-insensitively; `Copy paths` exports the list without deleting; and a
-timestamped record of every deletion is written under the app data folder.
+directories, matched case-insensitively; and `Copy paths` exports the list without deleting.
+
+**Deleting moves files to the quarantine, deliberately differently from the manual.** It goes
+through the same batch, manifest and restore as §Delete from disk, and only for files inside the
+configured music folders, judged on the resolved path. Databases and anything under a skipped DJ
+folder are refused.
 
 Three guards the manual does not specify but this needs, given the output is a deletion list:
 a scan against an **empty library refuses to run** (everything would look unused); library
 membership is **re-checked at delete time**, not just at scan time, because the library can gain
-a track in between; and path comparison is case- and separator-insensitive, since Rekordbox and
-the filesystem do not reliably agree and a case-only mismatch would offer a real track for
-deletion. Nothing is pre-selected, and deletion is behind an explicit second click.
+a track in between; and path comparison is case-, separator- and Unicode-form-insensitive and follows links, since
+Rekordbox and the filesystem do not reliably agree and a spelling-only mismatch would offer a real
+track for deletion. Nothing is pre-selected, and deletion is behind an explicit second click.
 
 *Epic* — **4**.
 
@@ -258,7 +262,8 @@ waving the rule through per file. "Shared with another track" is not overridable
 **The feature is off until the user says where their music is.** With no music folders configured,
 `plan` refuses every candidate — a fail-closed default, not a bug. Settings → Deleted audio is
 where the list gets filled, and `suggest_music_roots` reads the directories the library already
-draws from so filling it is one click. Nothing is stored until the user confirms a suggestion.
+draws from so filling it is one click. Nothing is stored until the user confirms a suggestion. `/`,
+a home folder, anything containing one, and a whole volume are not accepted.
 
 **Preview-first, like everything else.** `plan_delete_from_disk` is a separate command from
 `delete_from_disk`; the dialog names every file it will move *and* every file it will refuse, with
@@ -268,8 +273,9 @@ back, because between preview and confirmation the disk can change and a guard t
 stale state is not a guard.
 
 **Copy verification.** A move across filesystems falls back to copy-then-remove, and the copy is
-verified by length before the source is removed. A failed verification leaves *both* copies: a
-duplicate is something the user can clean up, a lost file is not.
+flushed and compared byte for byte before the source is removed. A failed verification keeps the
+original. An occupied destination is an error, never an overwrite. Move & Rename uses the same path,
+and puts a file back if its relocation cannot be staged.
 
 Reachable from Incoming triage (`Delete from disk` — the third outcome beside "keep" and "put
 away", and the case where the guards are least likely to bite since a just-arrived file is in no

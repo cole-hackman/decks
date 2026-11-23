@@ -2990,6 +2990,25 @@ async fn search_tracks_by_tags(
 
 // ── App entry point ───────────────────────────────────────────────────────────
 
+/// The app's identifier, which decides where its config, cache and quarantine
+/// live. A development build gets its own, so it starts without a library
+/// instead of opening the one the installed app is configured with.
+fn app_identifier(base: &str, dev: bool) -> String {
+    if dev {
+        format!("{base}.dev")
+    } else {
+        base.to_string()
+    }
+}
+
+fn app_context() -> tauri::Context {
+    let mut context = tauri::generate_context!();
+    let dev = tauri::is_dev() || cfg!(debug_assertions);
+    let identifier = app_identifier(&context.config().identifier, dev);
+    context.config_mut().identifier = identifier;
+    context
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -3259,7 +3278,7 @@ pub fn run() {
             search_tracks_by_tags,
             list_track_tags_map,
         ])
-        .run(tauri::generate_context!())
+        .run(app_context())
         .expect("error while running decks");
 }
 
@@ -3269,6 +3288,16 @@ mod tests {
     use changes::{ChangeKind, ChangeStatus};
     use decks_core::rekordbox_db::{Playlist, PlaylistEntry, PlaylistKind, Track};
     use serde_json::json;
+
+    #[test]
+    fn a_development_build_does_not_share_the_installed_apps_identifier() {
+        assert_eq!(app_identifier("app.x", true), "app.x.dev");
+        assert_eq!(app_identifier("app.x", false), "app.x");
+        // Tests are debug builds, so the real context has to show the suffix.
+        if cfg!(debug_assertions) {
+            assert_eq!(app_context().config().identifier, "app.decks.desktop.dev");
+        }
+    }
 
     fn create_change(id: &str, value: serde_json::Value) -> cache::StagedChangeRecord {
         cache::StagedChangeRecord {

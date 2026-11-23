@@ -29,14 +29,14 @@ use crate::{read_config, write_config};
 /// Where the confirmed music roots live in `config.json`.
 const MUSIC_ROOTS: &str = "music_roots";
 
-fn now_secs() -> i64 {
+pub(crate) fn now_secs() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or_default()
 }
 
-fn quarantine_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn quarantine_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     Ok(app
         .path()
@@ -55,7 +55,78 @@ pub fn stored_music_roots(app: &tauri::AppHandle) -> Vec<PathBuf> {
         .filter_map(|v| v.as_str())
         .filter(|s| !s.trim().is_empty())
         .map(PathBuf::from)
+        // Also applied on read, so a root stored before this check existed
+        // does not stay in force.
+        .filter(|p| check_music_root(p, home_dir(app).as_deref()).is_ok())
         .collect()
+}
+
+fn home_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    use tauri::Manager;
+    app.path().home_dir().ok()
+}
+
+/// Is this folder specific enough to be a music root?
+///
+/// A root decides what a bulk delete may reach, so a filesystem root, a home
+/// folder, anything containing one, and a whole volume are all refused. Checked
+/// on the path as typed and on where it really leads, since a link to `/` is
+/// still `/`.
+fn check_music_root(path: &Path, home: Option<&Path>) -> Result<(), String> {
+    use std::path::Component;
+    let shown = path.display();
+    if !path.is_absolute() {
+        return Err(format!("Music folders must be absolute paths: {shown}"));
+    }
+    if path.components().any(|c| c == Component::ParentDir) {
+        return Err(format!("Music folders cannot contain `..`: {shown}"));
+    }
+    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let home = home.map(|h| std::fs::canonicalize(h).unwrap_or_else(|_| h.to_path_buf()));
+    for p in [path, resolved.as_path()] {
+        if is_too_broad(p) || home.as_deref().is_some_and(|h| contains(p, h)) {
+            return Err(format!(
+                "{shown} covers more than music. Choose the folder that holds your music, such \
+                 as a Music folder inside it."
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The named parts of a path, lower-cased: neither macOS nor Windows tells
+/// `/Users` from `/users`.
+fn names(path: &Path) -> Vec<String> {
+    path.components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(n) => Some(n.to_string_lossy().to_lowercase()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Is `inner` the same folder as `outer`, or inside it?
+fn contains(outer: &Path, inner: &Path) -> bool {
+    names(inner).starts_with(&names(outer))
+}
+
+/// How many named components a folder needs before it is about music rather
+/// than about a whole user or volume.
+fn required_depth(first: &str) -> usize {
+    match first.to_lowercase().as_str() {
+        "users" | "volumes" | "home" => 3,
+        _ => 1,
+    }
+}
+
+fn is_too_broad(path: &Path) -> bool {
+    let names = names(path);
+    match names.first() {
+        None => true,
+        // macOS mirrors the whole data volume, home folders included, here.
+        Some(first) if first == "system" => true,
+        Some(first) => names.len() < required_depth(first),
+    }
 }
 
 #[tauri::command]
@@ -69,19 +140,18 @@ pub fn music_roots(app: tauri::AppHandle) -> Result<Vec<String>, String> {
 /// Replace the confirmed roots.
 ///
 /// Relative paths are rejected rather than resolved: a root is a guard, and a
-/// guard that depends on the process's working directory is not one.
+/// guard that depends on the process's working directory is not one. Folders
+/// too broad to guard anything are rejected too; see [`check_music_root`].
 #[tauri::command]
 pub fn set_music_roots(app: tauri::AppHandle, roots: Vec<String>) -> Result<(), String> {
+    let home = home_dir(&app);
     let mut cleaned = Vec::new();
     for root in roots {
         let trimmed = root.trim().to_string();
         if trimmed.is_empty() {
             continue;
         }
-        let path = PathBuf::from(&trimmed);
-        if !path.is_absolute() {
-            return Err(format!("Music folders must be absolute paths: {trimmed}"));
-        }
+        check_music_root(Path::new(&trimmed), home.as_deref())?;
         if !cleaned.contains(&trimmed) {
             cleaned.push(trimmed);
         }
@@ -100,9 +170,9 @@ pub struct RootSuggestion {
 
 /// Suggest roots from the library's own track paths.
 ///
-/// Groups every track's directory by its second-from-top component — deep
-/// enough to be a real collection folder rather than `/` or `C:\`, shallow
-/// enough that one entry covers a whole library. Suggestions are *suggestions*:
+/// Groups every track's directory by a component near the top — deep enough to
+/// be a real collection folder rather than `/`, a home folder or a volume,
+/// shallow enough that one entry covers a whole library. Suggestions are *suggestions*:
 /// nothing is stored until the user confirms them.
 #[tauri::command]
 pub async fn suggest_music_roots(
@@ -114,6 +184,7 @@ pub async fn suggest_music_roots(
             .map_err(|e| e.to_string())?;
         let mappings = path_mappings(&app);
 
+        let home = home_dir(&app);
         let mut counts: HashMap<PathBuf, usize> = HashMap::new();
         for track in db.tracks().map_err(|e| e.to_string())? {
             let Some(raw) = track.folder_path.as_deref() else {
@@ -124,7 +195,9 @@ pub async fn suggest_music_roots(
                 continue;
             };
             if let Some(root) = collection_root(dir) {
-                *counts.entry(root).or_default() += 1;
+                if check_music_root(&root, home.as_deref()).is_ok() {
+                    *counts.entry(root).or_default() += 1;
+                }
             }
         }
 
@@ -142,10 +215,11 @@ pub async fn suggest_music_roots(
     .map_err(|e| e.to_string())?
 }
 
-/// The first two meaningful components of a directory, as an absolute path.
+/// The first few meaningful components of a directory, as an absolute path.
 ///
-/// `/Users/cole/Music/House/x` → `/Users/cole`. `C:\Music\House` → `C:\Music`.
-/// `None` for anything too shallow to be a useful root — suggesting `/` would
+/// Two, or three under `/Users` and `/Volumes` where two name a whole home
+/// folder or disk: `/Users/cole/Music/House` → `/Users/cole/Music`,
+/// `C:\Music\House\x` → `C:\Music\House`. `None` for anything too shallow to be a useful root — suggesting `/` would
 /// defeat the guard the roots exist to provide.
 fn collection_root(dir: &Path) -> Option<PathBuf> {
     use std::path::Component;
@@ -154,13 +228,17 @@ fn collection_root(dir: &Path) -> Option<PathBuf> {
     }
     let mut out = PathBuf::new();
     let mut normal = 0usize;
+    let mut wanted = 2usize;
     for component in dir.components() {
         match component {
             Component::Prefix(_) | Component::RootDir => out.push(component.as_os_str()),
             Component::Normal(part) => {
                 out.push(part);
                 normal += 1;
-                if normal == 2 {
+                if normal == 1 {
+                    wanted = required_depth(&part.to_string_lossy()).max(2);
+                }
+                if normal == wanted {
                     return Some(out);
                 }
             }
@@ -169,7 +247,7 @@ fn collection_root(dir: &Path) -> Option<PathBuf> {
     }
     // One level under the root is still a plausible collection folder
     // (`/Music`, `D:\Tracks`); zero is not.
-    (normal == 1).then_some(out)
+    (!is_too_broad(&out)).then_some(out)
 }
 
 // ── Planning and deleting ────────────────────────────────────────────────────
@@ -413,9 +491,63 @@ mod tests {
     #[test]
     fn a_collection_root_stops_two_levels_down() {
         assert_eq!(
-            collection_root(&abs(&["Users", "cole", "Music", "House"])),
-            Some(abs(&["Users", "cole"]))
+            collection_root(&abs(&["Music", "House", "Deep"])),
+            Some(abs(&["Music", "House"]))
         );
+    }
+
+    #[test]
+    fn a_home_folder_or_a_volume_is_never_suggested_whole() {
+        for top in ["Users", "Volumes", "home"] {
+            assert_eq!(
+                collection_root(&abs(&[top, "cole", "Music", "House"])),
+                Some(abs(&[top, "cole", "Music"]))
+            );
+            assert_eq!(collection_root(&abs(&[top, "cole"])), None);
+            assert_eq!(collection_root(&abs(&[top])), None);
+        }
+    }
+
+    #[test]
+    fn folders_that_cover_more_than_music_are_not_accepted_as_roots() {
+        let home = abs(&["srv", "people", "cole"]);
+        for broad in [
+            abs(&[]),
+            abs(&["Users"]),
+            abs(&["Users", "someone"]),
+            abs(&["users", "someone"]),
+            abs(&["Volumes"]),
+            abs(&["Volumes", "SSD"]),
+            abs(&["System", "Volumes", "Data", "Users", "cole"]),
+            abs(&["srv"]),
+            home.clone(),
+            abs(&["SRV", "People", "Cole"]),
+            home.join("Music").join(".."),
+            PathBuf::from("Music"),
+        ] {
+            assert!(
+                check_music_root(&broad, Some(&home)).is_err(),
+                "{} was accepted",
+                broad.display()
+            );
+        }
+        for fine in [
+            home.join("Music"),
+            abs(&["Users", "someone", "Music"]),
+            abs(&["Volumes", "SSD", "Music"]),
+            abs(&["Music"]),
+        ] {
+            check_music_root(&fine, Some(&home)).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_broad_folder_is_not_accepted_as_a_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("music");
+        std::os::unix::fs::symlink("/", &link).unwrap();
+        assert!(check_music_root(&link, None).is_err());
     }
 
     #[test]
