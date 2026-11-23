@@ -234,9 +234,9 @@ test.beforeEach(async ({ page }) => {
             }
             case "delete_unused_files":
               return {
-                deleted: args.paths as string[],
+                quarantined: args.paths as string[],
                 failed: [],
-                report_path: "/data/reports/deleted-1.txt",
+                manifest_path: "/data/deleted-audio/b1/manifest.json",
               };
             case "preview_organize":
               return plan(args);
@@ -320,13 +320,13 @@ test("find unused files: scan, then confirm before deleting", async ({ page }) =
 
   await page.getByLabel("Select /music/cover.png").check();
   await page.getByRole("button", { name: /Delete 1 file\(s\)…/ }).click();
-  await expect(page.getByRole("alert")).toContainText("cannot be undone");
+  await expect(page.getByRole("alert")).toContainText("WARNING");
 
   await page
-    .getByRole("button", { name: /Permanently delete 1 file\(s\)/ })
+    .getByRole("button", { name: /Move 1 file\(s\) to Deleted audio/ })
     .click();
-  await expect(page.getByText(/Deleted 1 file\(s\)/)).toBeVisible();
-  await expect(page.getByText(/deleted-1\.txt/)).toBeVisible();
+  await expect(page.getByText(/Moved 1 file\(s\)/)).toBeVisible();
+  await expect(page.getByText(/b1\/manifest\.json/)).toBeVisible();
 });
 
 test("write tags: nothing selected by default, then write the ticked field", async ({

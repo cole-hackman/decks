@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use file_organizer::{
-    plan_batch, ExtensionFilter, KnownPaths, OrganizeSpec, PathMappings, Pattern, PlanRequest,
-    RunDate, SubfolderSpec, TrackFacts, UnusedScan,
+    plan_batch, trash, ExtensionFilter, KnownPaths, OrganizeSpec, PathMappings, Pattern,
+    PlanRequest, RunDate, SubfolderSpec, TrackFacts, UnusedScan,
 };
 use serde::{Deserialize, Serialize};
 
@@ -386,26 +386,25 @@ pub async fn scan_unused_files(
 }
 
 #[derive(Debug, Default, Serialize)]
-pub struct DeleteReport {
-    pub deleted: Vec<String>,
+pub struct QuarantineReport {
+    /// Files moved into the quarantine.
+    pub quarantined: Vec<String>,
     pub failed: Vec<(String, String)>,
-    /// Where the record of what was deleted was written. Deletion here is
-    /// irreversible, so it always leaves a trail.
-    pub report_path: Option<String>,
+    /// The manifest of the batch they were moved into, which restores them.
+    pub manifest_path: Option<String>,
 }
 
-/// Delete files the scan reported.
+/// Move files the scan reported into the deleted-audio quarantine.
 ///
-/// Irreversible — the caller is responsible for confirming with the user. Two
-/// guards regardless: a path still in the library is refused outright (the
-/// library can change between scanning and deleting), and a report of what went
-/// is written before the command returns.
+/// The same quarantine and the same confirmed music folders as Delete from disk
+/// — nothing is unlinked here. Every path is judged again against the library
+/// and the disk as they are now; see `unused::plan_quarantine`.
 #[tauri::command]
 pub async fn delete_unused_files(
     app: tauri::AppHandle,
     library_path: String,
     paths: Vec<String>,
-) -> Result<DeleteReport, String> {
+) -> Result<QuarantineReport, String> {
     let mappings = path_mappings(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let db = decks_core::rekordbox_db::RekordboxDb::open(Path::new(&library_path))
@@ -417,49 +416,70 @@ pub async fn delete_unused_files(
                 .filter_map(|t| t.folder_path)
                 .map(|p| resolve_path(&mappings, &p)),
         );
-
-        let mut report = DeleteReport::default();
-        for path in paths {
-            let p = PathBuf::from(&path);
-            // Re-checked here, not just at scan time: the library can gain a
-            // track between the scan and the click.
-            if known.contains(&p) {
-                report
-                    .failed
-                    .push((path, "now referenced by the library".into()));
-                continue;
-            }
-            match std::fs::remove_file(&p) {
-                Ok(()) => report.deleted.push(path),
-                Err(e) => report.failed.push((path, e.to_string())),
-            }
+        let opts = trash::GuardOptions {
+            music_roots: crate::trash::stored_music_roots(&app),
+            quarantine_root: crate::trash::quarantine_root(&app)?,
+            allow_playlist_members: false,
+        };
+        if opts.music_roots.is_empty() {
+            return Err(
+                "No music folders are configured — add them in Settings first.".to_string(),
+            );
         }
 
-        if !report.deleted.is_empty() {
-            report.report_path = write_delete_report(&app, &report.deleted).ok();
+        let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+        let plan = file_organizer::unused::plan_quarantine(
+            &paths,
+            &known,
+            Path::new(&library_path),
+            &opts,
+        )?;
+
+        let shown = |p: &Path| p.to_string_lossy().into_owned();
+        let mut report = QuarantineReport {
+            failed: plan
+                .refused
+                .iter()
+                .map(|r| (shown(&r.path), r.message.clone()))
+                .collect(),
+            ..Default::default()
+        };
+        if plan.is_empty() {
+            return Ok(report);
+        }
+
+        let receipt = trash::execute(
+            &plan,
+            &opts.quarantine_root,
+            &library_path,
+            "Unused files",
+            crate::trash::now_secs(),
+        )
+        .map_err(|e| e.to_string())?;
+        report.failed.extend(
+            receipt
+                .failed
+                .iter()
+                .map(|f| (shown(&f.path), f.error.clone())),
+        );
+        report.quarantined = receipt
+            .manifest
+            .entries
+            .iter()
+            .map(|e| shown(&e.original_path))
+            .collect();
+        if !report.quarantined.is_empty() {
+            report.manifest_path = Some(shown(
+                &opts
+                    .quarantine_root
+                    .join(&receipt.manifest.batch_id)
+                    .join(trash::MANIFEST_FILE),
+            ));
         }
         Ok(report)
     })
     .await
     .map_err(|e| e.to_string())?
-}
-
-/// Write the list of deleted paths beside the app's own data.
-///
-/// Best-effort: failing to write the record must not make the command look like
-/// the deletion failed, but the UI is told whether a record exists.
-fn write_delete_report(app: &tauri::AppHandle, deleted: &[String]) -> std::io::Result<String> {
-    use tauri::Manager;
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| std::io::Error::other(e.to_string()))?
-        .join("reports");
-    std::fs::create_dir_all(&dir)?;
-    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-    let path = dir.join(format!("deleted-{stamp}.txt"));
-    std::fs::write(&path, deleted.join("\n"))?;
-    Ok(path.to_string_lossy().into_owned())
 }
 
 // ── Local Path Mappings ──────────────────────────────────────────────────────

@@ -97,6 +97,10 @@ pub enum Refusal {
     SharedWithTracks { track_ids: Vec<String> },
     /// A playlist still references this track.
     StillInPlaylists { playlists: Vec<String> },
+    /// The library references this file, so it is not unused.
+    InLibrary,
+    /// Part of a DJ library rather than a stray file.
+    Protected,
     /// Already inside the quarantine. Deleting a quarantined file is
     /// [`purge`]'s job and goes through its own confirmation.
     AlreadyQuarantined,
@@ -135,6 +139,8 @@ impl Refusal {
                 },
                 playlists.join(", "),
             ),
+            Refusal::InLibrary => "Now referenced by the library.".into(),
+            Refusal::Protected => "Belongs to a DJ library, not a stray file.".into(),
             Refusal::AlreadyQuarantined => {
                 "Already in the deleted-audio folder. Empty that batch to remove it for good."
                     .into()
@@ -776,6 +782,10 @@ pub fn quarantined_tracks(
             continue;
         }
         for entry in &batch.manifest.entries {
+            // Unused files are not library tracks and carry no id.
+            if entry.track_id.is_empty() {
+                continue;
+            }
             out.entry(entry.track_id.clone())
                 .or_insert_with(|| batch.manifest.batch_id.clone());
         }
@@ -978,6 +988,8 @@ mod tests {
             Refusal::StillInPlaylists {
                 playlists: vec!["Warmup".into()],
             },
+            Refusal::InLibrary,
+            Refusal::Protected,
             Refusal::AlreadyQuarantined,
         ] {
             assert!(!r.message().is_empty(), "{r:?} has no message");

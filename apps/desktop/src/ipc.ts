@@ -65,7 +65,7 @@ import type {
   PatternField,
   ExtensionFilter,
   UnusedScan,
-  DeleteReport,
+  QuarantineReport,
   TagFieldSelection,
   WriteTagsResult,
   PathMappingRow,
@@ -1243,8 +1243,8 @@ export async function scanUnusedFiles(
 export async function deleteUnusedFiles(
   libraryPath: string,
   paths: string[],
-): Promise<DeleteReport> {
-  return invoke<DeleteReport>("delete_unused_files", { libraryPath, paths });
+): Promise<QuarantineReport> {
+  return invoke<QuarantineReport>("delete_unused_files", { libraryPath, paths });
 }
 
 export async function writeTagsBulk(

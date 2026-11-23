@@ -1,5 +1,13 @@
 # Status
 
+## 2026-11-23 — Guards on destructive paths
+
+- Chat: the assistant session loads only the bundled rekordagent tools. User settings, other MCP servers and built-in tools are not loaded, and anything off the allowlist is declined.
+- Dev builds: config, cache and quarantine live under `app.decks.desktop.dev`, apart from the installed app. Set at runtime, so it covers every way of starting one.
+- Fixture generator: writes only inside `fixtures/tiny-library` or a temporary directory. The resolved path is checked before anything is created or removed.
+- Music folders: `/`, a home folder, anything containing one and whole volumes are not accepted. Suggestions stop one level deeper under `/Users` and `/Volumes`, and a stored root that is too broad is ignored.
+- Moves: Move & Rename and the quarantine share one move that never overwrites and compares a cross-volume copy byte for byte before removing the original. A move that cannot be staged is put back.
+- Find Unused Files: deleting moves files into the deleted-audio quarantine, only inside the configured music folders. Path matching is Unicode-form-insensitive and follows links; databases and DJ-software folders are refused.
 ## 2026-08-08 — Epic 7, scoped honestly: Track Matcher done, store links built, the rest named
 
 The instruction was "integrate all the ones you can". The useful part of this session was working
