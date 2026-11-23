@@ -132,6 +132,9 @@ cd decks
 ./scripts/dev.sh
 ```
 
+Development builds keep their own settings (`app.decks.desktop.dev`), so they start without a
+library. Point them at a copy of `master.db` or the synthetic fixture.
+
 **Tests** run against synthetic fixture libraries in `fixtures/` — no real
 library needed:
 
